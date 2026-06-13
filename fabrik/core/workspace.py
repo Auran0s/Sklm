@@ -29,6 +29,11 @@ class Workspace:
     def exists(self) -> bool:
         return self.fabrik_dir.is_dir()
 
+    def set_agent(self, agent: str) -> None:
+        config = self.load_config()
+        config.agent = agent
+        self._save_config(config)
+
     def init(self, agent: str = "none") -> WorkspaceConfig:
         self.fabrik_dir.mkdir(parents=True, exist_ok=True)
         self.links_dir.mkdir(parents=True, exist_ok=True)

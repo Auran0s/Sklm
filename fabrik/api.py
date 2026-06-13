@@ -43,6 +43,10 @@ class Fabrik:
         self.workspace.init(agent=detected)
         return detected
 
+    def set_agent(self, agent: str) -> str:
+        self.workspace.set_agent(agent)
+        return agent
+
     def get_status(self) -> dict:
         config = self.workspace.load_config()
         resources = config.resources

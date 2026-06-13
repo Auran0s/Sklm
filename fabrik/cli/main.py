@@ -68,6 +68,11 @@ def init(
     """Initialize a Fabrik workspace in the current directory."""
     f = get_fabrik()
     if f.workspace.exists():
+        if agent:
+            f.set_agent(agent)
+            console.print("[yellow]⚠[/] Workspace already exists at [bold].fabrik/[/]")
+            console.print(f"   Agent updated to: [cyan]{agent}[/]")
+            return
         console.print("[yellow]⚠[/] Workspace already exists at [bold].fabrik/[/]")
         raise typer.Exit(1)
     detected = f.init_workspace(agent)
