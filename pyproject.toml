@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fabrik"
+version = "0.1.0"
+description = "MCP/Skills manager for AI agents"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+keywords = ["mcp", "skills", "ai-agent", "cli"]
+
+authors = [
+    {name = "Fabrik Contributors"},
+]
+
+dependencies = [
+    "typer>=0.12.0",
+    "rich>=13.0.0",
+    "pyyaml>=6.0",
+    "pydantic>=2.0.0",
+]
+
+[project.scripts]
+fabrik = "fabrik.cli.main:app"
+
+[tool.setuptools.packages.find]
+include = ["fabrik*"]
