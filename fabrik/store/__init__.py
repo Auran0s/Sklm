@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 from pathlib import Path
 from typing import Optional
 
-from fabrik.models import GlobalConfig, Resource, ResourceKind
+from fabrik.models import GlobalConfig, Resource, ResourceKind, TelemetryConfig
 
 
 FABRIK_HOME = Path.home() / ".fabrik"
@@ -87,3 +88,29 @@ class GlobalStore:
     def get_resource(self, kind: ResourceKind, name: str) -> Optional[Resource]:
         config = self._load_config()
         return config.resources.get(f"{kind.value}:{name}")
+
+    def get_telemetry_config(self) -> TelemetryConfig:
+        config = self._load_config()
+        cfg = config.telemetry
+
+        if "FABRIK_TELEMETRY" in os.environ:
+            enabled = os.environ["FABRIK_TELEMETRY"] not in (
+                "0",
+                "false",
+                "no",
+                "off",
+                "",
+            )
+        else:
+            enabled = cfg.enabled
+
+        return TelemetryConfig(
+            enabled=enabled,
+            umami_url=os.environ.get("FABRIK_UMAMI_URL") or cfg.umami_url,
+            website_id=os.environ.get("FABRIK_WEBSITE_ID") or cfg.website_id,
+        )
+
+    def set_telemetry_config(self, cfg: TelemetryConfig) -> None:
+        config = self._load_config()
+        config.telemetry = cfg
+        self._save_config(config)

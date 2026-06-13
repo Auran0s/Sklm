@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import time
+import traceback as tb_mod
+from pathlib import Path
 from typing import Optional
 
+import click
 import typer
 from rich.console import Console
 from rich.table import Table
@@ -22,6 +26,25 @@ app = typer.Typer(
 console = Console()
 
 _fabrik: Optional[Fabrik] = None
+_tracker_start: float = 0.0
+_tracker_command: str = ""
+_tracker: Optional["UmamiTracker"] = None  # type: ignore[name-defined]
+
+
+def get_tracker() -> Optional["UmamiTracker"]:
+    global _tracker
+    if _tracker is None:
+        from fabrik.store import GlobalStore
+        from fabrik.telemetry import UmamiTracker
+
+        store = GlobalStore()
+        cfg = store.get_telemetry_config()
+        _tracker = UmamiTracker(
+            umami_url=cfg.umami_url,
+            website_id=cfg.website_id,
+            enabled=cfg.enabled,
+        )
+    return _tracker
 
 
 def get_fabrik() -> Fabrik:
@@ -51,7 +74,10 @@ def main(
         False, "--version", "-V", help="Show version", callback=version_callback
     ),
 ):
-    pass
+    global _tracker_start, _tracker_command
+    _tracker_start = time.monotonic()
+    ctx = click.get_current_context()
+    _tracker_command = ctx.invoked_subcommand or ""
 
 
 # ─── Workspace ───────────────────────────────────────────────────────────────
@@ -125,8 +151,8 @@ def add(
         ref = f.add(kind, name)
     except (FileNotFoundError, FileExistsError, ValueError) as e:
         console.print(f"[red]✗[/] {e}")
-        raise typer.Exit(1)
-    console.print(f"[green]✓[/] Added and activated {kind.value} [bold]{ref.name}[/]")
+        raise typer.Exit(1) from e
+    console.print(f"[green]✓[/] Added {kind.value} [bold]{ref.name}[/] (origin: {ref.origin})")
 
 
 @app.command()
@@ -141,7 +167,7 @@ def rm(
         ref = f.remove(kind, name)
     except (KeyError, RuntimeError) as e:
         console.print(f"[red]✗[/] {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e
     console.print(f"[green]✓[/] Removed {kind.value} [bold]{ref.name}[/]")
 
 
@@ -157,9 +183,9 @@ def ls(
     kind = parse_resource_type(resource_type) if resource_type else None
     try:
         resources = f.list(kind)
-    except FileNotFoundError:
+    except FileNotFoundError as e:
         console.print("[red]✗[/] No Fabrik workspace found.")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e
     if json_output:
         data = [r.model_dump(mode="json") for r in resources]
         print_json(data=data)
@@ -199,11 +225,77 @@ def info(
     console.print(table)
 
 
+# ─── Linking ─────────────────────────────────────────────────────────────────
+
+
+@app.command()
+def link(
+    resource_type: str = typer.Argument(..., help="Resource type: skill or mcp"),
+    name: str = typer.Argument(..., help="Resource name to link"),
+    no_sync: bool = typer.Option(False, "--no-sync", help="Skip agent config sync"),
+):
+    """Link a global resource into the project workspace."""
+    f = get_fabrik()
+    kind = parse_resource_type(resource_type)
+    try:
+        result = f.link(kind, name)
+    except (FileNotFoundError, FileExistsError) as e:
+        console.print(f"[red]✗[/] {e}")
+        raise typer.Exit(1) from e
+    console.print(f"[green]✓[/] Linked {kind.value} [bold]{result.name}[/]")
+    if not no_sync:
+        try:
+            f.agent_sync()
+            console.print("   [dim]Agent config synced.[/]")
+        except RuntimeError:
+            pass
+
+
+@app.command()
+def unlink(
+    resource_type: str = typer.Argument(..., help="Resource type: skill or mcp"),
+    name: str = typer.Argument(..., help="Resource name to unlink"),
+    no_sync: bool = typer.Option(False, "--no-sync", help="Skip agent config sync"),
+):
+    """Unlink a resource from the project workspace."""
+    f = get_fabrik()
+    kind = parse_resource_type(resource_type)
+    try:
+        f.unlink(kind, name)
+    except KeyError as e:
+        console.print(f"[red]✗[/] {e}")
+        raise typer.Exit(1) from e
+    console.print(f"[green]✓[/] Unlinked {kind.value} [bold]{name}[/]")
+    if not no_sync:
+        try:
+            f.agent_sync()
+            console.print("   [dim]Agent config synced.[/]")
+        except RuntimeError:
+            pass
+
+
 # ─── Global Store ────────────────────────────────────────────────────────────
 
 
 global_app = typer.Typer(help="Manage the global Fabrik store")
 app.add_typer(global_app, name="global")
+
+
+@global_app.command("add")
+def global_add(
+    resource_type: str = typer.Argument(..., help="Resource type: skill or mcp"),
+    path: str = typer.Argument(..., help="Path to the resource"),
+    name: Optional[str] = typer.Option(None, "--name", "-n", help="Custom name for the resource"),
+):
+    """Add a resource to the global store."""
+    f = get_fabrik()
+    kind = parse_resource_type(resource_type)
+    try:
+        resource = f.global_add(kind, path, name)
+    except (FileNotFoundError, FileExistsError) as e:
+        console.print(f"[red]✗[/] {e}")
+        raise typer.Exit(1) from e
+    console.print(f"[green]✓[/] Added {kind.value} [bold]{resource.name}[/] to global store")
 
 
 @global_app.command("ls")
@@ -241,7 +333,7 @@ def global_rm(
         f.global_rm(kind, name)
     except KeyError as e:
         console.print(f"[red]✗[/] {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e
     console.print(f"[green]✓[/] Removed {kind.value} [bold]{name}[/] from global store")
 
 
@@ -263,7 +355,7 @@ def registry_add(
         src = f.registry_add(source, name)
     except FileExistsError as e:
         console.print(f"[red]✗[/] {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e
     console.print(f"[green]✓[/] Added registry [bold]{src.name}[/] ({src.type.value})")
 
 
@@ -315,6 +407,26 @@ app.add_typer(agent_app, name="agent")
 
 
 @agent_app.command()
+def sync(
+    dry_run: bool = typer.Option(False, "--dry-run", help="Preview changes without applying"),
+):
+    """Synchronize workspace resources with the active agent config."""
+    f = get_fabrik()
+    try:
+        result = f.agent_sync(dry_run)
+    except RuntimeError as e:
+        console.print(f"[red]✗[/] {e}")
+        raise typer.Exit(1) from e
+    if dry_run:
+        console.print("[blue]DRY-RUN[/]")
+        console.print(f"   Agent: {result['agent']}")
+        console.print(f"   Skills to add: {', '.join(result['skills_to_add']) or 'none'}")
+        console.print(f"   MCPs to add: {', '.join(result['mcps_to_add']) or 'none'}")
+    else:
+        console.print(f"[green]✓[/] Synced with {result['agent']}")
+
+
+@agent_app.command()
 def detect():
     """Detect the active AI agent in the current project."""
     f = get_fabrik()
@@ -325,7 +437,134 @@ def detect():
         console.print("[yellow]No supported agent detected.[/]")
 
 
+# ─── Telemetry ────────────────────────────────────────────────────────────────
+
+
+telemetry_app = typer.Typer(help="Manage telemetry settings")
+app.add_typer(telemetry_app, name="telemetry")
+
+
+@telemetry_app.command("on")
+def telemetry_on():
+    """Enable telemetry."""
+    from fabrik.store import GlobalStore
+
+    store = GlobalStore()
+    cfg = store.get_telemetry_config()
+    cfg.enabled = True
+    store.set_telemetry_config(cfg)
+    console.print("[green]✓[/] Telemetry enabled")
+
+
+@telemetry_app.command("off")
+def telemetry_off():
+    """Disable telemetry."""
+    from fabrik.store import GlobalStore
+
+    store = GlobalStore()
+    cfg = store.get_telemetry_config()
+    cfg.enabled = False
+    store.set_telemetry_config(cfg)
+    console.print("[yellow]⚠[/] Telemetry disabled")
+
+
+@telemetry_app.command("status")
+def telemetry_status():
+    """Show telemetry status."""
+    from fabrik.store import GlobalStore
+
+    store = GlobalStore()
+    cfg = store.get_telemetry_config()
+    tracker = get_tracker()
+
+    if not tracker:
+        console.print("[yellow]⚠ Telemetry not initialized[/]")
+        raise typer.Exit(1)
+
+    if not cfg.umami_url or not cfg.website_id:
+        console.print("[yellow]⚠ Telemetry inactive[/]")
+        console.print("   Configure FABRIK_UMAMI_URL and FABRIK_WEBSITE_ID")
+        console.print("   or run: [bold]fabrik telemetry on[/]")
+        raise typer.Exit(1)
+
+    if tracker.active:
+        console.print(f"[green]Active[/] → {cfg.umami_url}")
+    else:
+        console.print("[yellow]⚠ Telemetry disabled[/]")
+        console.print("   Run [bold]fabrik telemetry on[/] to enable")
+
+
+@telemetry_app.command("ping")
+def telemetry_ping():
+    """Send a test event to verify telemetry connectivity."""
+    tracker = get_tracker()
+
+    if not tracker:
+        console.print("[red]✗ Telemetry not initialized[/]")
+        raise typer.Exit(1)
+
+    if not tracker.active:
+        console.print("[yellow]⚠ Telemetry disabled or not configured[/]")
+        console.print("   Run [bold]fabrik telemetry on[/] to enable")
+        raise typer.Exit(1)
+
+    console.print("[dim]Sending test event...[/]")
+    ok, status, dur = tracker.ping()
+    if ok:
+        console.print(f"[green]✓ Ping succeeded[/] ({status}, {dur:.0f}ms)")
+    else:
+        console.print(f"[red]✗ Ping failed[/] ({status})")
+        raise typer.Exit(1)
+
+
 # ─── Entrypoint ──────────────────────────────────────────────────────────────
 
+
 def run():
-    app()
+    global _tracker_command
+    error = None
+    try:
+        app()
+    except SystemExit as e:
+        error = e
+    except BaseException as e:
+        error = e
+
+    _track_success = True
+    _track_error = None
+    _track_error_message = None
+    _track_traceback = None
+
+    if isinstance(error, SystemExit):
+        cause = getattr(error, "__cause__", None)
+        if cause:
+            _track_success = False
+            _track_error = type(cause).__name__
+            _track_error_message = str(cause) or None
+            tb_frames = tb_mod.extract_tb(cause.__traceback__)
+            if tb_frames:
+                tail = tb_frames[-3:]
+                _track_traceback = "".join(tb_mod.format_list(tail)).rstrip()
+        else:
+            _track_success = error.code in (None, 0)
+            _track_error = None if _track_success else "error"
+    elif error is not None:
+        _track_success = False
+        _track_error = type(error).__name__
+        _track_error_message = str(error) or None
+
+    if _tracker_start > 0:
+        duration = (time.monotonic() - _tracker_start) * 1000
+        tracker = get_tracker()
+        if tracker:
+            tracker.track_command(
+                _tracker_command,
+                _track_success,
+                duration,
+                _track_error,
+                _track_error_message,
+                _track_traceback,
+            )
+
+    if error is not None:
+        raise error

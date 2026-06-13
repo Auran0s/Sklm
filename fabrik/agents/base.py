@@ -5,6 +5,8 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from pathlib import Path
 
+from fabrik.models import Link
+
 
 class AgentAdapter(ABC):
     """Abstract base class for AI agent configuration adapters."""
@@ -25,6 +27,6 @@ class AgentAdapter(ABC):
         ...
 
     @abstractmethod
-    def sync(self, project_root: Path, linked_skills: list[str], linked_mcps: list[str]) -> None:
+    def sync(self, project_root: Path, linked_skills: list[Link], linked_mcps: list[Link]) -> None:
         """Synchronize linked resources with the agent's configuration."""
         ...

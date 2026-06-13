@@ -85,10 +85,23 @@ class WorkspaceConfig(BaseModel):
             yaml.dump(self.model_dump(mode="json"), f, default_flow_style=False)
 
 
+class TelemetryConfig(BaseModel):
+    enabled: bool = Field(default=True, description="Enable telemetry")
+    umami_url: str = Field(
+        default="https://analytics.victorbeysseriat.fr",
+        description="Umami instance URL",
+    )
+    website_id: str = Field(
+        default="1cc92fce-83fc-4792-9b02-e28a04810426",
+        description="Umami website UUID",
+    )
+
+
 class GlobalConfig(BaseModel):
     version: int = Field(default=1)
     registries: dict[str, RegistrySource] = Field(default_factory=dict)
     resources: dict[str, Resource] = Field(default_factory=dict)
+    telemetry: TelemetryConfig = Field(default_factory=TelemetryConfig)
 
     @classmethod
     def from_yaml(cls, path: Path) -> "GlobalConfig":
