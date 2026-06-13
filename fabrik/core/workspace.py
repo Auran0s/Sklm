@@ -24,7 +24,6 @@ class Workspace:
         self.fabrik_dir = self.root / FABRIK_DIR_NAME
         self.config_path = self.fabrik_dir / "fabrik.yaml"
         self.links_dir = self.fabrik_dir / "links"
-        self.local_dir = self.fabrik_dir / "local"
 
     def exists(self) -> bool:
         return self.fabrik_dir.is_dir()
@@ -39,9 +38,6 @@ class Workspace:
         self.links_dir.mkdir(parents=True, exist_ok=True)
         (self.links_dir / "skills").mkdir(exist_ok=True)
         (self.links_dir / "mcps").mkdir(exist_ok=True)
-        self.local_dir.mkdir(parents=True, exist_ok=True)
-        (self.local_dir / "skills").mkdir(exist_ok=True)
-        (self.local_dir / "mcps").mkdir(exist_ok=True)
         config = WorkspaceConfig(agent=agent)
         self._save_config(config)
         return config
