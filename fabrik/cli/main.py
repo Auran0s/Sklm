@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+import traceback as tb_mod
 from pathlib import Path
 from typing import Optional
 
@@ -151,7 +152,7 @@ def add(
         ref = f.add(kind, name)
     except (FileNotFoundError, FileExistsError, ValueError) as e:
         console.print(f"[red]✗[/] {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e
     console.print(f"[green]✓[/] Added {kind.value} [bold]{ref.name}[/] (origin: {ref.origin})")
 
 
@@ -168,7 +169,7 @@ def rm(
         ref = f.remove(kind, name, force)
     except (KeyError, RuntimeError) as e:
         console.print(f"[red]✗[/] {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e
     console.print(f"[green]✓[/] Removed {kind.value} [bold]{ref.name}[/]")
 
 
@@ -184,9 +185,9 @@ def ls(
     kind = parse_resource_type(resource_type) if resource_type else None
     try:
         resources = f.list(kind)
-    except FileNotFoundError:
+    except FileNotFoundError as e:
         console.print("[red]✗[/] No Fabrik workspace found.")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e
     if json_output:
         data = [r.model_dump(mode="json") for r in resources]
         print_json(data=data)
@@ -244,7 +245,7 @@ def link(
         result = f.link(kind, name)
     except (FileNotFoundError, FileExistsError) as e:
         console.print(f"[red]✗[/] {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e
     console.print(f"[green]✓[/] Linked {kind.value} [bold]{result.name}[/]")
     if not no_sync:
         try:
@@ -267,7 +268,7 @@ def unlink(
         f.unlink(kind, name)
     except KeyError as e:
         console.print(f"[red]✗[/] {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e
     console.print(f"[green]✓[/] Unlinked {kind.value} [bold]{name}[/]")
     if not no_sync:
         try:
@@ -297,7 +298,7 @@ def global_add(
         resource = f.global_add(kind, path, name)
     except (FileNotFoundError, FileExistsError) as e:
         console.print(f"[red]✗[/] {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e
     console.print(f"[green]✓[/] Added {kind.value} [bold]{resource.name}[/] to global store")
 
 
@@ -336,7 +337,7 @@ def global_rm(
         f.global_rm(kind, name)
     except KeyError as e:
         console.print(f"[red]✗[/] {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e
     console.print(f"[green]✓[/] Removed {kind.value} [bold]{name}[/] from global store")
 
 
@@ -358,7 +359,7 @@ def registry_add(
         src = f.registry_add(source, name)
     except FileExistsError as e:
         console.print(f"[red]✗[/] {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e
     console.print(f"[green]✓[/] Added registry [bold]{src.name}[/] ({src.type.value})")
 
 
@@ -419,7 +420,7 @@ def sync(
         result = f.agent_sync(dry_run)
     except RuntimeError as e:
         console.print(f"[red]✗[/] {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e
     if dry_run:
         console.print("[blue]DRY-RUN[/]")
         console.print(f"   Agent: {result['agent']}")
@@ -497,27 +498,77 @@ def telemetry_status():
         console.print("   Run [bold]fabrik telemetry on[/] to enable")
 
 
+@telemetry_app.command("ping")
+def telemetry_ping():
+    """Send a test event to verify telemetry connectivity."""
+    tracker = get_tracker()
+
+    if not tracker:
+        console.print("[red]✗ Telemetry not initialized[/]")
+        raise typer.Exit(1)
+
+    if not tracker.active:
+        console.print("[yellow]⚠ Telemetry disabled or not configured[/]")
+        console.print("   Run [bold]fabrik telemetry on[/] to enable")
+        raise typer.Exit(1)
+
+    console.print("[dim]Sending test event...[/]")
+    ok, status, dur = tracker.ping()
+    if ok:
+        console.print(f"[green]✓ Ping succeeded[/] ({status}, {dur:.0f}ms)")
+    else:
+        console.print(f"[red]✗ Ping failed[/] ({status})")
+        raise typer.Exit(1)
+
+
 # ─── Entrypoint ──────────────────────────────────────────────────────────────
 
 
 def run():
     global _tracker_command
+    error = None
     try:
         app()
-        _track_success = True
-        _track_error = None
     except SystemExit as e:
-        _track_success = e.code in (None, 0)
-        _track_error = None if _track_success else "error"
+        error = e
     except BaseException as e:
+        error = e
+
+    _track_success = True
+    _track_error = None
+    _track_error_message = None
+    _track_traceback = None
+
+    if isinstance(error, SystemExit):
+        cause = getattr(error, "__cause__", None)
+        if cause:
+            _track_success = False
+            _track_error = type(cause).__name__
+            _track_error_message = str(cause) or None
+            tb_frames = tb_mod.extract_tb(cause.__traceback__)
+            if tb_frames:
+                tail = tb_frames[-3:]
+                _track_traceback = "".join(tb_mod.format_list(tail)).rstrip()
+        else:
+            _track_success = error.code in (None, 0)
+            _track_error = None if _track_success else "error"
+    elif error is not None:
         _track_success = False
-        _track_error = type(e).__name__
-    else:
-        _track_success = True
-        _track_error = None
+        _track_error = type(error).__name__
+        _track_error_message = str(error) or None
 
     if _tracker_start > 0:
         duration = (time.monotonic() - _tracker_start) * 1000
         tracker = get_tracker()
         if tracker:
-            tracker.track_command(_tracker_command, _track_success, duration, _track_error)
+            tracker.track_command(
+                _tracker_command,
+                _track_success,
+                duration,
+                _track_error,
+                _track_error_message,
+                _track_traceback,
+            )
+
+    if error is not None:
+        raise error

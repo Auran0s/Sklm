@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 from typing import Any
 
 from fabrik.agents.base import AgentAdapter
+from fabrik.models import Link
 
 
 OPENER_DIR_NAME = ".opencode"
@@ -28,8 +30,8 @@ class OpencodeAdapter(AgentAdapter):
     def sync(
         self,
         project_root: Path,
-        linked_skills: list[str],
-        linked_mcps: list[str],
+        linked_skills: list[Link],
+        linked_mcps: list[Link],
     ) -> None:
         opencode_dir = project_root / OPENER_DIR_NAME
         config_path = opencode_dir / OPENER_CONFIG_NAME
@@ -42,28 +44,36 @@ class OpencodeAdapter(AgentAdapter):
         self._sync_skills(opencode_dir, linked_skills)
         self._sync_mcps(opencode_dir, linked_mcps)
 
-    def _sync_skills(self, opencode_dir: Path, linked_skills: list[str]) -> None:
+    def _sync_skills(self, opencode_dir: Path, linked_skills: list[Link]) -> None:
         skills_path = opencode_dir / "skills"
         skills_path.mkdir(parents=True, exist_ok=True)
-        existing = {p.name for p in skills_path.iterdir() if p.is_dir()}
-        for skill_name in linked_skills:
-            if skill_name not in existing:
-                skill_dir = skills_path / skill_name
-                skill_dir.mkdir(parents=True, exist_ok=True)
-        for name in existing:
-            if name not in linked_skills:
-                import shutil
-                shutil.rmtree(skills_path / name)
 
-    def _sync_mcps(self, opencode_dir: Path, linked_mcps: list[str]) -> None:
+        # Copy content from global store for each linked skill
+        for link in linked_skills:
+            target_dir = skills_path / link.name
+            if target_dir.exists():
+                shutil.rmtree(target_dir)
+            shutil.copytree(link.target, target_dir)
+
+        # Remove skills that are no longer linked
+        linked_names = {l.name for l in linked_skills}
+        for existing in list(skills_path.iterdir()):
+            if existing.is_dir() and existing.name not in linked_names:
+                shutil.rmtree(existing)
+
+    def _sync_mcps(self, opencode_dir: Path, linked_mcps: list[Link]) -> None:
         mcps_path = opencode_dir / "mcps"
         mcps_path.mkdir(parents=True, exist_ok=True)
-        existing = {p.name for p in mcps_path.iterdir() if p.is_dir()}
-        for mcp_name in linked_mcps:
-            if mcp_name not in existing:
-                mcp_dir = mcps_path / mcp_name
-                mcp_dir.mkdir(parents=True, exist_ok=True)
-        for name in existing:
-            if name not in linked_mcps:
-                import shutil
-                shutil.rmtree(mcps_path / name)
+
+        # Copy content from global store for each linked MCP
+        for link in linked_mcps:
+            target_dir = mcps_path / link.name
+            if target_dir.exists():
+                shutil.rmtree(target_dir)
+            shutil.copytree(link.target, target_dir)
+
+        # Remove MCPs that are no longer linked
+        linked_names = {l.name for l in linked_mcps}
+        for existing in list(mcps_path.iterdir()):
+            if existing.is_dir() and existing.name not in linked_names:
+                shutil.rmtree(existing)

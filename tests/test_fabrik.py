@@ -5,6 +5,7 @@ import json
 import os
 import tempfile
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 import yaml
@@ -249,6 +250,128 @@ class TestGlobalStoreTelemetry:
         assert cfg.enabled is False
 
 
+class TestUmamiTracker:
+    """Tests for UmamiTracker.track_command enriched error fields."""
+
+    def _make_tracker(self, active=True):
+        from fabrik.telemetry import UmamiTracker
+        return UmamiTracker(
+            umami_url="https://umami.test" if active else "",
+            website_id="test-id" if active else "",
+            enabled=active,
+        )
+
+    def test_error_fields_included(self):
+        tracker = self._make_tracker()
+        tracker._send_event = lambda name, data: None
+        events: list[dict] = []
+
+        def fake_send(event_name, custom_data):
+            events.append(custom_data)
+
+        tracker._send_event = fake_send
+        tracker.track_command(
+            "test-cmd", success=False, duration_ms=100,
+            error_type="ValueError", error_message="bad value", traceback="  File test.py, line 1",
+        )
+        assert len(events) == 1
+        data = events[0]
+        assert data["error"] == "ValueError"
+        assert data["error_message"] == "bad value"
+        assert data["traceback"] == "  File test.py, line 1"
+        assert data["success"] is False
+
+    def test_no_error_fields_on_success(self):
+        tracker = self._make_tracker()
+        events: list[dict] = []
+
+        def fake_send(event_name, custom_data):
+            events.append(custom_data)
+
+        tracker._send_event = fake_send
+        tracker.track_command(
+            "test-cmd", success=True, duration_ms=100,
+            error_type=None, error_message="should not appear", traceback="should not appear",
+        )
+        assert len(events) == 1
+        data = events[0]
+        assert "error_message" not in data
+        assert "traceback" not in data
+        assert "error" not in data
+
+    def test_no_error_fields_when_omitted(self):
+        tracker = self._make_tracker()
+        events: list[dict] = []
+
+        def fake_send(event_name, custom_data):
+            events.append(custom_data)
+
+        tracker._send_event = fake_send
+        tracker.track_command("test-cmd", success=False, duration_ms=100, error_type="KeyError")
+        assert len(events) == 1
+        data = events[0]
+        assert data["error"] == "KeyError"
+        assert "error_message" not in data
+        assert "traceback" not in data
+
+
+class TestCLIErrorTelemetry:
+    """Tests that CLI error chain (raise from) and run() capture work correctly."""
+
+    def test_run_extracts_cause_from_system_exit(self, monkeypatch):
+        """run() extracts error_type, error_message, and traceback from __cause__."""
+        import traceback
+        from fabrik.cli.main import run
+
+        events: list[dict] = []
+
+        def fake_track_command(command, success, duration_ms, error_type=None,
+                               error_message=None, traceback=None, dry_run=False):
+            events.append(dict(
+                command=command, success=success, error_type=error_type,
+                error_message=error_message, traceback=traceback,
+            ))
+
+        tracker = MagicMock()
+        tracker.track_command.side_effect = fake_track_command
+        monkeypatch.setattr("fabrik.cli.main._tracker_start", 1000.0)
+        monkeypatch.setattr("fabrik.cli.main._tracker_command", "test-cmd")
+        monkeypatch.setattr("fabrik.cli.main.get_tracker", lambda: tracker)
+
+        original_app = None
+        def failing_app():
+            try:
+                raise ValueError("something went wrong")
+            except ValueError as e:
+                raise SystemExit(1) from e
+
+        monkeypatch.setattr("fabrik.cli.main.app", failing_app)
+        try:
+            run()
+        except SystemExit:
+            pass
+
+        assert len(events) == 1
+        data = events[0]
+        assert data["success"] is False
+        assert data["error_type"] == "ValueError"
+        assert "something went wrong" in data["error_message"]
+
+    def test_raise_typer_exit_from_e_chains_exception(self):
+        """Verify raise typer.Exit(1) from e sets __cause__ properly."""
+        import typer
+        try:
+            try:
+                raise FileNotFoundError("resource not found")
+            except FileNotFoundError as e:
+                raise typer.Exit(1) from e
+        except typer.Exit as e:
+            cause = getattr(e, "__cause__", None)
+            assert cause is not None
+            assert isinstance(cause, FileNotFoundError)
+            assert "resource not found" in str(cause)
+
+
 class TestWorkspace:
     def test_init_no_dir(self, temp_dir):
         ws = Workspace(temp_dir)
@@ -472,3 +595,117 @@ class TestCLIIntegration:
 
         cfg = store.get_telemetry_config()
         assert cfg.enabled is False
+
+    def test_telemetry_ping_success(self, temp_dir, monkeypatch):
+        from unittest.mock import Mock
+        from typer.testing import CliRunner
+        from fabrik.cli.main import app
+
+        monkeypatch.setenv("FABRIK_UMAMI_URL", "https://umami.test")
+        monkeypatch.setenv("FABRIK_WEBSITE_ID", "test-id")
+        monkeypatch.setattr("fabrik.telemetry.umami.new_event", Mock(return_value={}))
+
+        runner = CliRunner()
+        result = runner.invoke(app, ["telemetry", "ping"])
+        assert result.exit_code == 0
+        assert "succeeded" in result.output.lower()
+
+    def test_telemetry_ping_failure(self, temp_dir, monkeypatch):
+        from unittest.mock import Mock
+        from typer.testing import CliRunner
+        from fabrik.cli.main import app
+
+        monkeypatch.setenv("FABRIK_UMAMI_URL", "https://umami.test")
+        monkeypatch.setenv("FABRIK_WEBSITE_ID", "test-id")
+        monkeypatch.setattr("fabrik.telemetry.umami.new_event", Mock(side_effect=RuntimeError("Connection refused")))
+
+        runner = CliRunner()
+        result = runner.invoke(app, ["telemetry", "ping"])
+        assert result.exit_code == 1
+        assert "failed" in result.output.lower()
+
+    def test_init_creates_agent_dirs(self, temp_dir):
+        """fabrik init doit créer les dossiers de l'agent détecté."""
+        # Simuler un projet OpenCode
+        (temp_dir / ".opencode").mkdir()
+        from typer.testing import CliRunner
+        from fabrik.cli.main import app
+        runner = CliRunner()
+        result = runner.invoke(app, ["init"])
+        assert result.exit_code == 0
+        assert (temp_dir / ".opencode" / "skills").is_dir()
+        assert (temp_dir / ".opencode" / "mcps").is_dir()
+
+    def test_init_creates_agent_dirs_with_flag(self, temp_dir):
+        """fabrik init --agent opencode doit créer les dossiers même sans .opencode/."""
+        from typer.testing import CliRunner
+        from fabrik.cli.main import app
+        runner = CliRunner()
+        result = runner.invoke(app, ["init", "--agent", "opencode"])
+        assert result.exit_code == 0
+        assert (temp_dir / ".opencode" / "skills").is_dir()
+        assert (temp_dir / ".opencode" / "mcps").is_dir()
+
+    def test_link_copies_skill_content(self, temp_dir, fake_skill_dir):
+        """fabrik link doit copier le contenu du skill dans .opencode/skills/<name>/."""
+        # Simuler un projet OpenCode
+        (temp_dir / ".opencode").mkdir()
+        from typer.testing import CliRunner
+        from fabrik.cli.main import app
+        runner = CliRunner()
+        runner.invoke(app, ["init"])
+        runner.invoke(app, ["global", "add", "skill", str(fake_skill_dir), "--name", "test-skill"])
+        runner.invoke(app, ["add", "skill", "test-skill"])
+        result = runner.invoke(app, ["link", "skill", "test-skill"])
+        assert result.exit_code == 0
+        agent_skill_dir = temp_dir / ".opencode" / "skills" / "test-skill"
+        assert agent_skill_dir.is_dir()
+        assert (agent_skill_dir / "SKILL.md").exists()
+        assert (agent_skill_dir / "SKILL.md").read_text() == "# My Skill\nA test skill."
+
+    def test_link_no_sync_skips_agent(self, temp_dir, fake_skill_dir):
+        """fabrik link --no-sync ne doit pas copier le contenu dans l'agent."""
+        (temp_dir / ".opencode").mkdir()
+        from typer.testing import CliRunner
+        from fabrik.cli.main import app
+        runner = CliRunner()
+        runner.invoke(app, ["init"])
+        runner.invoke(app, ["global", "add", "skill", str(fake_skill_dir), "--name", "test-skill"])
+        runner.invoke(app, ["add", "skill", "test-skill"])
+        result = runner.invoke(app, ["link", "skill", "test-skill", "--no-sync"])
+        assert result.exit_code == 0
+        agent_skill_dir = temp_dir / ".opencode" / "skills" / "test-skill"
+        assert not agent_skill_dir.exists()
+
+    def test_unlink_removes_agent_skill(self, temp_dir, fake_skill_dir):
+        """fabrik unlink doit supprimer le dossier skill de l'agent."""
+        (temp_dir / ".opencode").mkdir()
+        from typer.testing import CliRunner
+        from fabrik.cli.main import app
+        runner = CliRunner()
+        runner.invoke(app, ["init"])
+        runner.invoke(app, ["global", "add", "skill", str(fake_skill_dir), "--name", "test-skill"])
+        runner.invoke(app, ["add", "skill", "test-skill"])
+        runner.invoke(app, ["link", "skill", "test-skill"])
+        agent_skill_dir = temp_dir / ".opencode" / "skills" / "test-skill"
+        assert agent_skill_dir.is_dir()
+        result = runner.invoke(app, ["unlink", "skill", "test-skill"])
+        assert result.exit_code == 0
+        assert not agent_skill_dir.exists()
+
+    def test_agent_sync_updates_content(self, temp_dir, fake_skill_dir):
+        """fabrik agent sync doit mettre à jour le contenu si le skill change."""
+        (temp_dir / ".opencode").mkdir()
+        from typer.testing import CliRunner
+        from fabrik.cli.main import app
+        runner = CliRunner()
+        runner.invoke(app, ["init"])
+        runner.invoke(app, ["global", "add", "skill", str(fake_skill_dir), "--name", "test-skill"])
+        runner.invoke(app, ["add", "skill", "test-skill"])
+        runner.invoke(app, ["link", "skill", "test-skill", "--no-sync"])
+        # Vérifier que le skill n'est PAS présent (no-sync)
+        assert not (temp_dir / ".opencode" / "skills" / "test-skill").exists()
+        # Puis synchroniser
+        result = runner.invoke(app, ["agent", "sync"])
+        assert result.exit_code == 0
+        assert (temp_dir / ".opencode" / "skills" / "test-skill" / "SKILL.md").exists()

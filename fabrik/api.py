@@ -41,6 +41,13 @@ class Fabrik:
         else:
             detected = self._detect_agent()
         self.workspace.init(agent=detected)
+        # Prepare agent infrastructure directories
+        if agent:
+            adapter = self._find_adapter_by_name(agent)
+        else:
+            adapter = self._detect_agent_adapter()
+        if adapter:
+            adapter.sync(self.project_root, [], [])
         return detected
 
     def set_agent(self, agent: str) -> str:
@@ -146,13 +153,13 @@ class Fabrik:
         if not agent:
             raise RuntimeError("No agent detected. Run 'fabrik init' first.")
         links = self.workspace.list_links()
-        linked_skills = [l.name for l in links if l.kind == ResourceKind.skill]
-        linked_mcps = [l.name for l in links if l.kind == ResourceKind.mcp]
+        linked_skills = [l for l in links if l.kind == ResourceKind.skill]
+        linked_mcps = [l for l in links if l.kind == ResourceKind.mcp]
         if dry_run:
             return {
                 "agent": type(agent).__name__,
-                "skills_to_add": linked_skills,
-                "mcps_to_add": linked_mcps,
+                "skills_to_add": [l.name for l in linked_skills],
+                "mcps_to_add": [l.name for l in linked_mcps],
             }
         agent.sync(self.project_root, linked_skills, linked_mcps)
         return {"agent": type(agent).__name__, "synced": True}
@@ -177,4 +184,13 @@ class Fabrik:
         for adapter in adapters:
             if adapter.detect(self.project_root):
                 return adapter
+        return None
+
+    def _find_adapter_by_name(self, agent_name: str) -> Optional[AgentAdapter]:
+        """Instantiate an adapter by its canonical name, bypassing detection."""
+        adapters: list[type[AgentAdapter]] = [OpencodeAdapter]
+        for adapter_cls in adapters:
+            name = adapter_cls.__name__.replace("Adapter", "").lower()
+            if name == agent_name:
+                return adapter_cls()
         return None
