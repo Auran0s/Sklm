@@ -15,7 +15,7 @@ each time). Fabrik resolves this tension.
 ## Installation
 
 ```bash
-git clone https://github.com/votre-user/fabrik.git
+git clone https://github.com/Auran0s/fabrik.git
 cd fabrik
 pip install -e .
 ```
