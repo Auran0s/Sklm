@@ -20,8 +20,7 @@ def link_resource(
     resource = global_store.get_resource(kind, name)
     if not resource:
         raise FileNotFoundError(
-            f"Resource '{kind.value}:{name}' not found in global store. "
-            f"Add it first with 'fabrik global add {kind.value} <path>'"
+            f"Resource '{kind.value}:{name}' not found in global store."
         )
     link_dir = workspace.links_dir / f"{kind.value}s" / name
     link_dir.parent.mkdir(parents=True, exist_ok=True)

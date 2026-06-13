@@ -262,6 +262,7 @@ class TestCLIIntegration:
         monkeypatch.setattr("fabrik.store.FABRIK_HOME", temp_dir / ".fabrik-home")
         monkeypatch.setattr("fabrik.core.registry.REGISTRIES_PATH", temp_dir / ".fabrik-home" / "registries.yaml")
         monkeypatch.setattr("fabrik.core.registry.REGISTRY_CACHE", temp_dir / ".fabrik-home" / "cache")
+        monkeypatch.setattr("fabrik.cli.main._fabrik", None)
     def test_help(self):
         from typer.testing import CliRunner
         from fabrik.cli.main import app
@@ -297,12 +298,14 @@ class TestCLIIntegration:
         assert result.exit_code == 0
         assert "opencode" in result.output
 
-    def test_global_add_ls_rm(self, temp_dir, fake_skill_dir):
+    def test_global_ls_rm(self, temp_dir, fake_skill_dir, monkeypatch):
         from typer.testing import CliRunner
         from fabrik.cli.main import app
+        from fabrik.api import Fabrik
+        from fabrik.models import ResourceKind
         runner = CliRunner()
-        result = runner.invoke(app, ["global", "add", "skill", str(fake_skill_dir), "--name", "test-skill"])
-        assert result.exit_code == 0
+        f = Fabrik()
+        f.global_add(ResourceKind.skill, fake_skill_dir, "test-skill")
         result = runner.invoke(app, ["global", "ls"])
         assert result.exit_code == 0
         assert "test-skill" in result.output
@@ -313,32 +316,23 @@ class TestCLIIntegration:
         from typer.testing import CliRunner
         from fabrik.cli.main import app
         runner = CliRunner()
-        runner.invoke(app, ["global", "add", "skill", str(fake_skill_dir), "--name", "test-skill"])
-        result = runner.invoke(app, ["add", "skill", "test-skill"])
+        runner.invoke(app, ["init"])
+        result = runner.invoke(app, ["add", "skill", str(fake_skill_dir)])
         assert result.exit_code == 0
         assert "Added" in result.output
-        result = runner.invoke(app, ["rm", "skill", "test-skill"])
+        result = runner.invoke(app, ["rm", "skill", fake_skill_dir.name])
         assert result.exit_code == 0
         assert "Removed" in result.output
-
-    def test_link_unlink(self, temp_dir, fake_skill_dir):
-        from typer.testing import CliRunner
-        from fabrik.cli.main import app
-        runner = CliRunner()
-        runner.invoke(app, ["global", "add", "skill", str(fake_skill_dir), "--name", "test-skill"])
-        runner.invoke(app, ["add", "skill", "test-skill"])
-        result = runner.invoke(app, ["link", "skill", "test-skill"])
-        assert result.exit_code == 0
-        assert "Linked" in result.output
-        result = runner.invoke(app, ["unlink", "skill", "test-skill"])
-        assert result.exit_code == 0
-        assert "Unlinked" in result.output
 
     def test_info(self, temp_dir, fake_skill_dir):
         from typer.testing import CliRunner
         from fabrik.cli.main import app
+        from fabrik.api import Fabrik
+        from fabrik.models import ResourceKind
         runner = CliRunner()
-        runner.invoke(app, ["global", "add", "skill", str(fake_skill_dir), "--name", "test-skill"])
+        runner.invoke(app, ["init"])
+        f = Fabrik()
+        f.global_add(ResourceKind.skill, fake_skill_dir, "test-skill")
         runner.invoke(app, ["add", "skill", "test-skill"])
         result = runner.invoke(app, ["info", "skill", "test-skill"])
         assert result.exit_code == 0
@@ -347,8 +341,12 @@ class TestCLIIntegration:
     def test_ls_json(self, temp_dir, fake_skill_dir):
         from typer.testing import CliRunner
         from fabrik.cli.main import app
+        from fabrik.api import Fabrik
+        from fabrik.models import ResourceKind
         runner = CliRunner()
-        runner.invoke(app, ["global", "add", "skill", str(fake_skill_dir), "--name", "test-skill"])
+        runner.invoke(app, ["init"])
+        f = Fabrik()
+        f.global_add(ResourceKind.skill, fake_skill_dir, "test-skill")
         runner.invoke(app, ["add", "skill", "test-skill"])
         result = runner.invoke(app, ["ls", "--json"])
         assert result.exit_code == 0

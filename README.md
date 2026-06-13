@@ -22,14 +22,14 @@ pip install -e .
 
 ## Usage
 
-Fabrik manages resources through a four-stage pipeline. Every command
-belongs to one of these stages:
+Fabrik manages resources through a simple three-step flow. `add` does
+everything — resolve, store, link, and sync — in a single command.
 
 ```
-    COLLECTION ──→ DECLARATION ──→ ACTIVATION ──→ SYNC
-   global add         add             link          agent sync
-   global ls          ls              unlink        agent detect
-   global rm          info
+    COLLECTION ──→ ACTIVATE
+   global ls          add
+   global rm          ls
+                      info
                       rm
 ```
 
@@ -53,12 +53,10 @@ fabrik status --repair               # Auto-fix any broken symlinks
 ### Global Store
 
 The global store (`~/.fabrik/`) is your personal curated library of
-skills and MCPs. Resources must be in the global store before they
-can be linked to a project.
+skills and MCPs. Resources are automatically copied here when you
+run `fabrik add` from a registry or local path.
 
 ```bash
-fabrik global add skill ./my-skill     # Import a skill into your personal library
-fabrik global add mcp ./mcp-config.yaml # Import an MCP configuration
 fabrik global ls                        # Browse your entire library
 fabrik global ls skills                 # Browse only skills (filter by type)
 fabrik global rm skill my-skill         # Remove from your library
@@ -66,32 +64,20 @@ fabrik global rm skill my-skill         # Remove from your library
 
 ### Resource Management
 
-Once a resource is in the global store (or a registry), declare it
-for the current project with `add`. This does **not** activate the
-resource yet — it simply records that this project uses it.
+`fabrik add` is the single command to add and activate a resource in
+your project. It resolves the resource, copies it to the global store
+if needed, links it into the workspace, and syncs with your AI agent
+— all in one step.
 
 ```bash
-fabrik add skill my-skill              # Declare a resource from the global store
-fabrik add mcp registry:my-mcp         # Declare a resource from a specific registry
-fabrik ls                               # List all declared resources
-fabrik ls skills                        # List only declared skills
+fabrik add skill my-skill              # Add and activate a skill (from global store or registry)
+fabrik add skill ./my-skill/           # Add and activate a skill from a local path
+fabrik add mcp registry:my-mcp         # Add and activate an MCP from a specific registry
+fabrik ls                               # List all active resources
+fabrik ls skills                        # List only active skills
 fabrik ls --json                        # Machine-readable JSON output
-fabrik info skill my-skill             # Show details (origin, path, link status)
-fabrik rm skill my-skill               # Remove the declaration
-fabrik rm skill my-skill --force       # Remove declaration and unlink in one step
-```
-
-### Linking
-
-Linking creates a symlink that makes a declared resource accessible
-in the project. After linking, the resource is automatically
-synchronized to your agent's configuration (unless `--no-sync` is
-passed). Unlinking removes the symlink without losing the declaration.
-
-```bash
-fabrik link skill my-skill             # Activate: symlinks the resource and syncs the agent
-fabrik unlink skill my-skill           # Deactivate: removes the symlink, keeps the declaration
-fabrik link skill my-skill --no-sync   # Link without updating the agent (batch multiple links)
+fabrik info skill my-skill             # Show details (origin, path, status)
+fabrik rm skill my-skill               # Remove, unlink, and clean up from agent in one step
 ```
 
 ### Registry
@@ -111,14 +97,11 @@ fabrik registry search scraper --type skill       # Filter search results by res
 
 ### Agent
 
-The final stage: synchronize your linked resources into the agent's
-configuration so the agent can actually see and use them. This runs
-automatically after every `link` and `unlink`.
+Agent synchronization runs automatically during `add` and `rm`. You
+only need the agent commands for setup and diagnostics.
 
 ```bash
 fabrik agent detect                   # Identify which AI agent is active in this project
-fabrik agent sync                     # Apply all linked resources to the agent's config
-fabrik agent sync --dry-run           # Preview what would change without applying it
 ```
 
 ## Architecture

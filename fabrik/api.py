@@ -71,12 +71,26 @@ class Fabrik:
     # ── Resource CRUD ────────────────────────────────────────────────────
 
     def add(self, kind: ResourceKind, name: str) -> ResourceRef:
-        return add_resource_to_workspace(
+        ref = add_resource_to_workspace(
             self.workspace, self.global_store, self.registry_manager, kind, name
         )
+        existing = self.global_store.get_resource(kind, ref.name)
+        if not existing and ref.path:
+            self.global_store.add_resource(kind, ref.path, ref.name)
+        _link_resource(self.workspace, self.global_store, kind, ref.name)
+        try:
+            self.agent_sync()
+        except RuntimeError:
+            pass
+        return ref
 
-    def remove(self, kind: ResourceKind, name: str, force: bool = False) -> ResourceRef:
-        return remove_resource_from_workspace(self.workspace, kind, name, force)
+    def remove(self, kind: ResourceKind, name: str) -> ResourceRef:
+        ref = remove_resource_from_workspace(self.workspace, kind, name)
+        try:
+            self.agent_sync()
+        except RuntimeError:
+            pass
+        return ref
 
     def list(self, kind: Optional[ResourceKind] = None) -> list[ResourceRef]:
         if kind and kind == ResourceKind.mcp:

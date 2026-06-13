@@ -27,16 +27,11 @@ def remove_resource_from_workspace(
     workspace: Workspace,
     kind: ResourceKind,
     name: str,
-    force: bool = False,
 ) -> ResourceRef:
     ref = workspace.get_resource(kind, name)
     if not ref:
         raise KeyError(f"Resource '{kind.value}:{name}' not found in workspace")
-    if ref.linked and not force:
-        raise RuntimeError(
-            f"Resource '{kind.value}:{name}' is linked. Use --force to unlink and remove."
-        )
-    if ref.linked and force:
+    if ref.linked:
         from fabrik.core.linking import unlink_resource
         unlink_resource(workspace, kind, name)
     return workspace.remove_resource(kind, name)

@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Optional
 
 import typer
 from rich.console import Console
 from rich.table import Table
-from rich.tree import Tree
 from rich import print_json
 
 from fabrik import __version__
@@ -120,7 +118,7 @@ def add(
     resource_type: str = typer.Argument(..., help="Resource type: skill or mcp"),
     name: str = typer.Argument(..., help="Resource name (optionally prefixed: registry:name)"),
 ):
-    """Add a resource reference to the workspace."""
+    """Add and activate a resource in the project (resolves, stores, links, syncs agent)."""
     f = get_fabrik()
     kind = parse_resource_type(resource_type)
     try:
@@ -128,20 +126,19 @@ def add(
     except (FileNotFoundError, FileExistsError, ValueError) as e:
         console.print(f"[red]✗[/] {e}")
         raise typer.Exit(1)
-    console.print(f"[green]✓[/] Added {kind.value} [bold]{ref.name}[/] (origin: {ref.origin})")
+    console.print(f"[green]✓[/] Added and activated {kind.value} [bold]{ref.name}[/]")
 
 
 @app.command()
 def rm(
     resource_type: str = typer.Argument(..., help="Resource type: skill or mcp"),
     name: str = typer.Argument(..., help="Resource name to remove"),
-    force: bool = typer.Option(False, "--force", "-f", help="Auto-unlink if linked"),
 ):
-    """Remove a resource reference from the workspace."""
+    """Remove a resource from the workspace (unlinks and syncs agent)."""
     f = get_fabrik()
     kind = parse_resource_type(resource_type)
     try:
-        ref = f.remove(kind, name, force)
+        ref = f.remove(kind, name)
     except (KeyError, RuntimeError) as e:
         console.print(f"[red]✗[/] {e}")
         raise typer.Exit(1)
@@ -174,10 +171,8 @@ def ls(
     table.add_column("Name", style="cyan")
     table.add_column("Type", style="magenta")
     table.add_column("Origin", style="green")
-    table.add_column("Linked", style="yellow")
     for r in resources:
-        linked = "[green]✓[/]" if r.linked else ""
-        table.add_row(r.name, r.kind.value, r.origin, linked)
+        table.add_row(r.name, r.kind.value, r.origin)
     console.print(table)
 
 
@@ -204,77 +199,11 @@ def info(
     console.print(table)
 
 
-# ─── Linking ─────────────────────────────────────────────────────────────────
-
-
-@app.command()
-def link(
-    resource_type: str = typer.Argument(..., help="Resource type: skill or mcp"),
-    name: str = typer.Argument(..., help="Resource name to link"),
-    no_sync: bool = typer.Option(False, "--no-sync", help="Skip agent config sync"),
-):
-    """Link a global resource into the project workspace."""
-    f = get_fabrik()
-    kind = parse_resource_type(resource_type)
-    try:
-        result = f.link(kind, name)
-    except (FileNotFoundError, FileExistsError) as e:
-        console.print(f"[red]✗[/] {e}")
-        raise typer.Exit(1)
-    console.print(f"[green]✓[/] Linked {kind.value} [bold]{result.name}[/]")
-    if not no_sync:
-        try:
-            f.agent_sync()
-            console.print("   [dim]Agent config synced.[/]")
-        except RuntimeError:
-            pass
-
-
-@app.command()
-def unlink(
-    resource_type: str = typer.Argument(..., help="Resource type: skill or mcp"),
-    name: str = typer.Argument(..., help="Resource name to unlink"),
-    no_sync: bool = typer.Option(False, "--no-sync", help="Skip agent config sync"),
-):
-    """Unlink a resource from the project workspace."""
-    f = get_fabrik()
-    kind = parse_resource_type(resource_type)
-    try:
-        f.unlink(kind, name)
-    except KeyError as e:
-        console.print(f"[red]✗[/] {e}")
-        raise typer.Exit(1)
-    console.print(f"[green]✓[/] Unlinked {kind.value} [bold]{name}[/]")
-    if not no_sync:
-        try:
-            f.agent_sync()
-            console.print("   [dim]Agent config synced.[/]")
-        except RuntimeError:
-            pass
-
-
 # ─── Global Store ────────────────────────────────────────────────────────────
 
 
 global_app = typer.Typer(help="Manage the global Fabrik store")
 app.add_typer(global_app, name="global")
-
-
-@global_app.command("add")
-def global_add(
-    resource_type: str = typer.Argument(..., help="Resource type: skill or mcp"),
-    path: str = typer.Argument(..., help="Path to the resource"),
-    name: Optional[str] = typer.Option(None, "--name", "-n", help="Custom name for the resource"),
-):
-    """Add a resource to the global store."""
-    f = get_fabrik()
-    kind = parse_resource_type(resource_type)
-    try:
-        resource = f.global_add(kind, path, name)
-    except (FileNotFoundError, FileExistsError) as e:
-        console.print(f"[red]✗[/] {e}")
-        raise typer.Exit(1)
-    console.print(f"[green]✓[/] Added {kind.value} [bold]{resource.name}[/] to global store")
 
 
 @global_app.command("ls")
@@ -383,26 +312,6 @@ def registry_search(
 
 agent_app = typer.Typer(help="Manage AI agent configuration")
 app.add_typer(agent_app, name="agent")
-
-
-@agent_app.command()
-def sync(
-    dry_run: bool = typer.Option(False, "--dry-run", help="Preview changes without applying"),
-):
-    """Synchronize workspace resources with the active agent config."""
-    f = get_fabrik()
-    try:
-        result = f.agent_sync(dry_run)
-    except RuntimeError as e:
-        console.print(f"[red]✗[/] {e}")
-        raise typer.Exit(1)
-    if dry_run:
-        console.print("[blue]DRY-RUN[/]")
-        console.print(f"   Agent: {result['agent']}")
-        console.print(f"   Skills to add: {', '.join(result['skills_to_add']) or 'none'}")
-        console.print(f"   MCPs to add: {', '.join(result['mcps_to_add']) or 'none'}")
-    else:
-        console.print(f"[green]✓[/] Synced with {result['agent']}")
 
 
 @agent_app.command()
