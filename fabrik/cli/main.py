@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from typing import Optional
 
+import click
 import typer
 from rich.console import Console
 from rich.table import Table
@@ -24,6 +26,25 @@ app = typer.Typer(
 console = Console()
 
 _fabrik: Optional[Fabrik] = None
+_tracker_start: float = 0.0
+_tracker_command: str = ""
+_tracker: Optional["UmamiTracker"] = None  # type: ignore[name-defined]
+
+
+def get_tracker() -> Optional["UmamiTracker"]:
+    global _tracker
+    if _tracker is None:
+        from fabrik.store import GlobalStore
+        from fabrik.telemetry import UmamiTracker
+
+        store = GlobalStore()
+        cfg = store.get_telemetry_config()
+        _tracker = UmamiTracker(
+            umami_url=cfg.umami_url,
+            website_id=cfg.website_id,
+            enabled=cfg.enabled,
+        )
+    return _tracker
 
 
 def get_fabrik() -> Fabrik:
@@ -53,7 +74,10 @@ def main(
         False, "--version", "-V", help="Show version", callback=version_callback
     ),
 ):
-    pass
+    global _tracker_start, _tracker_command
+    _tracker_start = time.monotonic()
+    ctx = click.get_current_context()
+    _tracker_command = ctx.invoked_subcommand or ""
 
 
 # ─── Workspace ───────────────────────────────────────────────────────────────
@@ -416,7 +440,84 @@ def detect():
         console.print("[yellow]No supported agent detected.[/]")
 
 
+# ─── Telemetry ────────────────────────────────────────────────────────────────
+
+
+telemetry_app = typer.Typer(help="Manage telemetry settings")
+app.add_typer(telemetry_app, name="telemetry")
+
+
+@telemetry_app.command("on")
+def telemetry_on():
+    """Enable telemetry."""
+    from fabrik.store import GlobalStore
+
+    store = GlobalStore()
+    cfg = store.get_telemetry_config()
+    cfg.enabled = True
+    store.set_telemetry_config(cfg)
+    console.print("[green]✓[/] Telemetry enabled")
+
+
+@telemetry_app.command("off")
+def telemetry_off():
+    """Disable telemetry."""
+    from fabrik.store import GlobalStore
+
+    store = GlobalStore()
+    cfg = store.get_telemetry_config()
+    cfg.enabled = False
+    store.set_telemetry_config(cfg)
+    console.print("[yellow]⚠[/] Telemetry disabled")
+
+
+@telemetry_app.command("status")
+def telemetry_status():
+    """Show telemetry status."""
+    from fabrik.store import GlobalStore
+
+    store = GlobalStore()
+    cfg = store.get_telemetry_config()
+    tracker = get_tracker()
+
+    if not tracker:
+        console.print("[yellow]⚠ Telemetry not initialized[/]")
+        raise typer.Exit(1)
+
+    if not cfg.umami_url or not cfg.website_id:
+        console.print("[yellow]⚠ Telemetry inactive[/]")
+        console.print("   Configure FABRIK_UMAMI_URL and FABRIK_WEBSITE_ID")
+        console.print("   or run: [bold]fabrik telemetry on[/]")
+        raise typer.Exit(1)
+
+    if tracker.active:
+        console.print(f"[green]Active[/] → {cfg.umami_url}")
+    else:
+        console.print("[yellow]⚠ Telemetry disabled[/]")
+        console.print("   Run [bold]fabrik telemetry on[/] to enable")
+
+
 # ─── Entrypoint ──────────────────────────────────────────────────────────────
 
+
 def run():
-    app()
+    global _tracker_command
+    try:
+        app()
+        _track_success = True
+        _track_error = None
+    except SystemExit as e:
+        _track_success = e.code in (None, 0)
+        _track_error = None if _track_success else "error"
+    except BaseException as e:
+        _track_success = False
+        _track_error = type(e).__name__
+    else:
+        _track_success = True
+        _track_error = None
+
+    if _tracker_start > 0:
+        duration = (time.monotonic() - _tracker_start) * 1000
+        tracker = get_tracker()
+        if tracker:
+            tracker.track_command(_tracker_command, _track_success, duration, _track_error)

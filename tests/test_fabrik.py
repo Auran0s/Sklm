@@ -17,6 +17,7 @@ from fabrik.models import (
     Resource,
     ResourceKind,
     ResourceRef,
+    TelemetryConfig,
     WorkspaceConfig,
 )
 from fabrik.store import GlobalStore, FABRIK_HOME
@@ -188,6 +189,64 @@ class TestGlobalStore:
     def test_remove_nonexistent_raises(self, isolated_store):
         with pytest.raises(KeyError):
             isolated_store.remove_resource(ResourceKind.skill, "nope")
+
+
+# ─── Telemetry ────────────────────────────────────────────────────────────────
+
+
+class TestTelemetryConfig:
+    def test_defaults(self):
+        cfg = TelemetryConfig()
+        assert cfg.enabled is True
+        assert cfg.umami_url == "https://analytics.victorbeysseriat.fr"
+        assert cfg.website_id == "1cc92fce-83fc-4792-9b02-e28a04810426"
+
+    def test_custom_values(self):
+        cfg = TelemetryConfig(
+            enabled=False,
+            umami_url="https://umami.example.com",
+            website_id="abc-123",
+        )
+        assert cfg.enabled is False
+        assert cfg.umami_url == "https://umami.example.com"
+        assert cfg.website_id == "abc-123"
+
+
+class TestGlobalStoreTelemetry:
+    def test_get_default_config(self, isolated_store):
+        cfg = isolated_store.get_telemetry_config()
+        assert cfg.enabled is True
+        assert cfg.umami_url == "https://analytics.victorbeysseriat.fr"
+        assert cfg.website_id == "1cc92fce-83fc-4792-9b02-e28a04810426"
+
+    def test_set_and_get_config(self, isolated_store):
+        original = TelemetryConfig(
+            enabled=False,
+            umami_url="https://umami.example.com",
+            website_id="abc-123",
+        )
+        isolated_store.set_telemetry_config(original)
+        loaded = isolated_store.get_telemetry_config()
+        assert loaded.enabled is False
+        assert loaded.umami_url == "https://umami.example.com"
+        assert loaded.website_id == "abc-123"
+
+    def test_env_overrides(self, isolated_store, monkeypatch):
+        monkeypatch.setenv("FABRIK_UMAMI_URL", "https://env.umami.com")
+        monkeypatch.setenv("FABRIK_WEBSITE_ID", "env-456")
+        cfg = isolated_store.get_telemetry_config()
+        assert cfg.umami_url == "https://env.umami.com"
+        assert cfg.website_id == "env-456"
+
+    def test_env_disable(self, isolated_store, monkeypatch):
+        monkeypatch.setenv("FABRIK_TELEMETRY", "0")
+        cfg = isolated_store.get_telemetry_config()
+        assert cfg.enabled is False
+
+    def test_env_disable_false(self, isolated_store, monkeypatch):
+        monkeypatch.setenv("FABRIK_TELEMETRY", "false")
+        cfg = isolated_store.get_telemetry_config()
+        assert cfg.enabled is False
 
 
 class TestWorkspace:
@@ -380,3 +439,36 @@ class TestCLIIntegration:
         runner = CliRunner()
         result = runner.invoke(app, ["agent", "detect"])
         assert result.exit_code == 0
+
+    def test_telemetry_status_active_by_default(self, temp_dir):
+        from typer.testing import CliRunner
+        from fabrik.cli.main import app
+        runner = CliRunner()
+        result = runner.invoke(app, ["telemetry", "status"])
+        assert result.exit_code == 0
+        assert "active" in result.output.lower()
+        assert "analytics.victorbeysseriat.fr" in result.output
+
+    def test_telemetry_on_off_lifecycle(self, temp_dir, monkeypatch):
+        from typer.testing import CliRunner
+        from fabrik.cli.main import app
+        from fabrik.store import GlobalStore
+
+        monkeypatch.setenv("FABRIK_UMAMI_URL", "https://umami.test")
+        monkeypatch.setenv("FABRIK_WEBSITE_ID", "test-id")
+
+        runner = CliRunner()
+        result = runner.invoke(app, ["telemetry", "on"])
+        assert result.exit_code == 0
+        assert "enabled" in result.output.lower()
+
+        store = GlobalStore()
+        cfg = store.get_telemetry_config()
+        assert cfg.enabled is True
+
+        result = runner.invoke(app, ["telemetry", "off"])
+        assert result.exit_code == 0
+        assert "disabled" in result.output.lower()
+
+        cfg = store.get_telemetry_config()
+        assert cfg.enabled is False
