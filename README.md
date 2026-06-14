@@ -1,17 +1,29 @@
+<div align="center">
+
 # Fabrik
 
-**Skills manager for AI agents.**
+*Skills manager for AI agents*
 
-Fabrik is a Python CLI that centralizes management of **skills** (SKILL.md files)
-for your AI agents.
+![Python version](https://img.shields.io/badge/Python->=3.9-3776AB?style=flat-square&logo=python&logoColor=fff)
+[![License](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](LICENSE)
 
-## Problem
+[Quickstart](#quickstart) • [Usage](#usage) • [Supported Agents](#supported-agents) • [Architecture](#architecture) • [Development](#development)
 
-Agent resources are either **global** (available everywhere but pollute
-every project) or **local** (project-specific but must be reinstalled
-each time). Fabrik resolves this tension with a **per-project scoping**
-model: install skills globally in a hidden store, then activate only
-what you need in each project.
+</div>
+
+Fabrik is a CLI tool that centralizes management of **skills** (SKILL.md files) for your AI agents. It solves the tension between wanting skills globally available vs. per-project scoped, without polluting your agent's configuration.
+
+> [!TIP]
+> New to Fabrik? Start with [`fabrik init`](#quickstart) — it auto-detects your AI agent and sets up everything in seconds.
+
+## Features
+
+- **Multi-agent support** — recognizes 8 AI agents (OpenCode, Claude Code, Cursor, Windsurf, Gemini CLI, Cline, Amazon Q, GitHub Copilot) and syncs skills to the right place.
+- **Global store** — install skills once in `~/.fabrik/`, reuse across projects.
+- **Per-project scoping** — activate only the skills each project needs via symlinks; your agent only sees what you explicitly add.
+- **Registry discovery** — index local directories or git repos as resource catalogs, searchable by keyword.
+- **Auto-sync** — `fabrik add` and `fabrik rm` automatically sync your agent's configuration directory — no manual copying.
+- **Telemetry (opt-out)** — anonymous usage tracking via Umami. Disable with `FABRIK_TELEMETRY=0`.
 
 ## Installation
 
@@ -21,168 +33,131 @@ cd fabrik
 pip install -e .
 ```
 
+## Quickstart
+
+```bash
+fabrik init                          # Creates .fabrik/ and detects your agent
+fabrik install skill my-skill \
+  --from https://github.com/user/skills   # Install into global store
+fabrik add skill my-skill            # Activate in the current project
+```
+
+That's it — your AI agent can now use the skill.
+
+> [!TIP]
+> If you already have skills in `~/.agents/skills/`, import them with `fabrik migrate`.
+
 ## Usage
 
-Fabrik provides a simple lifecycle for skills:
-
-```
-    INSTALL ──→ ACTIVATE ──→ DEACTIVATE ──→ UNINSTALL
-   install        add            rm           uninstall
-   migrate        ls            (keep in       (remove
-       (import)       info          store)        from store)
-```
-
-Use the sections below to find the right command for your current stage.
-
-### Workspace
-
-Before using any Fabrik commands, initialize a workspace in your
-project directory. This creates the `.fabrik/` structure and detects
-your AI agent. Use `status` to inspect what's configured and check
-for broken links.
+### Workspace setup
 
 ```bash
-cd my-project
-fabrik init                          # First command: creates .fabrik/ and detects the agent
-fabrik init --agent opencode         # Force a specific agent (skip auto-detection)
-fabrik status                        # Show workspace health (resources, links, broken symlinks)
-fabrik status --repair               # Auto-fix any broken symlinks
+fabrik init                          # Auto-detect agent and create .fabrik/
+fabrik init --agent opencode         # Force a specific agent
+fabrik status                        # Show workspace health
+fabrik status --repair               # Fix broken symlinks
 ```
 
-### Install (Store without Activating)
-
-Install a skill from a GitHub repository into the global store without
-activating it in the current project. This lets you pre-install skills
-and activate them later per project.
+### Global store (install once)
 
 ```bash
-fabrik install skill find-skills --from https://github.com/vercel-labs/skills
-fabrik install skill flask-api --from https://github.com/aj-geddes/useful-ai-prompts \
-  --subdir skills/flask-api-development
-fabrik uninstall skill find-skills                # Remove from store permanently
-fabrik uninstall skill find-skills --force        # Skip confirmation
+fabrik install skill find-skills \
+  --from https://github.com/vercel-labs/skills
+fabrik uninstall skill find-skills   # Remove from global store
+fabrik uninstall skill find-skills --force   # Skip confirmation
+fabrik migrate                       # Import from ~/.agents/skills/
+fabrik migrate skill find-skills     # Import a single skill
 ```
 
-### Migrating from existing tools
-
-If you're coming from another tool — for example, skills installed via `npx skills`
-in `~/.agents/skills/` — import them into Fabrik's store:
+### Resource management (activate per project)
 
 ```bash
-fabrik migrate                         # Import all externally managed skills
-fabrik migrate skill find-skills       # Import a specific skill
+fabrik add skill my-skill            # Full pipeline: resolve → store → link → sync
+fabrik add skill my-skill \
+  --from https://github.com/user/skills   # Install from git and activate
+fabrik ls                             # List active resources
+fabrik ls --json                      # Machine-readable output
+fabrik info skill my-skill           # Show origin, path, status
+fabrik rm skill my-skill             # Remove, unlink, and clean agent
 ```
 
-### Resource Management
-
-`fabrik add` is the single command to install and activate a resource in
-your project. It resolves the resource, copies it to the global store
-if needed, links it into the workspace, and syncs with your AI agent
-— all in one step.
+### Registry discovery
 
 ```bash
-fabrik add skill my-skill              # Add and activate (from store, registry, or local path)
-fabrik add skill find-skills --from https://github.com/vercel-labs/skills  # Install from GitHub + activate
-fabrik ls                               # List all active resources
-fabrik ls skills                        # List only active skills
-fabrik ls --json                        # Machine-readable JSON output
-fabrik info skill my-skill             # Show details (origin, path, status)
-fabrik rm skill my-skill               # Remove from project, unlink, and clean agent
+fabrik registry add ~/my-skills                  # Local folder as registry
+fabrik registry add https://github.com/org/skills.git   # Git repo as registry
+fabrik registry ls                                # List registries
+fabrik registry search scraper                    # Search across all registries
+fabrik registry search scraper --registry my-skills   # Within a specific registry
 ```
 
-### Registry
-
-Registries are discovery sources — local directories or git repos
-where you can find and import skills. Think of them as
-package indexes for agent resources.
+### Agent management
 
 ```bash
-fabrik registry add ~/my-skills                 # Add a local folder as a registry source
-fabrik registry add https://github.com/org/skills.git  # Add a git repository as a registry source
-fabrik registry ls                               # List all configured registries
-fabrik registry search scraper                   # Search for resources across all registries
-fabrik registry search scraper --registry my-skills # Search within a specific registry
-fabrik registry search scraper --type skill       # Filter search results by resource type
+fabrik agent detect                   # Identify the active AI agent
+fabrik agent list                     # List all known agents
+fabrik agent sync                     # Force re-sync all linked skills
+fabrik agent sync --dry-run           # Preview changes without applying
 ```
 
-### Per-Project Scoping
-
-Skills installed globally (e.g., via `npx skills` in `~/.agents/skills/`) may be
-visible to your AI agent in **every** project. Fabrik changes this by scoping
-skills per-project: your agent only sees skills that Fabrik explicitly syncs
-into its configuration directory (e.g., `.opencode/skills/` for OpenCode).
-
-Use `fabrik status` to check for unmanaged skills that may bypass scoping.
+### Telemetry
 
 ```bash
-fabrik status
-# ⚠ 5 skills found outside Fabrik's store
-#    These may be globally visible to your AI agent in every project.
-#    Use fabrik migrate to import them into the Fabrik store.
-```
-
-### Agent
-
-Agent synchronization runs automatically during `add` and `rm`. You
-only need the agent commands for setup and diagnostics.
-
-```bash
-fabrik agent detect                   # Identify which AI agent is active in this project
+fabrik telemetry status              # Check if telemetry is enabled
+fabrik telemetry off                  # Disable anonymous usage data
+fabrik telemetry on                   # Re-enable
 ```
 
 ## Supported Agents
 
-Fabrik recognizes and can sync skills with the following AI agents:
+Fabrik detects the active agent by checking which config directories exist in your project:
 
-| Agent | ID | Skills | Commands | Auto-detect |
-|---|---|---|---|---|
-| OpenCode | `opencode` | `.opencode/skills/` | `init`, `add`, `rm`, `agent sync` | ✅ |
-| Claude Code | `claude` | `.claude/skills/` | `init`, `add`, `rm`, `agent sync` | ✅ |
-| Cursor | `cursor` | `.cursor/skills/` | `init`, `add`, `rm`, `agent sync` | ✅ |
-| Windsurf | `windsurf` | `.windsurf/skills/` | `init`, `add`, `rm`, `agent sync` | ✅ |
-| Gemini CLI | `gemini` | `.gemini/skills/` | `init`, `add`, `rm`, `agent sync` | ✅ |
-| Cline | `cline` | `.cline/skills/` | `init`, `add`, `rm`, `agent sync` | ✅ |
-| Amazon Q | `amazon-q` | `.amazonq/skills/` | `init`, `add`, `rm`, `agent sync` | ✅ |
-| GitHub Copilot | `github-copilot` | `.github/skills/` | `init --agent github-copilot` | 🔲 (explicit only) |
+| Agent | Config directory | Skills path | Auto-detect |
+|---|---|---|---|
+| OpenCode | `.opencode/` | `.opencode/skills/` | ✅ |
+| Claude Code | `.claude/` | `.claude/skills/` | ✅ |
+| Cursor | `.cursor/` | `.cursor/skills/` | ✅ |
+| Windsurf | `.windsurf/` | `.windsurf/skills/` | ✅ |
+| Gemini CLI | `.gemini/` | `.gemini/skills/` | ✅ |
+| Cline | `.cline/` | `.cline/skills/` | ✅ |
+| Amazon Q | `.amazonq/` | `.amazonq/skills/` | ✅ |
+| GitHub Copilot | `.github/` | `.github/skills/` | 🔲 (explicit only) |
 
-### Other agents
-
-The following agents are recognized but not yet supported. Pull requests welcome!
-
-| Agent | Status |
-|---|---|
-| Agent (`~/.agent/`) | 🔲 |
-| Augment (`~/.augment/`) | 🔲 |
-| Codex (`~/.codex/`) | 🔲 |
-| Forge (`~/.forge/`) | 🔲 |
-| Cospec (`~/.cospec/`) | 🔲 |
-| Roo (`~/.roo/`) | 🔲 |
+GitHub Copilot requires `fabrik init --agent github-copilot` because `.github/` is too common to auto-detect.
 
 ## Architecture
 
+Fabrik uses a two-level store model:
+
 ```
-~/.fabrik/               # Global store (user-wide, hidden from agents)
-  config.yaml            # Global resource catalog
+~/.fabrik/               # Global store (user-wide)
+  config.yaml            # Resource catalog
   registries.yaml        # Registry sources
-  cache/                 # Cloned git repositories (for install --from)
-  store/skills/          # Global skills (each may have .fabrik-source.yaml)
+  cache/                 # Cloned git repos (for install --from)
+  store/skills/          # Installed skill directories
 
-./.fabrik/               # Project workspace (not committed)
-  fabrik.yaml            # Project configuration
-  links/skills/          # Linked skill symlinks → ~/.fabrik/store/skills/
+./.fabrik/               # Per-project workspace (gitignored)
+  fabrik.yaml            # Project config (agent, links, resources)
+  links/skills/          # Symlinks → ~/.fabrik/store/skills/
 
-<agent-dir>/skills/      # Agent sees only these (per-project scoping)
+<agent-dir>/skills/      # Agent-visible copies (auto-synced)
                          # e.g., .opencode/skills/ for OpenCode
 ```
+
+The `fabrik add` command runs four steps in sequence:
+
+1. **Resolve** — find the resource (global store → registries → local path)
+2. **Store** — copy it into `~/.fabrik/store/` if not already there
+3. **Link** — create a symlink in `./.fabrik/links/`
+4. **Sync** — copy linked skills to the agent's config directory
+
+Removal (`fabrik rm`) reverses steps 3 and 4. The global store is untouched — skills remain available for other projects.
 
 ## Development
 
 ```bash
-pip install -e .
-pip install pytest
-python3 -m pytest tests/
+pip install -e .                    # Editable install
+pip install -r requirements.txt     # Dev dependencies (pytest, pytest-cov)
+python3 -m pytest tests/            # Run the test suite
+python3 -m pytest tests/ -k <pattern>   # Run a subset of tests
 ```
-
-## License
-
-MIT
