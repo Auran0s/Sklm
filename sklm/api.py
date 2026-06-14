@@ -125,43 +125,51 @@ class Sklm:
         self.global_store.remove_resource(kind, name)
 
     def migrate(
-        self, kind: ResourceKind, name: Optional[str] = None
-    ) -> list[ResourceRef]:
-        agents_dir = Path.home() / ".agents" / f"{kind.value}s"
-        if not agents_dir.exists():
-            raise FileNotFoundError(f"No resources found at {agents_dir}")
-        results: list[ResourceRef] = []
+        self,
+        kind: ResourceKind,
+        name: Optional[str] = None,
+        source_path: Optional[Path] = None,
+    ) -> list[tuple[ResourceRef, Path]]:
+        if source_path is not None:
+            source_dir = source_path.resolve()
+        else:
+            source_dir = Path.home() / ".agents" / f"{kind.value}s"
+        if not source_dir.exists():
+            raise FileNotFoundError(f"No resources found at {source_dir}")
+        results: list[tuple[ResourceRef, Path]] = []
         if name:
-            src = agents_dir / name
+            src = source_dir / name
             if not src.exists() or not (src / "SKILL.md").exists():
-                raise FileNotFoundError(f"Resource '{name}' not found in {agents_dir}")
+                raise FileNotFoundError(f"Resource '{name}' not found in {source_dir}")
             resource = self.global_store.add_resource(kind, src, name)
-            results.append(
+            results.append((
                 ResourceRef(
                     name=resource.name,
                     kind=resource.kind,
                     origin=str(src),
                     linked=False,
                     path=resource.path,
-                )
-            )
+                ),
+                src,
+            ))
         else:
-            for d in sorted(agents_dir.iterdir()):
+            for d in sorted(source_dir.iterdir()):
                 if not d.is_dir():
                     continue
                 if not (d / "SKILL.md").exists():
                     continue
                 try:
                     resource = self.global_store.add_resource(kind, d)
-                    results.append(
+                    results.append((
                         ResourceRef(
                             name=resource.name,
                             kind=resource.kind,
                             origin=str(d),
                             linked=False,
                             path=resource.path,
-                        )
-                    )
+                        ),
+                        d,
+                    ))
                 except FileExistsError:
                     continue
         return results

@@ -141,6 +141,109 @@ class TestGlobalConfig:
 # ─── Store Layer ─────────────────────────────────────────────────────────────
 
 
+class TestNestedSkillResolution:
+    """Tests pour add_resource_from_git avec structures imbriquées."""
+
+    def _make_repo(self, root: Path, skill_paths: dict[str, str]) -> Path:
+        """Helper: crée une fausse arborescence de repo cloné.
+        skill_paths = { "rel/path/to/skill_dir": "SKILL.md content", ... }
+        """
+        for rel_path, content in skill_paths.items():
+            d = root / rel_path
+            d.mkdir(parents=True, exist_ok=True)
+            (d / "SKILL.md").write_text(content)
+        return root
+
+    def test_finds_nested_skill_two_levels(self, isolated_store, temp_dir):
+        """skills/<category>/<name>/SKILL.md doit être trouvé."""
+        from sklm.models import ResourceKind
+
+        cache_dir = isolated_store.cache_dir / "test-nested-2"
+        self._make_repo(cache_dir, {
+            "skills/seo/entity-seo": "# Entity SEO",
+        })
+        with unittest.mock.patch("sklm.core.registry.RegistryManager") as MockReg:
+            MockReg.return_value.clone_or_fetch.return_value = cache_dir
+            resource = isolated_store.add_resource_from_git(
+                ResourceKind.skill, "entity-seo", "https://github.com/test/repo"
+            )
+        assert resource.name == "entity-seo"
+        assert resource.path.exists()
+        assert (resource.path / "SKILL.md").read_text() == "# Entity SEO"
+
+    def test_finds_nested_skill_three_levels(self, isolated_store, temp_dir):
+        """skills/<cat>/<sub>/<name>/SKILL.md doit être trouvé."""
+        from sklm.models import ResourceKind
+
+        cache_dir = isolated_store.cache_dir / "test-nested-3"
+        self._make_repo(cache_dir, {
+            "skills/paid-ads/platforms/reddit-ads": "# Reddit Ads",
+        })
+        with unittest.mock.patch("sklm.core.registry.RegistryManager") as MockReg:
+            MockReg.return_value.clone_or_fetch.return_value = cache_dir
+            resource = isolated_store.add_resource_from_git(
+                ResourceKind.skill, "reddit-ads", "https://github.com/test/repo"
+            )
+        assert resource.name == "reddit-ads"
+        assert resource.path.exists()
+        assert (resource.path / "SKILL.md").read_text() == "# Reddit Ads"
+
+    def test_flat_structure_still_takes_priority(self, isolated_store, temp_dir):
+        """skills/<name>/ (flat) doit être prioritaire sur skills/<cat>/<name>/."""
+        from sklm.models import ResourceKind
+
+        cache_dir = isolated_store.cache_dir / "test-priority"
+        self._make_repo(cache_dir, {
+            "skills/my-skill": "# Flat Skill",
+            "skills/category/my-skill": "# Nested Skill",
+        })
+        with unittest.mock.patch("sklm.core.registry.RegistryManager") as MockReg:
+            MockReg.return_value.clone_or_fetch.return_value = cache_dir
+            resource = isolated_store.add_resource_from_git(
+                ResourceKind.skill, "my-skill", "https://github.com/test/repo"
+            )
+        assert (resource.path / "SKILL.md").read_text() == "# Flat Skill"
+
+    def test_not_found_error_lists_available(self, isolated_store, temp_dir):
+        """Quand aucun skill n'est trouvé, le message doit lister les disponibles."""
+        from sklm.models import ResourceKind
+
+        cache_dir = isolated_store.cache_dir / "test-not-found"
+        self._make_repo(cache_dir, {
+            "skills/seo/entity-seo": "# Entity SEO",
+            "skills/seo/on-page": "# On Page SEO",
+            "skills/channels/email/email-marketing": "# Email Marketing",
+        })
+        with unittest.mock.patch("sklm.core.registry.RegistryManager") as MockReg:
+            MockReg.return_value.clone_or_fetch.return_value = cache_dir
+            with pytest.raises(FileNotFoundError) as exc:
+                isolated_store.add_resource_from_git(
+                    ResourceKind.skill, "nonexistent", "https://github.com/test/repo"
+                )
+        msg = str(exc.value)
+        assert "entity-seo" in msg
+        assert "on-page" in msg
+        assert "email-marketing" in msg
+        assert "--subdir" in msg
+
+    def test_source_subdir_reflects_nested_path(self, isolated_store, temp_dir):
+        """source_subdir dans les métadonnées doit refléter le chemin réel."""
+        from sklm.models import ResourceKind
+
+        cache_dir = isolated_store.cache_dir / "test-subdir-meta"
+        self._make_repo(cache_dir, {
+            "skills/seo/entity-seo": "# Entity SEO",
+        })
+        with unittest.mock.patch("sklm.core.registry.RegistryManager") as MockReg:
+            MockReg.return_value.clone_or_fetch.return_value = cache_dir
+            isolated_store.add_resource_from_git(
+                ResourceKind.skill, "entity-seo", "https://github.com/test/repo"
+            )
+        meta = isolated_store.get_source_metadata(ResourceKind.skill, "entity-seo")
+        assert meta is not None
+        assert meta.source_subdir == "skills/seo/entity-seo"
+
+
 class TestGlobalStore:
     def test_init_creates_dirs(self, isolated_store):
         assert isolated_store.root.exists()
@@ -971,6 +1074,157 @@ class TestCLIIntegration:
         assert result.exit_code == 0
         assert "Migrated" in result.output
         # cleanup
+        import shutil
+        shutil.rmtree(test_skill_dir)
+
+    def test_migrate_from_registry(self, temp_dir):
+        """sklm migrate --from-registry doit importer depuis un registry local."""
+        from typer.testing import CliRunner
+        from sklm.cli.main import app
+        runner = CliRunner()
+        reg_path = temp_dir / "test-registry"
+        reg_path.mkdir()
+        skill_dir = reg_path / "reg-skill"
+        skill_dir.mkdir()
+        (skill_dir / "SKILL.md").write_text("# Registry Skill")
+        runner.invoke(app, ["registry", "add", str(reg_path), "--name", "test-local-reg"])
+        result = runner.invoke(app, ["migrate", "--from-registry", "test-local-reg"])
+        assert result.exit_code == 0
+        assert "Migrated" in result.output
+        assert "reg-skill" in result.output
+
+    def test_migrate_from_registry_not_found(self, temp_dir):
+        """sklm migrate --from-registry avec un nom inconnu doit échouer."""
+        from typer.testing import CliRunner
+        from sklm.cli.main import app
+        runner = CliRunner()
+        result = runner.invoke(app, ["migrate", "--from-registry", "does-not-exist"])
+        assert result.exit_code != 0
+        assert "not found" in result.output
+
+    def test_migrate_from_git_registry_errors(self, temp_dir):
+        """sklm migrate --from-registry avec un registry git doit échouer."""
+        import yaml
+        from typer.testing import CliRunner
+        from sklm.cli.main import app
+        runner = CliRunner()
+        reg_path = temp_dir / ".sklm-home" / "registries.yaml"
+        reg_path.parent.mkdir(parents=True, exist_ok=True)
+        reg_data = {
+            "registries": {
+                "git-reg": {
+                    "name": "git-reg", "type": "git",
+                    "url_or_path": "https://github.com/test/repo.git",
+                }
+            }
+        }
+        with open(reg_path, "w") as f:
+            yaml.dump(reg_data, f, default_flow_style=False)
+        result = runner.invoke(app, ["migrate", "--from-registry", "git-reg"])
+        assert result.exit_code != 0
+        assert "git registry" in result.output.lower()
+
+    def test_migrate_force_cleanup(self, temp_dir):
+        """sklm migrate --force-cleanup doit supprimer les sources."""
+        agents_skills = Path.home() / ".agents" / "skills"
+        agents_skills.mkdir(parents=True, exist_ok=True)
+        test_skill_dir = agents_skills / "test-force-clean-skill"
+        test_skill_dir.mkdir(exist_ok=True)
+        (test_skill_dir / "SKILL.md").write_text("# Force Cleanup")
+        from typer.testing import CliRunner
+        from sklm.cli.main import app
+        runner = CliRunner()
+        result = runner.invoke(app, ["migrate", "skill", "test-force-clean-skill", "--force-cleanup"])
+        assert result.exit_code == 0
+        assert "Deleted" in result.output
+        assert not test_skill_dir.exists()
+
+    def test_migrate_no_cleanup(self, temp_dir):
+        """sklm migrate --no-cleanup doit préserver les sources."""
+        agents_skills = Path.home() / ".agents" / "skills"
+        agents_skills.mkdir(parents=True, exist_ok=True)
+        test_skill_dir = agents_skills / "test-no-clean-skill"
+        test_skill_dir.mkdir(exist_ok=True)
+        (test_skill_dir / "SKILL.md").write_text("# No Cleanup")
+        from typer.testing import CliRunner
+        from sklm.cli.main import app
+        runner = CliRunner()
+        result = runner.invoke(app, ["migrate", "skill", "test-no-clean-skill", "--no-cleanup"])
+        assert result.exit_code == 0
+        assert "no-cleanup" in result.output
+        assert test_skill_dir.exists()
+        import shutil
+        shutil.rmtree(test_skill_dir)
+
+    def test_migrate_non_interactive_message(self, temp_dir):
+        """sklm migrate en mode non-interactif affiche le message de conservation."""
+        agents_skills = Path.home() / ".agents" / "skills"
+        agents_skills.mkdir(parents=True, exist_ok=True)
+        test_skill_dir = agents_skills / "test-non-int-skill"
+        test_skill_dir.mkdir(exist_ok=True)
+        (test_skill_dir / "SKILL.md").write_text("# Non-interactive")
+        from typer.testing import CliRunner
+        from sklm.cli.main import app
+        runner = CliRunner()
+        result = runner.invoke(app, ["migrate", "skill", "test-non-int-skill"])
+        assert result.exit_code == 0
+        assert "Non-interactive mode" in result.output
+        assert test_skill_dir.exists()
+        import shutil
+        shutil.rmtree(test_skill_dir)
+
+    def test_migrate_interactive_yes(self, temp_dir, monkeypatch):
+        """_prompt_cleanup avec confirmation yes supprime les sources."""
+        import sys
+        from pathlib import Path
+        from sklm.models import ResourceKind, ResourceRef
+        from sklm.cli.main import _prompt_cleanup
+        test_dir = temp_dir / "int-yes-src"
+        test_dir.mkdir()
+        ref_src = [
+            (ResourceRef(name="test", kind=ResourceKind.skill, origin=str(test_dir)), test_dir)
+        ]
+        monkeypatch.delenv("SKLM_NO_INTERACTIVE", raising=False)
+        with unittest.mock.patch.object(sys.stdout, "isatty", return_value=True), \
+             unittest.mock.patch("sklm.cli.main.typer.confirm", return_value=True):
+            _prompt_cleanup(ref_src, force_cleanup=False, no_cleanup=False)
+        assert not test_dir.exists()
+
+    def test_migrate_interactive_no(self, temp_dir, monkeypatch):
+        """_prompt_cleanup avec confirmation no preserve les sources."""
+        import sys
+        from sklm.models import ResourceKind, ResourceRef
+        from sklm.cli.main import _prompt_cleanup
+        test_dir = temp_dir / "int-no-src"
+        test_dir.mkdir()
+        ref_src = [
+            (ResourceRef(name="test", kind=ResourceKind.skill, origin=str(test_dir)), test_dir)
+        ]
+        monkeypatch.delenv("SKLM_NO_INTERACTIVE", raising=False)
+        with unittest.mock.patch.object(sys.stdout, "isatty", return_value=True), \
+             unittest.mock.patch("sklm.cli.main.typer.confirm", return_value=False):
+            _prompt_cleanup(ref_src, force_cleanup=False, no_cleanup=False)
+        assert test_dir.exists()
+        import shutil
+        shutil.rmtree(test_dir)
+
+    def test_migrate_api_returns_tuples(self, temp_dir):
+        """Sklm.migrate() retourne list[tuple[ResourceRef, Path]]."""
+        from sklm.models import ResourceKind, ResourceRef
+        from sklm.api import Sklm
+        agents_skills = Path.home() / ".agents" / "skills"
+        agents_skills.mkdir(parents=True, exist_ok=True)
+        test_skill_dir = agents_skills / "api-tuple-test"
+        test_skill_dir.mkdir(exist_ok=True)
+        (test_skill_dir / "SKILL.md").write_text("# API Tuple Test")
+        f = Sklm()
+        result = f.migrate(ResourceKind.skill, "api-tuple-test")
+        assert len(result) == 1
+        ref, src = result[0]
+        assert isinstance(ref, ResourceRef)
+        assert isinstance(src, Path)
+        assert ref.name == "api-tuple-test"
+        assert src == test_skill_dir
         import shutil
         shutil.rmtree(test_skill_dir)
 

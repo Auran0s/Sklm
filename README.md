@@ -65,8 +65,11 @@ sklm install skill find-skills \
   --from https://github.com/vercel-labs/skills
 sklm uninstall skill find-skills   # Remove from global store
 sklm uninstall skill find-skills --force   # Skip confirmation
-sklm migrate                       # Import from ~/.agents/skills/
+sklm migrate                       # Import all from ~/.agents/skills/
 sklm migrate skill find-skills     # Import a single skill
+sklm migrate --from-registry my-reg          # Import from a local registry
+sklm migrate --force-cleanup                 # Delete source files after import (no prompt)
+sklm migrate --no-cleanup                    # Keep source files after import (no prompt)
 ```
 
 ### Resource management (activate per project)

@@ -96,6 +96,7 @@ class GlobalStore:
         registry = RegistryManager()
         cache_path = registry.clone_or_fetch(repo_url, name, ref=ref)
 
+        resolved_subdir: Optional[str] = subdir
         if subdir:
             src = cache_path / subdir
         else:
@@ -103,17 +104,43 @@ class GlobalStore:
             # 1. skills/<name> subdirectory (multi-skill repo)
             # 2. repo root (single-skill repo with SKILL.md at root)
             # 3. <name> subdirectory (repo with nested subdir of same name)
+            # 4. Recursive search under skills/ for <name>/SKILL.md
             candidate = cache_path / "skills" / name
             if candidate.exists():
                 src = candidate
+                resolved_subdir = f"skills/{name}"
             elif (cache_path / "SKILL.md").exists():
                 src = cache_path
+                resolved_subdir = None
             else:
                 src = cache_path / name
+                resolved_subdir = name
+
+            if not src.exists() or not src.is_dir():
+                skills_root = cache_path / "skills"
+                if skills_root.is_dir():
+                    for dirpath, dirnames, _ in os.walk(skills_root):
+                        if name in dirnames:
+                            candidate = Path(dirpath) / name
+                            if (candidate / "SKILL.md").exists():
+                                src = candidate
+                                resolved_subdir = str(src.relative_to(cache_path))
+                                break
 
         if not src.exists() or not src.is_dir():
+            available = []
+            skills_root = cache_path / "skills"
+            if skills_root.is_dir():
+                for dirpath, _, filenames in os.walk(skills_root):
+                    if "SKILL.md" in filenames:
+                        rel = Path(dirpath).relative_to(cache_path)
+                        available.append(str(rel))
+            hint = ""
+            if available:
+                hint = f" Available skills: {', '.join(sorted(available))}."
             raise FileNotFoundError(
-                f"Skill directory '{name}' not found at expected path '{src}' in repo '{repo_url}'."
+                f"Skill directory '{name}' not found at expected path '{src}' in repo '{repo_url}'.{hint}"
+                + " Use --subdir to specify the exact subdirectory path."
             )
 
         dest = self._type_dir(kind) / name
@@ -139,7 +166,7 @@ class GlobalStore:
             name,
             SourceMetadata(
                 source_repo=repo_url,
-                source_subdir=str(subdir or f"skills/{name}"),
+                source_subdir=resolved_subdir or "",
                 installed_at=datetime.now(timezone.utc).isoformat(),
                 ref=ref,
             ),

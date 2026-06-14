@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import os
+import shutil
+import sys
 import time
 import traceback as tb_mod
 from pathlib import Path
@@ -15,7 +18,7 @@ from rich import print_json
 
 from sklm import __version__
 from sklm.api import Sklm
-from sklm.models import ResourceKind
+from sklm.models import RegistryType, ResourceKind
 
 app = typer.Typer(
     name="sklm",
@@ -64,6 +67,48 @@ def parse_resource_type(val: str) -> ResourceKind:
     if val in ("skill", "skills"):
         return ResourceKind.skill
     raise typer.BadParameter(f"Invalid type '{val}'. Use 'skill'.")
+
+
+def _prompt_cleanup(
+    refs_src: list[tuple["ResourceRef", Path]],
+    force_cleanup: bool,
+    no_cleanup: bool,
+) -> None:
+    if not refs_src:
+        return
+
+    if no_cleanup:
+        console.print("[dim]Source files preserved (--no-cleanup).[/]")
+        return
+
+    is_interactive = sys.stdout.isatty() and os.environ.get("SKLM_NO_INTERACTIVE", "").lower() not in ("1", "true", "yes", "on")
+
+    if force_cleanup:
+        for _, src in refs_src:
+            if src.exists():
+                shutil.rmtree(src)
+        msg = f"[green]✓[/] Deleted {len(refs_src)} source director{'y' if len(refs_src) == 1 else 'ies'}"
+        console.print(msg)
+        return
+
+    if not is_interactive:
+        console.print("[dim]Non-interactive mode: source files preserved. Use --force-cleanup to delete.[/]")
+        return
+
+    if len(refs_src) == 1:
+        msg = f"Delete source directory {refs_src[0][1]}?"
+    else:
+        parent = refs_src[0][1].parent
+        msg = f"Delete {len(refs_src)} migrated source directories from {parent}?"
+
+    if typer.confirm(msg, default=False):
+        for _, src in refs_src:
+            if src.exists():
+                shutil.rmtree(src)
+        msg = f"[green]✓[/] Deleted {len(refs_src)} source director{'y' if len(refs_src) == 1 else 'ies'}"
+        console.print(msg)
+    else:
+        console.print("[dim]Source files preserved.[/]")
 
 
 @app.callback()
@@ -204,21 +249,49 @@ def migrate(
     name: Optional[str] = typer.Argument(
         None, help="Resource name (omit to migrate all)"
     ),
+    from_registry: Optional[str] = typer.Option(
+        None, "--from-registry", help="Migrate from a local registry by name"
+    ),
+    force_cleanup: bool = typer.Option(
+        False, "--force-cleanup", help="Delete source files without prompting"
+    ),
+    no_cleanup: bool = typer.Option(
+        False, "--no-cleanup", help="Preserve source files without prompting"
+    ),
 ):
-    """Import resources from ~/.agents/ into the Sklm global store."""
+    """Import resources from ~/.agents/ or a local registry into the Sklm global store."""
     f = get_sklm()
     kind = parse_resource_type(resource_type)
+
+    source_path: Optional[Path] = None
+    if from_registry:
+        sources = f.registry_manager.list_sources()
+        if from_registry not in sources:
+            console.print(f"[red]✗[/] Registry '{from_registry}' not found")
+            raise typer.Exit(1)
+        src = sources[from_registry]
+        if src.type != RegistryType.local:
+            console.print(
+                f"[red]✗[/] Cannot migrate from git registry '{from_registry}'. "
+                "Only local registries are supported."
+            )
+            raise typer.Exit(1)
+        source_path = Path(src.url_or_path).expanduser().resolve()
+
     try:
-        refs = f.migrate(kind, name)
+        refs_src = f.migrate(kind, name, source_path)
     except (FileNotFoundError, FileExistsError, ValueError) as e:
         console.print(f"[red]✗[/] {e}")
         raise typer.Exit(1) from e
-    if not refs:
+    if not refs_src:
         console.print("[yellow]No resources to migrate.[/]")
         return
-    for ref in refs:
+    for ref, _ in refs_src:
         console.print(f"[green]✓[/] Migrated {kind.value} [bold]{ref.name}[/]")
-    console.print(f"\n[green]Done.[/] {len(refs)} resource(s) migrated.")
+    console.print(f"\n[green]Done.[/] {len(refs_src)} resource(s) migrated.")
+
+    _prompt_cleanup(refs_src, force_cleanup, no_cleanup)
+
     if name:
         console.print("Tip: Run [bold]sklm add {kind.value} {name}[/] to activate it in this project.")
     else:
