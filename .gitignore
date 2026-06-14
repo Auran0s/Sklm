@@ -221,3 +221,4 @@ __marimo__/
 fabrik.egg-info
 openspec
 .sklm
+.DS_Store
