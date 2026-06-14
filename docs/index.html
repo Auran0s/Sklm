@@ -331,9 +331,9 @@
       <h2 class="font-display text-4xl md:text-6xl font-semibold text-white leading-tight">Everything you need</h2>
     </div>
 
-    <div class="grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-6">
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
       <!-- Multi-agent -->
-      <div class="col-span-1 md:col-span-8 md:row-span-2 reveal reveal-delay-1">
+      <div class="col-span-1 md:col-span-1 reveal reveal-delay-1">
         <div class="p-[1.5px] rounded-[var(--outer-radius)] bg-white/5 border border-white/10 h-full glass-card">
           <div class="rounded-[var(--inner-radius)] bg-[#0a0a0a] p-8 md:p-10 h-full shadow-[inset_0_1px_1px_rgba(255,255,255,0.12)] flex flex-col justify-center">
             <span class="inline-flex w-12 h-12 rounded-full bg-purple-500/10 items-center justify-center mb-5 ring-1 ring-purple-500/20">
@@ -348,7 +348,7 @@
       </div>
 
       <!-- Global store -->
-      <div class="col-span-1 md:col-span-4 reveal reveal-delay-2">
+      <div class="col-span-1 md:col-span-1 reveal reveal-delay-2">
         <div class="p-[1.5px] rounded-[var(--outer-radius)] bg-white/5 border border-white/10 h-full glass-card">
           <div class="rounded-[var(--inner-radius)] bg-[#0a0a0a] p-8 h-full shadow-[inset_0_1px_1px_rgba(255,255,255,0.12)] flex flex-col justify-center">
             <span class="inline-flex w-10 h-10 rounded-full bg-emerald-500/10 items-center justify-center mb-4 ring-1 ring-emerald-500/20">
@@ -363,7 +363,7 @@
       </div>
 
       <!-- Per-project scoping -->
-      <div class="col-span-1 md:col-span-5 reveal reveal-delay-3">
+      <div class="col-span-1 md:col-span-1 reveal reveal-delay-3">
         <div class="p-[1.5px] rounded-[var(--outer-radius)] bg-white/5 border border-white/10 h-full glass-card">
           <div class="rounded-[var(--inner-radius)] bg-[#0a0a0a] p-8 h-full shadow-[inset_0_1px_1px_rgba(255,255,255,0.12)] flex flex-col justify-center">
             <span class="inline-flex w-10 h-10 rounded-full bg-blue-500/10 items-center justify-center mb-4 ring-1 ring-blue-500/20">
@@ -378,7 +378,7 @@
       </div>
 
       <!-- Registry discovery -->
-      <div class="col-span-1 md:col-span-7 reveal reveal-delay-4">
+      <div class="col-span-1 md:col-span-1 reveal reveal-delay-4">
         <div class="p-[1.5px] rounded-[var(--outer-radius)] bg-white/5 border border-white/10 h-full glass-card">
           <div class="rounded-[var(--inner-radius)] bg-[#0a0a0a] p-8 h-full shadow-[inset_0_1px_1px_rgba(255,255,255,0.12)] flex flex-col justify-center">
             <span class="inline-flex w-10 h-10 rounded-full bg-cyan-500/10 items-center justify-center mb-4 ring-1 ring-cyan-500/20">
@@ -393,7 +393,7 @@
       </div>
 
       <!-- Auto-sync -->
-      <div class="col-span-1 md:col-span-6 reveal">
+      <div class="col-span-1 md:col-span-1 reveal">
         <div class="p-[1.5px] rounded-[var(--outer-radius)] bg-white/5 border border-white/10 h-full glass-card">
           <div class="rounded-[var(--inner-radius)] bg-[#0a0a0a] p-8 h-full shadow-[inset_0_1px_1px_rgba(255,255,255,0.12)] flex flex-col justify-center">
             <span class="inline-flex w-10 h-10 rounded-full bg-amber-500/10 items-center justify-center mb-4 ring-1 ring-amber-500/20">
@@ -423,8 +423,8 @@
             <span class="font-display text-lg font-semibold text-purple-400">01</span>
           </div>
         </div>
-        <h3 class="font-display text-lg font-semibold text-white mb-1">Resolve</h3>
-        <p class="text-white/40 text-sm max-w-[180px]">Find the resource in global store, registries, or local paths</p>
+        <h3 class="font-display text-lg font-semibold text-white mb-1">Init</h3>
+        <p class="text-white/40 text-sm max-w-[180px]">Initialize sklm in the project workspace</p>
       </div>
 
       <div class="step-connector relative flex flex-col items-center text-center flex-1 w-full md:w-auto reveal reveal-delay-2">
@@ -434,8 +434,8 @@
             <span class="font-display text-lg font-semibold text-emerald-400">02</span>
           </div>
         </div>
-        <h3 class="font-display text-lg font-semibold text-white mb-1">Store</h3>
-        <p class="text-white/40 text-sm max-w-[180px]">Copy into ~/.sklm/ global store if not already there</p>
+        <h3 class="font-display text-lg font-semibold text-white mb-1">Install</h3>
+        <p class="text-white/40 text-sm max-w-[180px]">Install skills from registries or URLs into the global store</p>
       </div>
 
       <div class="step-connector relative flex flex-col items-center text-center flex-1 w-full md:w-auto reveal reveal-delay-3">
@@ -445,8 +445,8 @@
             <span class="font-display text-lg font-semibold text-blue-400">03</span>
           </div>
         </div>
-        <h3 class="font-display text-lg font-semibold text-white mb-1">Link</h3>
-        <p class="text-white/40 text-sm max-w-[180px]">Create symlink in ./.sklm/links/ per project</p>
+        <h3 class="font-display text-lg font-semibold text-white mb-1">Add</h3>
+        <p class="text-white/40 text-sm max-w-[180px]">Add installed skills to the current project</p>
       </div>
 
       <div class="relative flex flex-col items-center text-center flex-1 w-full md:w-auto reveal reveal-delay-4">
@@ -456,8 +456,8 @@
             <span class="font-display text-lg font-semibold text-cyan-400">04</span>
           </div>
         </div>
-        <h3 class="font-display text-lg font-semibold text-white mb-1">Sync</h3>
-        <p class="text-white/40 text-sm max-w-[180px]">Copy linked skills to agent config directory</p>
+        <h3 class="font-display text-lg font-semibold text-white mb-1">Migrate</h3>
+        <p class="text-white/40 text-sm max-w-[180px]">Migrate existing local skills into Sklm's management</p>
       </div>
     </div>
 
@@ -557,11 +557,10 @@
         <div class="rounded-[var(--inner-radius)] bg-[#0a0a0a] p-6 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]">
           <div class="flex items-center justify-between mb-3">
             <h3 class="font-display text-lg font-semibold text-white">GitHub Copilot</h3>
-            <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-white/10"><i class="ph ph-minus text-white/40 text-xs"></i></span>
+            <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500/15"><i class="ph ph-check text-emerald-400 text-xs"></i></span>
           </div>
           <p class="font-mono text-xs text-white/40"><span class="text-white/20">Config:</span> .github/</p>
           <p class="font-mono text-xs text-white/40"><span class="text-white/20">Skills:</span> .github/skills/</p>
-          <p class="font-mono text-[10px] text-white/30 mt-1 italic">Requires explicit init — too common to auto-detect</p>
         </div>
       </div>
     </div>
