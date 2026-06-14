@@ -5,14 +5,14 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "fabrik"
 version = "0.1.0"
-description = "MCP/Skills manager for AI agents"
+description = "Skills manager for AI agents"
 readme = "README.md"
 requires-python = ">=3.9"
 license = {text = "MIT"}
-keywords = ["mcp", "skills", "ai-agent", "cli"]
+keywords = ["skills", "ai-agent", "cli"]
 
 authors = [
-    {name = "Fabrik Contributors"},
+    {name = "Auran0s"},
 ]
 
 dependencies = [
