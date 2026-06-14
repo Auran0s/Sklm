@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sklm — Skills manager for AI agents</title>
+
+  <link href="https://api.fontshare.com/v2/css?f[]=geist@400,500,600,700&f[]=geist-mono@400,500&f[]=clash-display@400,500,600,700&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/@phosphor-icons/web@2.1.1"></script>
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Geist', 'system-ui', 'sans-serif'],
+            display: ['Clash Display', 'system-ui', 'sans-serif'],
+            mono: ['Geist Mono', 'monospace'],
+          },
+        },
+      },
+    }
+  </script>
+
+  <style>
+    :root {
+      --outer-radius: 2rem;
+      --inner-radius: calc(var(--outer-radius) - 0.375rem);
+      --ease-spring: cubic-bezier(0.32, 0.72, 0, 1);
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      background: #050505;
+      overflow-x: hidden;
+      font-family: 'Geist', system-ui, sans-serif;
+    }
+
+    ::selection {
+      background: rgba(139, 92, 246, 0.3);
+      color: #fff;
+    }
+
+    .gradient-orb-1 {
+      position: fixed;
+      top: -20%;
+      left: -10%;
+      width: 60vw;
+      height: 60vw;
+      background: radial-gradient(circle at center, rgba(139, 92, 246, 0.15), transparent 70%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .gradient-orb-2 {
+      position: fixed;
+      bottom: -20%;
+      right: -10%;
+      width: 50vw;
+      height: 50vw;
+      background: radial-gradient(circle at center, rgba(16, 185, 129, 0.12), transparent 70%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .gradient-orb-3 {
+      position: fixed;
+      top: 40%;
+      right: 15%;
+      width: 30vw;
+      height: 30vw;
+      background: radial-gradient(circle at center, rgba(59, 130, 246, 0.08), transparent 70%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .noise-overlay {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 50;
+      opacity: 0.035;
+    }
+
+    .reveal {
+      opacity: 0;
+      transform: translateY(4rem);
+      filter: blur(4px);
+      transition: all 0.8s var(--ease-spring);
+    }
+
+    .reveal.visible {
+      opacity: 1;
+      transform: translateY(0);
+      filter: blur(0);
+    }
+
+    .reveal-delay-1 { transition-delay: 100ms; }
+    .reveal-delay-2 { transition-delay: 200ms; }
+    .reveal-delay-3 { transition-delay: 300ms; }
+    .reveal-delay-4 { transition-delay: 400ms; }
+
+    .nav-link {
+      opacity: 0;
+      transform: translateY(3rem);
+      transition: all 0.6s var(--ease-spring);
+    }
+
+    .nav-link.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .nav-link:nth-child(1) { transition-delay: 80ms; }
+    .nav-link:nth-child(2) { transition-delay: 140ms; }
+    .nav-link:nth-child(3) { transition-delay: 200ms; }
+    .nav-link:nth-child(4) { transition-delay: 260ms; }
+
+    .hamburger-line {
+      position: absolute;
+      left: 0;
+      width: 100%;
+      height: 1.5px;
+      background: rgba(255, 255, 255, 0.8);
+      border-radius: 2px;
+      transition: all 0.4s var(--ease-spring);
+    }
+
+    .hamburger-line:nth-child(1) { top: 2px; }
+    .hamburger-line:nth-child(2) { bottom: 2px; }
+
+    .hamburger-active .hamburger-line:nth-child(1) {
+      top: 50%;
+      transform: translateY(-50%) rotate(45deg);
+    }
+
+    .hamburger-active .hamburger-line:nth-child(2) {
+      bottom: 50%;
+      transform: translateY(50%) rotate(-45deg);
+    }
+
+    .nav-overlay {
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.5s var(--ease-spring);
+    }
+
+    .nav-overlay.active {
+      opacity: 1;
+      pointer-events: all;
+    }
+
+    .agent-card {
+      transition: all 0.4s var(--ease-spring);
+    }
+
+    .agent-card:hover {
+      transform: translateY(-2px);
+    }
+
+    .step-connector::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: calc(100% + 0.5rem);
+      width: 2rem;
+      height: 1px;
+      border-top: 1px dashed rgba(255, 255, 255, 0.15);
+      transform: translateY(-50%);
+    }
+
+    @media (max-width: 768px) {
+      .step-connector::after {
+        display: none;
+      }
+    }
+
+    .scroll-indicator {
+      animation: bounce-fade 2.5s ease-in-out infinite;
+    }
+
+    @keyframes bounce-fade {
+      0%, 100% { transform: translateY(0); opacity: 0.3; }
+      50% { transform: translateY(6px); opacity: 0.7; }
+    }
+
+    @keyframes pulse-glow {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.2); }
+      50% { box-shadow: 0 0 0 8px rgba(139, 92, 246, 0); }
+    }
+
+    .cursor-blink {
+      animation: blink 1s step-end infinite;
+    }
+
+    @keyframes blink {
+      50% { opacity: 0; }
+    }
+
+    .arch-connector {
+      animation: pulse-arrow 2s var(--ease-spring) infinite;
+    }
+
+    @keyframes pulse-arrow {
+      0%, 100% { transform: translateX(0); opacity: 0.5; }
+      50% { transform: translateX(4px); opacity: 1; }
+    }
+
+    @media (max-width: 768px) {
+      .arch-connector {
+        transform: rotate(90deg);
+      }
+      @keyframes pulse-arrow {
+        0%, 100% { transform: rotate(90deg) translateX(0); opacity: 0.5; }
+        50% { transform: rotate(90deg) translateX(4px); opacity: 1; }
+      }
+    }
+
+    .text-balance {
+      text-wrap: balance;
+    }
+
+    .glass-nav {
+      backdrop-filter: blur(24px) saturate(1.5);
+      -webkit-backdrop-filter: blur(24px) saturate(1.5);
+    }
+
+    .glass-overlay {
+      backdrop-filter: blur(48px) saturate(1.4);
+      -webkit-backdrop-filter: blur(48px) saturate(1.4);
+    }
+
+    /* Glass-card intentionally omits backdrop-filter — only fixed/sticky elements use it */
+  </style>
+</head>
+<body>
+  <svg class="noise-overlay" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+    <filter id="noiseFilter">
+      <feTurbulence type="fractalNoise" baseFrequency="0.65" numOctaves="3" stitchTiles="stitch" />
+      <feColorMatrix type="saturate" values="0" />
+    </filter>
+    <rect width="100%" height="100%" filter="url(#noiseFilter)" />
+  </svg>
+
+  <div class="gradient-orb-1"></div>
+  <div class="gradient-orb-2"></div>
+  <div class="gradient-orb-3"></div>
+
+  <!-- === NAV === -->
+  <nav class="fixed top-6 left-1/2 -translate-x-1/2 z-50 w-max">
+    <div class="glass-nav flex items-center gap-6 px-5 py-2.5 rounded-full bg-black/40 ring-1 ring-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
+      <a href="#" class="font-display text-sm font-semibold tracking-tight text-white/90">Sklm</a>
+
+      <div class="hidden md:flex items-center gap-6">
+        <a href="#features" class="text-xs font-medium text-white/40 hover:text-white/80 transition-colors duration-300">Features</a>
+        <a href="#agents" class="text-xs font-medium text-white/40 hover:text-white/80 transition-colors duration-300">Agents</a>
+        <a href="#quickstart" class="text-xs font-medium text-white/40 hover:text-white/80 transition-colors duration-300">Quickstart</a>
+        <a href="https://github.com/Auran0s/sklm" target="_blank" rel="noopener noreferrer" class="text-xs font-medium text-white/40 hover:text-white/80 transition-colors duration-300">GitHub</a>
+      </div>
+
+      <button id="menuToggle" class="relative w-6 h-5 md:hidden focus:outline-none" aria-label="Toggle menu">
+        <span class="hamburger-line"></span>
+        <span class="hamburger-line"></span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- === NAV OVERLAY === -->
+  <div id="navOverlay" class="nav-overlay fixed inset-0 glass-overlay bg-black/80 z-40 flex flex-col items-center justify-center">
+    <div class="flex flex-col items-center gap-8">
+      <a href="#features" class="nav-link text-4xl font-display font-semibold text-white/90 hover:text-white transition-colors">Features</a>
+      <a href="#agents" class="nav-link text-4xl font-display font-semibold text-white/90 hover:text-white transition-colors">Agents</a>
+      <a href="#quickstart" class="nav-link text-4xl font-display font-semibold text-white/90 hover:text-white transition-colors">Quickstart</a>
+      <a href="https://github.com/Auran0s/sklm" target="_blank" rel="noopener noreferrer" class="nav-link text-4xl font-display font-semibold text-white/90 hover:text-white transition-colors">GitHub</a>
+    </div>
+  </div>
+
+  <!-- === HERO === -->
+  <section class="relative z-10 min-h-[100dvh] flex flex-col items-center justify-center px-4 text-center">
+    <span class="inline-flex items-center rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.2em] font-medium bg-white/[0.06] ring-1 ring-white/10 text-white/50 mb-8 reveal">
+      AI Agent Skills Manager
+    </span>
+
+    <h1 class="font-display text-[clamp(4rem,15vw,10rem)] font-bold leading-none tracking-tight text-white reveal reveal-delay-1">
+      Sklm
+    </h1>
+
+    <p class="mt-6 text-white/50 text-lg md:text-xl max-w-2xl mx-auto leading-relaxed reveal reveal-delay-2 text-balance">
+      Centralize, scope, and sync skills for every AI agent — one CLI command at a time.
+    </p>
+
+    <div class="mt-10 reveal reveal-delay-3">
+      <div class="p-[1.5px] rounded-full bg-gradient-to-r from-purple-500/40 to-emerald-500/40">
+        <a href="https://github.com/Auran0s/sklm" target="_blank" rel="noopener noreferrer"
+           class="group relative inline-flex items-center gap-3 px-8 py-4 rounded-full bg-[#0a0a0a] text-white text-sm font-medium ring-1 ring-white/10 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)] active:scale-[0.98] transition-all duration-500 var(--ease-spring)">
+          <span>Get Started</span>
+          <span class="inline-flex w-8 h-8 rounded-full bg-white/10 items-center justify-center transition-all duration-500 var(--ease-spring) group-hover:translate-x-1 group-hover:-translate-y-px group-hover:scale-105">
+            <i class="ph ph-arrow-up-right text-sm"></i>
+          </span>
+        </a>
+      </div>
+    </div>
+
+    <div class="absolute bottom-10 left-1/2 -translate-x-1/2 scroll-indicator">
+      <i class="ph ph-chevron-down text-white/30 text-xl"></i>
+    </div>
+  </section>
+
+  <!-- === VALUE PROP === -->
+  <section class="relative z-10 py-32 px-4 text-center">
+    <p class="text-xl md:text-2xl text-white/60 max-w-4xl mx-auto leading-relaxed reveal text-balance">
+      Sklm solves the tension between wanting skills globally available vs. per-project scoped. 
+      Install once in <code class="font-mono text-white/80 bg-white/5 px-2 py-0.5 rounded text-sm">~/.sklm/</code>, 
+      activate per project, and your agent sees exactly what you want — without polluting its configuration.
+    </p>
+    <div class="mt-12 mx-auto w-16 h-px bg-white/10"></div>
+  </section>
+
+  <!-- === FEATURES BENTO === -->
+  <section id="features" class="relative z-10 py-32 px-4 max-w-7xl mx-auto">
+    <div class="text-center mb-16 reveal">
+      <span class="inline-flex items-center rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.2em] font-medium bg-white/[0.06] ring-1 ring-white/10 text-white/50 mb-6">Features</span>
+      <h2 class="font-display text-4xl md:text-6xl font-semibold text-white leading-tight">Everything you need</h2>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-6">
+      <!-- Multi-agent -->
+      <div class="col-span-1 md:col-span-8 md:row-span-2 reveal reveal-delay-1">
+        <div class="p-[1.5px] rounded-[var(--outer-radius)] bg-white/5 border border-white/10 h-full glass-card">
+          <div class="rounded-[var(--inner-radius)] bg-[#0a0a0a] p-8 md:p-10 h-full shadow-[inset_0_1px_1px_rgba(255,255,255,0.12)] flex flex-col justify-center">
+            <span class="inline-flex w-12 h-12 rounded-full bg-purple-500/10 items-center justify-center mb-5 ring-1 ring-purple-500/20">
+              <i class="ph ph-cube text-purple-400 text-xl"></i>
+            </span>
+            <h3 class="font-display text-2xl md:text-3xl font-semibold text-white mb-3">Multi-agent support</h3>
+            <p class="text-white/50 text-base md:text-lg leading-relaxed max-w-xl">
+              Recognizes 8 AI agents — OpenCode, Claude Code, Cursor, Windsurf, Gemini CLI, Cline, Amazon Q, GitHub Copilot — and syncs skills to the right place, every time.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Global store -->
+      <div class="col-span-1 md:col-span-4 reveal reveal-delay-2">
+        <div class="p-[1.5px] rounded-[var(--outer-radius)] bg-white/5 border border-white/10 h-full glass-card">
+          <div class="rounded-[var(--inner-radius)] bg-[#0a0a0a] p-8 h-full shadow-[inset_0_1px_1px_rgba(255,255,255,0.12)] flex flex-col justify-center">
+            <span class="inline-flex w-10 h-10 rounded-full bg-emerald-500/10 items-center justify-center mb-4 ring-1 ring-emerald-500/20">
+              <i class="ph ph-database text-emerald-400 text-lg"></i>
+            </span>
+            <h3 class="font-display text-xl font-semibold text-white mb-2">Global store</h3>
+            <p class="text-white/50 text-sm leading-relaxed">
+              Install skills once in <code class="font-mono text-white/70 bg-white/5 px-1 rounded text-xs">~/.sklm/</code>, reuse across every project.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Per-project scoping -->
+      <div class="col-span-1 md:col-span-5 reveal reveal-delay-3">
+        <div class="p-[1.5px] rounded-[var(--outer-radius)] bg-white/5 border border-white/10 h-full glass-card">
+          <div class="rounded-[var(--inner-radius)] bg-[#0a0a0a] p-8 h-full shadow-[inset_0_1px_1px_rgba(255,255,255,0.12)] flex flex-col justify-center">
+            <span class="inline-flex w-10 h-10 rounded-full bg-blue-500/10 items-center justify-center mb-4 ring-1 ring-blue-500/20">
+              <i class="ph ph-git-fork text-blue-400 text-lg"></i>
+            </span>
+            <h3 class="font-display text-xl font-semibold text-white mb-2">Per-project scoping</h3>
+            <p class="text-white/50 text-sm leading-relaxed">
+              Activate only the skills each project needs via symlinks. Your agent sees only what you explicitly add.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Registry discovery -->
+      <div class="col-span-1 md:col-span-7 reveal reveal-delay-4">
+        <div class="p-[1.5px] rounded-[var(--outer-radius)] bg-white/5 border border-white/10 h-full glass-card">
+          <div class="rounded-[var(--inner-radius)] bg-[#0a0a0a] p-8 h-full shadow-[inset_0_1px_1px_rgba(255,255,255,0.12)] flex flex-col justify-center">
+            <span class="inline-flex w-10 h-10 rounded-full bg-cyan-500/10 items-center justify-center mb-4 ring-1 ring-cyan-500/20">
+              <i class="ph ph-magnifying-glass text-cyan-400 text-lg"></i>
+            </span>
+            <h3 class="font-display text-xl font-semibold text-white mb-2">Registry discovery</h3>
+            <p class="text-white/50 text-sm leading-relaxed">
+              Index local directories or git repos as resource catalogs, searchable by keyword across all your registries.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Auto-sync -->
+      <div class="col-span-1 md:col-span-6 reveal">
+        <div class="p-[1.5px] rounded-[var(--outer-radius)] bg-white/5 border border-white/10 h-full glass-card">
+          <div class="rounded-[var(--inner-radius)] bg-[#0a0a0a] p-8 h-full shadow-[inset_0_1px_1px_rgba(255,255,255,0.12)] flex flex-col justify-center">
+            <span class="inline-flex w-10 h-10 rounded-full bg-amber-500/10 items-center justify-center mb-4 ring-1 ring-amber-500/20">
+              <i class="ph ph-arrows-clockwise text-amber-400 text-lg"></i>
+            </span>
+            <h3 class="font-display text-xl font-semibold text-white mb-2">Auto-sync</h3>
+            <p class="text-white/50 text-sm leading-relaxed">
+              <code class="font-mono text-white/70 bg-white/5 px-1 rounded text-xs">sklm add</code> and <code class="font-mono text-white/70 bg-white/5 px-1 rounded text-xs">sklm rm</code> automatically sync your agent's config directory — no manual copying.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- === HOW IT WORKS === -->
+  <section class="relative z-10 py-32 px-4 max-w-6xl mx-auto">
+    <div class="text-center mb-20 reveal">
+      <span class="inline-flex items-center rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.2em] font-medium bg-white/[0.06] ring-1 ring-white/10 text-white/50 mb-6">Pipeline</span>
+      <h2 class="font-display text-4xl md:text-6xl font-semibold text-white leading-tight">Four commands, one flow</h2>
+    </div>
+
+    <div class="flex flex-col md:flex-row items-start md:items-center justify-center gap-8 md:gap-12">
+      <div class="step-connector relative flex flex-col items-center text-center flex-1 w-full md:w-auto reveal reveal-delay-1">
+        <div class="p-[1px] rounded-full bg-white/10 mb-4">
+          <div class="flex items-center justify-center w-14 h-14 rounded-full bg-[#0a0a0a] ring-1 ring-white/10 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]">
+            <span class="font-display text-lg font-semibold text-purple-400">01</span>
+          </div>
+        </div>
+        <h3 class="font-display text-lg font-semibold text-white mb-1">Resolve</h3>
+        <p class="text-white/40 text-sm max-w-[180px]">Find the resource in global store, registries, or local paths</p>
+      </div>
+
+      <div class="step-connector relative flex flex-col items-center text-center flex-1 w-full md:w-auto reveal reveal-delay-2">
+        <i class="ph ph-arrow-right text-white/20 text-xl hidden md:block absolute -left-8 top-1/2 -translate-y-1/2"></i>
+        <div class="p-[1px] rounded-full bg-white/10 mb-4">
+          <div class="flex items-center justify-center w-14 h-14 rounded-full bg-[#0a0a0a] ring-1 ring-white/10 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]">
+            <span class="font-display text-lg font-semibold text-emerald-400">02</span>
+          </div>
+        </div>
+        <h3 class="font-display text-lg font-semibold text-white mb-1">Store</h3>
+        <p class="text-white/40 text-sm max-w-[180px]">Copy into ~/.sklm/ global store if not already there</p>
+      </div>
+
+      <div class="step-connector relative flex flex-col items-center text-center flex-1 w-full md:w-auto reveal reveal-delay-3">
+        <i class="ph ph-arrow-right text-white/20 text-xl hidden md:block absolute -left-8 top-1/2 -translate-y-1/2"></i>
+        <div class="p-[1px] rounded-full bg-white/10 mb-4">
+          <div class="flex items-center justify-center w-14 h-14 rounded-full bg-[#0a0a0a] ring-1 ring-white/10 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]">
+            <span class="font-display text-lg font-semibold text-blue-400">03</span>
+          </div>
+        </div>
+        <h3 class="font-display text-lg font-semibold text-white mb-1">Link</h3>
+        <p class="text-white/40 text-sm max-w-[180px]">Create symlink in ./.sklm/links/ per project</p>
+      </div>
+
+      <div class="relative flex flex-col items-center text-center flex-1 w-full md:w-auto reveal reveal-delay-4">
+        <i class="ph ph-arrow-right text-white/20 text-xl hidden md:block absolute -left-8 top-1/2 -translate-y-1/2"></i>
+        <div class="p-[1px] rounded-full bg-white/10 mb-4">
+          <div class="flex items-center justify-center w-14 h-14 rounded-full bg-[#0a0a0a] ring-1 ring-white/10 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]">
+            <span class="font-display text-lg font-semibold text-cyan-400">04</span>
+          </div>
+        </div>
+        <h3 class="font-display text-lg font-semibold text-white mb-1">Sync</h3>
+        <p class="text-white/40 text-sm max-w-[180px]">Copy linked skills to agent config directory</p>
+      </div>
+    </div>
+
+    <div class="flex items-center justify-center gap-2 mt-16 md:hidden">
+      <i class="ph ph-arrow-down text-white/20 text-lg"></i>
+      <i class="ph ph-arrow-down text-white/20 text-lg -ml-3"></i>
+      <i class="ph ph-arrow-down text-white/20 text-lg -ml-3"></i>
+    </div>
+  </section>
+
+  <!-- === SUPPORTED AGENTS === -->
+  <section id="agents" class="relative z-10 py-32 px-4 max-w-7xl mx-auto">
+    <div class="text-center mb-16 reveal">
+      <span class="inline-flex items-center rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.2em] font-medium bg-white/[0.06] ring-1 ring-white/10 text-white/50 mb-6">Ecosystem</span>
+      <h2 class="font-display text-4xl md:text-6xl font-semibold text-white leading-tight">Works with your agent</h2>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div class="p-[1px] rounded-[var(--outer-radius)] bg-white/5 border border-white/10 agent-card reveal reveal-delay-1" style="--accent: #8B5CF6">
+        <div class="rounded-[var(--inner-radius)] bg-[#0a0a0a] p-6 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="font-display text-lg font-semibold text-white">OpenCode</h3>
+            <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500/15"><i class="ph ph-check text-emerald-400 text-xs"></i></span>
+          </div>
+          <p class="font-mono text-xs text-white/40"><span class="text-white/20">Config:</span> .opencode/</p>
+          <p class="font-mono text-xs text-white/40"><span class="text-white/20">Skills:</span> .opencode/skills/</p>
+        </div>
+      </div>
+
+      <div class="p-[1px] rounded-[var(--outer-radius)] bg-white/5 border border-white/10 agent-card reveal reveal-delay-2">
+        <div class="rounded-[var(--inner-radius)] bg-[#0a0a0a] p-6 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="font-display text-lg font-semibold text-white">Claude Code</h3>
+            <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500/15"><i class="ph ph-check text-emerald-400 text-xs"></i></span>
+          </div>
+          <p class="font-mono text-xs text-white/40"><span class="text-white/20">Config:</span> .claude/</p>
+          <p class="font-mono text-xs text-white/40"><span class="text-white/20">Skills:</span> .claude/skills/</p>
+        </div>
+      </div>
+
+      <div class="p-[1px] rounded-[var(--outer-radius)] bg-white/5 border border-white/10 agent-card reveal reveal-delay-3">
+        <div class="rounded-[var(--inner-radius)] bg-[#0a0a0a] p-6 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="font-display text-lg font-semibold text-white">Cursor</h3>
+            <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500/15"><i class="ph ph-check text-emerald-400 text-xs"></i></span>
+          </div>
+          <p class="font-mono text-xs text-white/40"><span class="text-white/20">Config:</span> .cursor/</p>
+          <p class="font-mono text-xs text-white/40"><span class="text-white/20">Skills:</span> .cursor/skills/</p>
+        </div>
+      </div>
+
+      <div class="p-[1px] rounded-[var(--outer-radius)] bg-white/5 border border-white/10 agent-card reveal reveal-delay-1">
+        <div class="rounded-[var(--inner-radius)] bg-[#0a0a0a] p-6 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="font-display text-lg font-semibold text-white">Windsurf</h3>
+            <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500/15"><i class="ph ph-check text-emerald-400 text-xs"></i></span>
+          </div>
+          <p class="font-mono text-xs text-white/40"><span class="text-white/20">Config:</span> .windsurf/</p>
+          <p class="font-mono text-xs text-white/40"><span class="text-white/20">Skills:</span> .windsurf/skills/</p>
+        </div>
+      </div>
+
+      <div class="p-[1px] rounded-[var(--outer-radius)] bg-white/5 border border-white/10 agent-card reveal reveal-delay-2">
+        <div class="rounded-[var(--inner-radius)] bg-[#0a0a0a] p-6 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="font-display text-lg font-semibold text-white">Gemini CLI</h3>
+            <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500/15"><i class="ph ph-check text-emerald-400 text-xs"></i></span>
+          </div>
+          <p class="font-mono text-xs text-white/40"><span class="text-white/20">Config:</span> .gemini/</p>
+          <p class="font-mono text-xs text-white/40"><span class="text-white/20">Skills:</span> .gemini/skills/</p>
+        </div>
+      </div>
+
+      <div class="p-[1px] rounded-[var(--outer-radius)] bg-white/5 border border-white/10 agent-card reveal reveal-delay-3">
+        <div class="rounded-[var(--inner-radius)] bg-[#0a0a0a] p-6 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="font-display text-lg font-semibold text-white">Cline</h3>
+            <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500/15"><i class="ph ph-check text-emerald-400 text-xs"></i></span>
+          </div>
+          <p class="font-mono text-xs text-white/40"><span class="text-white/20">Config:</span> .cline/</p>
+          <p class="font-mono text-xs text-white/40"><span class="text-white/20">Skills:</span> .cline/skills/</p>
+        </div>
+      </div>
+
+      <div class="p-[1px] rounded-[var(--outer-radius)] bg-white/5 border border-white/10 agent-card reveal reveal-delay-4 lg:col-start-2">
+        <div class="rounded-[var(--inner-radius)] bg-[#0a0a0a] p-6 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="font-display text-lg font-semibold text-white">Amazon Q</h3>
+            <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500/15"><i class="ph ph-check text-emerald-400 text-xs"></i></span>
+          </div>
+          <p class="font-mono text-xs text-white/40"><span class="text-white/20">Config:</span> .amazonq/</p>
+          <p class="font-mono text-xs text-white/40"><span class="text-white/20">Skills:</span> .amazonq/skills/</p>
+        </div>
+      </div>
+
+      <div class="p-[1px] rounded-[var(--outer-radius)] bg-white/5 border border-white/10 agent-card reveal reveal-delay-4 lg:col-start-3">
+        <div class="rounded-[var(--inner-radius)] bg-[#0a0a0a] p-6 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="font-display text-lg font-semibold text-white">GitHub Copilot</h3>
+            <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-white/10"><i class="ph ph-minus text-white/40 text-xs"></i></span>
+          </div>
+          <p class="font-mono text-xs text-white/40"><span class="text-white/20">Config:</span> .github/</p>
+          <p class="font-mono text-xs text-white/40"><span class="text-white/20">Skills:</span> .github/skills/</p>
+          <p class="font-mono text-[10px] text-white/30 mt-1 italic">Requires explicit init — too common to auto-detect</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- === ARCHITECTURE === -->
+  <section class="relative z-10 py-32 px-4 max-w-6xl mx-auto">
+    <div class="text-center mb-16 reveal">
+      <span class="inline-flex items-center rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.2em] font-medium bg-white/[0.06] ring-1 ring-white/10 text-white/50 mb-6">Architecture</span>
+      <h2 class="font-display text-4xl md:text-6xl font-semibold text-white leading-tight">Two-level store</h2>
+    </div>
+
+    <div class="flex flex-col md:flex-row items-start md:items-center justify-center gap-6 md:gap-4">
+      <div class="flex-1 w-full reveal reveal-delay-1">
+        <div class="p-[1.5px] rounded-[var(--outer-radius)] bg-white/5 border border-white/10 glass-card">
+          <div class="rounded-[var(--inner-radius)] bg-[#0a0a0a] p-6 md:p-8 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]">
+            <div class="flex items-center gap-2 mb-4">
+              <span class="w-3 h-3 rounded-full bg-red-500/50"></span>
+              <span class="w-3 h-3 rounded-full bg-yellow-500/50"></span>
+              <span class="w-3 h-3 rounded-full bg-emerald-500/50"></span>
+              <span class="font-mono text-xs text-white/30 ml-2">~/.sklm/  —  Global store</span>
+            </div>
+            <pre class="font-mono text-xs md:text-sm leading-relaxed text-white/50"><span class="text-white/70">~/.sklm/</span>
+├── <span class="text-white/40">config.yaml</span>
+├── <span class="text-white/40">registries.yaml</span>
+├── <span class="text-white/40">cache/</span>
+└── <span class="text-white/60">store/</span>
+    └── <span class="text-white/60">skills/</span>
+        └── <span class="text-purple-400/70">&lt;skill&gt;</span><span class="text-white/40">/</span>
+            └── <span class="text-purple-400/70">SKILL.md</span></pre>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex-shrink-0 reveal reveal-delay-2">
+        <i class="ph ph-arrow-right text-white/20 text-2xl arch-connector hidden md:block"></i>
+        <i class="ph ph-arrow-down text-white/20 text-2xl arch-connector md:hidden mx-auto block text-center"></i>
+      </div>
+
+      <div class="flex-1 w-full reveal reveal-delay-3">
+        <div class="p-[1.5px] rounded-[var(--outer-radius)] bg-white/5 border border-white/10 glass-card">
+          <div class="rounded-[var(--inner-radius)] bg-[#0a0a0a] p-6 md:p-8 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]">
+            <div class="flex items-center gap-2 mb-4">
+              <span class="w-3 h-3 rounded-full bg-red-500/50"></span>
+              <span class="w-3 h-3 rounded-full bg-yellow-500/50"></span>
+              <span class="w-3 h-3 rounded-full bg-emerald-500/50"></span>
+              <span class="font-mono text-xs text-white/30 ml-2">./.sklm/  —  Workspace</span>
+            </div>
+            <pre class="font-mono text-xs md:text-sm leading-relaxed text-white/50"><span class="text-white/70">./.sklm/</span>
+├── <span class="text-white/40">sklm.yaml</span>
+└── <span class="text-white/60">links/</span>
+    └── <span class="text-white/60">skills/</span>
+        └── <span class="text-purple-400/70">&lt;skill&gt;</span> <span class="text-white/30">→ ~/.sklm/...</span>
+
+<span class="text-white/70">.opencode/</span>
+└── <span class="text-white/60">skills/</span>
+    └── <span class="text-purple-400/70">&lt;skill&gt;</span><span class="text-white/40">/</span>
+        └── <span class="text-purple-400/70">SKILL.md</span></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- === QUICKSTART === -->
+  <section id="quickstart" class="relative z-10 py-32 px-4 max-w-4xl mx-auto">
+    <div class="text-center mb-16 reveal">
+      <span class="inline-flex items-center rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.2em] font-medium bg-white/[0.06] ring-1 ring-white/10 text-white/50 mb-6">Quickstart</span>
+      <h2 class="font-display text-4xl md:text-6xl font-semibold text-white leading-tight">Up and running in seconds</h2>
+    </div>
+
+    <div class="reveal reveal-delay-1">
+      <div class="p-[1.5px] rounded-[var(--outer-radius)] bg-white/5 border border-white/10 glass-card">
+        <div class="rounded-[var(--inner-radius)] bg-[#0a0a0a] p-6 md:p-8 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]">
+          <div class="flex items-center gap-2 mb-5">
+            <span class="w-3 h-3 rounded-full bg-red-500/60"></span>
+            <span class="w-3 h-3 rounded-full bg-yellow-500/60"></span>
+            <span class="w-3 h-3 rounded-full bg-emerald-500/60"></span>
+            <span class="font-mono text-xs text-white/30 ml-2">terminal</span>
+          </div>
+          <pre id="terminal" class="font-mono text-sm md:text-base leading-relaxed text-white/80 min-h-[8rem]">
+            <span class="text-white/30">$ </span><span id="terminalContent"></span><span id="terminalCursor" class="cursor-blink text-white/60">▎</span>
+          </pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- === FOOTER === -->
+  <footer class="relative z-10 border-t border-white/5 py-12 px-4">
+    <div class="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
+      <p class="text-white/30 text-sm font-sans">
+        Built by <a href="https://github.com/Auran0s" target="_blank" rel="noopener noreferrer" class="text-white/50 hover:text-white/80 transition-colors">Auran0s</a>
+      </p>
+      <div class="flex items-center gap-6">
+        <a href="https://github.com/Auran0s/sklm/blob/main/LICENSE" target="_blank" rel="noopener noreferrer" class="text-white/30 text-xs font-mono hover:text-white/60 transition-colors">MIT License</a>
+        <a href="https://github.com/Auran0s/sklm" target="_blank" rel="noopener noreferrer" class="text-white/30 hover:text-white/60 transition-colors">
+          <i class="ph ph-github-logo text-lg"></i>
+        </a>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    // === HAMBURGER TOGGLE ===
+    (function() {
+      const menuToggle = document.getElementById('menuToggle');
+      const navOverlay = document.getElementById('navOverlay');
+      const navLinks = navOverlay.querySelectorAll('.nav-link');
+      let isOpen = false;
+
+      function openMenu() {
+        isOpen = true;
+        menuToggle.classList.add('hamburger-active');
+        navOverlay.classList.add('active');
+        document.body.style.overflow = 'hidden';
+        setTimeout(function() {
+          navLinks.forEach(function(link) { link.classList.add('visible'); });
+        }, 50);
+      }
+
+      function closeMenu() {
+        isOpen = false;
+        menuToggle.classList.remove('hamburger-active');
+        navLinks.forEach(function(link) { link.classList.remove('visible'); });
+        navOverlay.classList.remove('active');
+        document.body.style.overflow = '';
+      }
+
+      menuToggle.addEventListener('click', function() {
+        isOpen ? closeMenu() : openMenu();
+      });
+
+      navLinks.forEach(function(link) {
+        link.addEventListener('click', function(e) {
+          closeMenu();
+        });
+      });
+
+      navOverlay.addEventListener('click', function(e) {
+        if (e.target === navOverlay) closeMenu();
+      });
+    })();
+
+    // === SCROLL REVEALS ===
+    (function() {
+      if (!('IntersectionObserver' in window)) return;
+      var reveals = document.querySelectorAll('.reveal');
+      var observer = new IntersectionObserver(function(entries) {
+        entries.forEach(function(entry) {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('visible');
+            observer.unobserve(entry.target);
+          }
+        });
+      }, { threshold: 0.08, rootMargin: '0px 0px -60px 0px' });
+      reveals.forEach(function(el) { observer.observe(el); });
+    })();
+
+    // === TYPEWRITER TERMINAL ===
+    (function() {
+      var lines = [
+        '$ git clone https://github.com/Auran0s/sklm.git',
+        '$ cd sklm && pip install -e .',
+        '$ sklm init',
+        '$ sklm add skill my-skill --from https://github.com/user/skills',
+        '',
+        '# Skills synced. Ready to work.'
+      ];
+
+      var terminalContent = document.getElementById('terminalContent');
+      var terminalCursor = document.getElementById('terminalCursor');
+      var terminal = document.getElementById('terminal');
+      var observer = new IntersectionObserver(function(entries) {
+        entries.forEach(function(entry) {
+          if (entry.isIntersecting) {
+            observer.unobserve(entry.target);
+            startTyping();
+          }
+        });
+      }, { threshold: 0.3 });
+
+      observer.observe(terminal);
+
+      var typingInProgress = false;
+
+      function startTyping() {
+        if (typingInProgress) return;
+        typingInProgress = true;
+        var lineIdx = 0;
+        var charIdx = 0;
+        var output = '';
+
+        function typeChar() {
+          if (lineIdx >= lines.length) {
+            terminalCursor.style.display = 'inline';
+            return;
+          }
+
+          var line = lines[lineIdx];
+
+          if (charIdx === 0 && line.startsWith('$ ')) {
+            output += '<span class="text-emerald-400/60">$</span> ';
+            charIdx = 2;
+          }
+
+          if (charIdx < line.length) {
+            output += escapeHtml(line[charIdx]);
+            charIdx++;
+            terminalContent.innerHTML = output;
+            var delay = line[charIdx - 1] === ' ' ? 15 : 30;
+            setTimeout(typeChar, delay);
+          } else {
+            if (line.length > 0) {
+              output += '\n';
+              terminalContent.innerHTML = output;
+            }
+            lineIdx++;
+            charIdx = 0;
+            setTimeout(typeChar, line.length > 0 ? 400 : 200);
+          }
+        }
+
+        typeChar();
+      }
+
+      function escapeHtml(str) {
+        var div = document.createElement('div');
+        div.appendChild(document.createTextNode(str));
+        return div.innerHTML;
+      }
+    })();
+  </script>
+</body>
+</html>
