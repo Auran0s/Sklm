@@ -10,8 +10,8 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from fabrik.agents.base import AgentAdapter
-from fabrik.models import Link
+from sklm.agents.base import AgentAdapter
+from sklm.models import Link
 
 
 GITHUB_COPILOT_DIR = ".github"

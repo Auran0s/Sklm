@@ -1,11 +1,11 @@
-# AGENTS.md — Fabrik
+# AGENTS.md — Sklm
 
 ## Setup & dev commands
 
 ```bash
 pip install -e .              # editable install (required before any work)
 pip install -r requirements.txt  # includes pytest + pytest-cov
-python3 -m pytest tests/      # run all tests (single file: tests/test_fabrik.py)
+python3 -m pytest tests/      # run all tests (single file: tests/test_sklm.py)
 python3 -m pytest tests/ -k <pattern>  # run a subset
 ```
 
@@ -13,36 +13,36 @@ No linting or typechecking tools are configured. No CI.
 
 ## Architecture
 
-Fabrik is a Python 3.9+ CLI (Typer + Rich) that manages skills for AI agents via a two-level store:
+Sklm is a Python 3.9+ CLI (Typer + Rich) that manages skills for AI agents via a two-level store:
 
 ```
-~/.fabrik/          # global store (user-wide library)
+~/.sklm/            # global store (user-wide library)
   store/skills/     #   skill directories (each contains a SKILL.md)
 
-./.fabrik/          # per-project workspace (gitignored)
+./.sklm/            # per-project workspace (gitignored)
   links/skills/     #   symlinks → global store
-  fabrik.yaml       #   WorkspaceConfig per project
+  sklm.yaml         #   WorkspaceConfig per project
 ```
 
 - `_type_dir(kind)` in `GlobalStore` always returns `skills_dir` — the `kind` parameter is ignored (only `skill` exists).
-- `fabrik add` pipeline: resolve → store → link → sync to agent config.
+- `sklm add` pipeline: resolve → store → link → sync to agent config.
 - Agent sync **copies** (not symlinks) skill content into the agent's config dir (e.g. `.opencode/skills/`).
-- Entrypoint: `fabrik.cli.main:run` (Typer app, `no_args_is_help=True`).
+- Entrypoint: `sklm.cli.main:run` (Typer app, `no_args_is_help=True`).
 
 ### Source layout
 
 | Path | Role |
 |---|---|
-| `fabrik/api.py` | `Fabrik` facade — wires everything together |
-| `fabrik/cli/main.py` | Typer CLI app — all commands |
-| `fabrik/models/` | Pydantic v2 models (YAML persistence) |
-| `fabrik/store/` | `GlobalStore` — `~/.fabrik/` management |
-| `fabrik/core/workspace.py` | `Workspace` — `.fabrik/` management |
-| `fabrik/core/registry.py` | `RegistryManager` — registry discovery |
-| `fabrik/core/crud.py` | CRUD operations |
-| `fabrik/core/linking.py` | Symlink create/remove/repair |
-| `fabrik/agents/` | 8 agents in `agents.yaml`; `GenericAdapter` handles 7, `GitHubCopilotAdapter` is custom |
-| `fabrik/telemetry.py` | `UmamiTracker` — telemetry |
+| `sklm/api.py` | `Sklm` facade — wires everything together |
+| `sklm/cli/main.py` | Typer CLI app — all commands |
+| `sklm/models/` | Pydantic v2 models (YAML persistence) |
+| `sklm/store/` | `GlobalStore` — `~/.sklm/` management |
+| `sklm/core/workspace.py` | `Workspace` — `.sklm/` management |
+| `sklm/core/registry.py` | `RegistryManager` — registry discovery |
+| `sklm/core/crud.py` | CRUD operations |
+| `sklm/core/linking.py` | Symlink create/remove/repair |
+| `sklm/agents/` | 8 agents in `agents.yaml`; `GenericAdapter` handles 7, `GitHubCopilotAdapter` is custom |
+| `sklm/telemetry.py` | `UmamiTracker` — telemetry |
 
 ## Conventions
 
@@ -64,13 +64,13 @@ Spec-driven development via `.opencode/commands/` slash commands:
 
 ## Testing
 
-- Single test file: `tests/test_fabrik.py` (no `__init__.py`).
+- Single test file: `tests/test_sklm.py` (no `__init__.py`).
 - Uses `pytest` fixtures (`temp_dir`, `isolated_store`, `fake_skill_dir`).
 - CLI integration tests use `typer.testing.CliRunner`.
-- Global store tests patch `FABRIK_HOME` via `monkeypatch`.
+- Global store tests patch `SKLM_HOME` via `monkeypatch`.
 
 ## Telemetry
 
-- Umami Analytics; disable with `FABRIK_TELEMETRY=0` (or `false`/`no`/`off`/`""`).
-- Also overridable via `FABRIK_UMAMI_URL`, `FABRIK_WEBSITE_ID`.
+- Umami Analytics; disable with `SKLM_TELEMETRY=0` (or `false`/`no`/`off`/`""`).
+- Also overridable via `SKLM_UMAMI_URL`, `SKLM_WEBSITE_ID`.
 - Tracker runs in a daemon thread with 2s timeout — never raises, never blocks.

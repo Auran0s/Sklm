@@ -1,4 +1,4 @@
-"""Tests for Fabrik models, store, core, and CLI."""
+"""Tests for Sklm models, store, core, and CLI."""
 from __future__ import annotations
 
 import json
@@ -11,7 +11,7 @@ from unittest.mock import MagicMock
 import pytest
 import yaml
 
-from fabrik.models import (
+from sklm.models import (
     GlobalConfig,
     Link,
     RegistrySource,
@@ -22,8 +22,8 @@ from fabrik.models import (
     TelemetryConfig,
     WorkspaceConfig,
 )
-from fabrik.store import GlobalStore, FABRIK_HOME
-from fabrik.core.workspace import Workspace
+from sklm.store import GlobalStore, SKLM_HOME
+from sklm.core.workspace import Workspace
 
 
 # ─── Fixtures ────────────────────────────────────────────────────────────────
@@ -40,7 +40,7 @@ def temp_dir():
 
 @pytest.fixture
 def isolated_store(monkeypatch, temp_dir):
-    monkeypatch.setattr("fabrik.store.FABRIK_HOME", temp_dir / ".fabrik-home")
+    monkeypatch.setattr("sklm.store.SKLM_HOME", temp_dir / ".sklm-home")
     return GlobalStore()
 
 
@@ -98,7 +98,7 @@ class TestWorkspaceConfig:
         config.resources.append(
             ResourceRef(name="s1", kind=ResourceKind.skill, origin="global")
         )
-        path = temp_dir / "fabrik.yaml"
+        path = temp_dir / "sklm.yaml"
         config.to_yaml(path)
         loaded = WorkspaceConfig.from_yaml(path)
         assert loaded.agent == "opencode"
@@ -220,19 +220,19 @@ class TestGlobalStoreTelemetry:
         assert loaded.website_id == "abc-123"
 
     def test_env_overrides(self, isolated_store, monkeypatch):
-        monkeypatch.setenv("FABRIK_UMAMI_URL", "https://env.umami.com")
-        monkeypatch.setenv("FABRIK_WEBSITE_ID", "env-456")
+        monkeypatch.setenv("SKLM_UMAMI_URL", "https://env.umami.com")
+        monkeypatch.setenv("SKLM_WEBSITE_ID", "env-456")
         cfg = isolated_store.get_telemetry_config()
         assert cfg.umami_url == "https://env.umami.com"
         assert cfg.website_id == "env-456"
 
     def test_env_disable(self, isolated_store, monkeypatch):
-        monkeypatch.setenv("FABRIK_TELEMETRY", "0")
+        monkeypatch.setenv("SKLM_TELEMETRY", "0")
         cfg = isolated_store.get_telemetry_config()
         assert cfg.enabled is False
 
     def test_env_disable_false(self, isolated_store, monkeypatch):
-        monkeypatch.setenv("FABRIK_TELEMETRY", "false")
+        monkeypatch.setenv("SKLM_TELEMETRY", "false")
         cfg = isolated_store.get_telemetry_config()
         assert cfg.enabled is False
 
@@ -241,7 +241,7 @@ class TestUmamiTracker:
     """Tests for UmamiTracker.track_command enriched error fields."""
 
     def _make_tracker(self, active=True):
-        from fabrik.telemetry import UmamiTracker
+        from sklm.telemetry import UmamiTracker
         return UmamiTracker(
             umami_url="https://umami.test" if active else "",
             website_id="test-id" if active else "",
@@ -308,7 +308,7 @@ class TestCLIErrorTelemetry:
     def test_run_extracts_cause_from_system_exit(self, monkeypatch):
         """run() extracts error_type, error_message, and traceback from __cause__."""
         import traceback
-        from fabrik.cli.main import run
+        from sklm.cli.main import run
 
         events: list[dict] = []
 
@@ -321,9 +321,9 @@ class TestCLIErrorTelemetry:
 
         tracker = MagicMock()
         tracker.track_command.side_effect = fake_track_command
-        monkeypatch.setattr("fabrik.cli.main._tracker_start", 1000.0)
-        monkeypatch.setattr("fabrik.cli.main._tracker_command", "test-cmd")
-        monkeypatch.setattr("fabrik.cli.main.get_tracker", lambda: tracker)
+        monkeypatch.setattr("sklm.cli.main._tracker_start", 1000.0)
+        monkeypatch.setattr("sklm.cli.main._tracker_command", "test-cmd")
+        monkeypatch.setattr("sklm.cli.main.get_tracker", lambda: tracker)
 
         original_app = None
         def failing_app():
@@ -332,7 +332,7 @@ class TestCLIErrorTelemetry:
             except ValueError as e:
                 raise SystemExit(1) from e
 
-        monkeypatch.setattr("fabrik.cli.main.app", failing_app)
+        monkeypatch.setattr("sklm.cli.main.app", failing_app)
         try:
             run()
         except SystemExit:
@@ -369,8 +369,8 @@ class TestWorkspace:
         config = ws.init(agent="opencode")
         assert ws.exists()
         assert config.agent == "opencode"
-        assert (temp_dir / ".fabrik").is_dir()
-        assert (temp_dir / ".fabrik" / "fabrik.yaml").exists()
+        assert (temp_dir / ".sklm").is_dir()
+        assert (temp_dir / ".sklm" / "sklm.yaml").exists()
 
     def test_add_and_list_resources(self, temp_dir):
         ws = Workspace(temp_dir)
@@ -403,7 +403,7 @@ class TestWorkspace:
             name="s1",
             kind=ResourceKind.skill,
             target=Path("/tmp/s1"),
-            link_path=Path("/tmp/.fabrik/links/skills/s1"),
+            link_path=Path("/tmp/.sklm/links/skills/s1"),
         )
         ws.add_link(link)
         assert len(ws.list_links()) == 1
@@ -427,7 +427,7 @@ class TestWorkspace:
 
 class TestAgentRegistry:
     def test_loads_all_agents(self, temp_dir):
-        from fabrik.agents.registry import AgentRegistry
+        from sklm.agents.registry import AgentRegistry
         registry = AgentRegistry()
         agents = registry.get_agent_ids()
         assert len(agents) == 8
@@ -441,44 +441,44 @@ class TestAgentRegistry:
         assert "github-copilot" in agents
 
     def test_detect_returns_none_when_no_agent_dir(self, temp_dir):
-        from fabrik.agents.registry import AgentRegistry
+        from sklm.agents.registry import AgentRegistry
         registry = AgentRegistry()
         assert registry.detect(temp_dir) is None
 
     def test_detect_opencode(self, temp_dir):
-        from fabrik.agents.registry import AgentRegistry
+        from sklm.agents.registry import AgentRegistry
         (temp_dir / ".opencode").mkdir()
         registry = AgentRegistry()
         assert registry.detect(temp_dir) == "opencode"
 
     def test_detect_priority_order(self, temp_dir):
-        from fabrik.agents.registry import AgentRegistry
+        from sklm.agents.registry import AgentRegistry
         (temp_dir / ".opencode").mkdir()
         (temp_dir / ".claude").mkdir()
         registry = AgentRegistry()
         assert registry.detect(temp_dir) == "opencode"
 
     def test_get_adapter_returns_generic(self, temp_dir):
-        from fabrik.agents.registry import AgentRegistry
+        from sklm.agents.registry import AgentRegistry
         registry = AgentRegistry()
         adapter = registry.get_adapter("cursor")
-        from fabrik.agents.generic import GenericAdapter
+        from sklm.agents.generic import GenericAdapter
         assert isinstance(adapter, GenericAdapter)
 
     def test_get_adapter_handles_github_copilot(self, temp_dir):
-        from fabrik.agents.registry import AgentRegistry
+        from sklm.agents.registry import AgentRegistry
         registry = AgentRegistry()
         adapter = registry.get_adapter("github-copilot")
-        from fabrik.agents.github_copilot import GitHubCopilotAdapter
+        from sklm.agents.github_copilot import GitHubCopilotAdapter
         assert isinstance(adapter, GitHubCopilotAdapter)
 
     def test_get_adapter_returns_none_for_unknown(self, temp_dir):
-        from fabrik.agents.registry import AgentRegistry
+        from sklm.agents.registry import AgentRegistry
         registry = AgentRegistry()
         assert registry.get_adapter("nonexistent") is None
 
     def test_list_agents_shows_active(self, temp_dir):
-        from fabrik.agents.registry import AgentRegistry
+        from sklm.agents.registry import AgentRegistry
         (temp_dir / ".cursor").mkdir()
         registry = AgentRegistry()
         agents = registry.list_agents(temp_dir)
@@ -488,15 +488,15 @@ class TestAgentRegistry:
         assert opencode["active"] is False
 
     def test_detect_adapter_returns_adapter(self, temp_dir):
-        from fabrik.agents.registry import AgentRegistry
+        from sklm.agents.registry import AgentRegistry
         (temp_dir / ".claude").mkdir()
         registry = AgentRegistry()
         adapter = registry.detect_adapter(temp_dir)
-        from fabrik.agents.generic import GenericAdapter
+        from sklm.agents.generic import GenericAdapter
         assert isinstance(adapter, GenericAdapter)
 
     def test_copilot_not_auto_detected(self, temp_dir):
-        from fabrik.agents.registry import AgentRegistry
+        from sklm.agents.registry import AgentRegistry
         (temp_dir / ".github").mkdir()
         registry = AgentRegistry()
         assert registry.detect(temp_dir) is None
@@ -507,24 +507,24 @@ class TestAgentRegistry:
 
 class TestGenericAdapter:
     def test_detect(self, temp_dir):
-        from fabrik.agents.generic import GenericAdapter
+        from sklm.agents.generic import GenericAdapter
         (temp_dir / ".cursor").mkdir()
         adapter = GenericAdapter("cursor", {"dir_name": ".cursor"})
         assert adapter.detect(temp_dir) is True
 
     def test_no_detect_without_dir(self, temp_dir):
-        from fabrik.agents.generic import GenericAdapter
+        from sklm.agents.generic import GenericAdapter
         adapter = GenericAdapter("cursor", {"dir_name": ".cursor"})
         assert adapter.detect(temp_dir) is False
 
     def test_get_skills_path(self, temp_dir):
-        from fabrik.agents.generic import GenericAdapter
+        from sklm.agents.generic import GenericAdapter
         adapter = GenericAdapter("cursor", {"dir_name": ".cursor"})
         assert adapter.get_skills_path(temp_dir) == temp_dir / ".cursor" / "skills"
 
     def test_sync_creates_skills(self, temp_dir):
-        from fabrik.agents.generic import GenericAdapter
-        from fabrik.models import Link, ResourceKind
+        from sklm.agents.generic import GenericAdapter
+        from sklm.models import Link, ResourceKind
         skill_dir = temp_dir / "source-skill"
         skill_dir.mkdir()
         (skill_dir / "SKILL.md").write_text("# Test")
@@ -539,8 +539,8 @@ class TestGenericAdapter:
         assert (temp_dir / ".cursor" / "skills" / "test-skill" / "SKILL.md").exists()
 
     def test_sync_removes_unlinked(self, temp_dir):
-        from fabrik.agents.generic import GenericAdapter
-        from fabrik.models import Link, ResourceKind
+        from sklm.agents.generic import GenericAdapter
+        from sklm.models import Link, ResourceKind
         skill_dir = temp_dir / "source-skill"
         skill_dir.mkdir()
         (skill_dir / "SKILL.md").write_text("# Test")
@@ -562,13 +562,13 @@ class TestGenericAdapter:
 
 class TestGitHubCopilotAdapter:
     def test_detect_always_false(self, temp_dir):
-        from fabrik.agents.github_copilot import GitHubCopilotAdapter
+        from sklm.agents.github_copilot import GitHubCopilotAdapter
         (temp_dir / ".github").mkdir()
         adapter = GitHubCopilotAdapter()
         assert adapter.detect(temp_dir) is False
 
     def test_get_skills_path(self, temp_dir):
-        from fabrik.agents.github_copilot import GitHubCopilotAdapter
+        from sklm.agents.github_copilot import GitHubCopilotAdapter
         adapter = GitHubCopilotAdapter()
         assert adapter.get_skills_path(temp_dir) == temp_dir / ".github" / "skills"
 
@@ -578,7 +578,7 @@ class TestGitHubCopilotAdapter:
 
 class TestAgentKind:
     def test_known_agents(self):
-        from fabrik.models import AgentKind
+        from sklm.models import AgentKind
         assert AgentKind("opencode") == AgentKind.opencode
         assert AgentKind("claude") == AgentKind.claude
         assert AgentKind("cursor") == AgentKind.cursor
@@ -589,22 +589,22 @@ class TestAgentKind:
         assert AgentKind("github-copilot") == AgentKind.github_copilot
 
     def test_unknown_agent_raises(self):
-        from fabrik.models import AgentKind
+        from sklm.models import AgentKind
         with pytest.raises(ValueError):
             AgentKind("nonexistent-agent")
 
     def test_workspace_config_validates_agent(self, temp_dir):
-        from fabrik.models import WorkspaceConfig
+        from sklm.models import WorkspaceConfig
         config = WorkspaceConfig(agent="claude")
         assert config.agent == "claude"
 
     def test_workspace_config_rejects_unknown(self, temp_dir):
-        from fabrik.models import WorkspaceConfig
+        from sklm.models import WorkspaceConfig
         with pytest.raises(ValueError, match="Unknown agent"):
             WorkspaceConfig(agent="nonexistent-agent")
 
     def test_workspace_config_accepts_none(self, temp_dir):
-        from fabrik.models import WorkspaceConfig
+        from sklm.models import WorkspaceConfig
         config = WorkspaceConfig(agent="none")
         assert config.agent == "none"
 
@@ -615,13 +615,14 @@ class TestAgentKind:
 class TestCLIIntegration:
     @pytest.fixture(autouse=True)
     def setup(self, monkeypatch, temp_dir):
-        monkeypatch.setattr("fabrik.store.FABRIK_HOME", temp_dir / ".fabrik-home")
-        monkeypatch.setattr("fabrik.core.registry.REGISTRIES_PATH", temp_dir / ".fabrik-home" / "registries.yaml")
-        monkeypatch.setattr("fabrik.core.registry.REGISTRY_CACHE", temp_dir / ".fabrik-home" / "cache")
-        monkeypatch.setattr("fabrik.cli.main._fabrik", None)
+        monkeypatch.setattr("sklm.store.SKLM_HOME", temp_dir / ".sklm-home")
+        monkeypatch.setattr("sklm.core.registry.REGISTRIES_PATH", temp_dir / ".sklm-home" / "registries.yaml")
+        monkeypatch.setattr("sklm.core.registry.REGISTRY_CACHE", temp_dir / ".sklm-home" / "cache")
+        monkeypatch.setattr("sklm.cli.main._sklm", None)
+
     def test_help(self):
         from typer.testing import CliRunner
-        from fabrik.cli.main import app
+        from sklm.cli.main import app
         runner = CliRunner()
         result = runner.invoke(app, ["--help"])
         assert result.exit_code == 0
@@ -629,15 +630,15 @@ class TestCLIIntegration:
 
     def test_version(self):
         from typer.testing import CliRunner
-        from fabrik.cli.main import app
+        from sklm.cli.main import app
         runner = CliRunner()
         result = runner.invoke(app, ["--version"])
         assert result.exit_code == 0
-        assert "fabrik v" in result.output
+        assert "sklm v" in result.output
 
     def test_init_and_status(self, temp_dir):
         from typer.testing import CliRunner
-        from fabrik.cli.main import app
+        from sklm.cli.main import app
         runner = CliRunner()
         result = runner.invoke(app, ["init"])
         assert result.exit_code == 0
@@ -648,7 +649,7 @@ class TestCLIIntegration:
 
     def test_init_with_agent(self, temp_dir):
         from typer.testing import CliRunner
-        from fabrik.cli.main import app
+        from sklm.cli.main import app
         runner = CliRunner()
         result = runner.invoke(app, ["init", "--agent", "opencode"])
         assert result.exit_code == 0
@@ -656,11 +657,11 @@ class TestCLIIntegration:
 
     def test_global_ls_rm(self, temp_dir, fake_skill_dir, monkeypatch):
         from typer.testing import CliRunner
-        from fabrik.cli.main import app
-        from fabrik.api import Fabrik
-        from fabrik.models import ResourceKind
+        from sklm.cli.main import app
+        from sklm.api import Sklm
+        from sklm.models import ResourceKind
         runner = CliRunner()
-        f = Fabrik()
+        f = Sklm()
         f.global_add(ResourceKind.skill, fake_skill_dir, "test-skill")
         result = runner.invoke(app, ["global", "ls"])
         assert result.exit_code == 0
@@ -670,7 +671,7 @@ class TestCLIIntegration:
 
     def test_add_rm_resource(self, temp_dir, fake_skill_dir):
         from typer.testing import CliRunner
-        from fabrik.cli.main import app
+        from sklm.cli.main import app
         runner = CliRunner()
         runner.invoke(app, ["init"])
         result = runner.invoke(app, ["add", "skill", str(fake_skill_dir)])
@@ -682,12 +683,12 @@ class TestCLIIntegration:
 
     def test_info(self, temp_dir, fake_skill_dir):
         from typer.testing import CliRunner
-        from fabrik.cli.main import app
-        from fabrik.api import Fabrik
-        from fabrik.models import ResourceKind
+        from sklm.cli.main import app
+        from sklm.api import Sklm
+        from sklm.models import ResourceKind
         runner = CliRunner()
         runner.invoke(app, ["init"])
-        f = Fabrik()
+        f = Sklm()
         f.global_add(ResourceKind.skill, fake_skill_dir, "test-skill")
         runner.invoke(app, ["add", "skill", "test-skill"])
         result = runner.invoke(app, ["info", "skill", "test-skill"])
@@ -696,12 +697,12 @@ class TestCLIIntegration:
 
     def test_ls_json(self, temp_dir, fake_skill_dir):
         from typer.testing import CliRunner
-        from fabrik.cli.main import app
-        from fabrik.api import Fabrik
-        from fabrik.models import ResourceKind
+        from sklm.cli.main import app
+        from sklm.api import Sklm
+        from sklm.models import ResourceKind
         runner = CliRunner()
         runner.invoke(app, ["init"])
-        f = Fabrik()
+        f = Sklm()
         f.global_add(ResourceKind.skill, fake_skill_dir, "test-skill")
         runner.invoke(app, ["add", "skill", "test-skill"])
         result = runner.invoke(app, ["ls", "--json"])
@@ -712,7 +713,7 @@ class TestCLIIntegration:
 
     def test_registry_lifecycle(self, temp_dir):
         from typer.testing import CliRunner
-        from fabrik.cli.main import app
+        from sklm.cli.main import app
         runner = CliRunner()
         result = runner.invoke(app, ["registry", "add", str(temp_dir), "--name", "test-reg"])
         assert result.exit_code == 0
@@ -722,7 +723,7 @@ class TestCLIIntegration:
 
     def test_registry_search(self, temp_dir, fake_skill_dir):
         from typer.testing import CliRunner
-        from fabrik.cli.main import app
+        from sklm.cli.main import app
         runner = CliRunner()
         runner.invoke(app, ["registry", "add", str(fake_skill_dir.parent), "--name", "test-reg"])
         result = runner.invoke(app, ["registry", "search", "my-skill"])
@@ -730,14 +731,14 @@ class TestCLIIntegration:
 
     def test_agent_detect(self, temp_dir):
         from typer.testing import CliRunner
-        from fabrik.cli.main import app
+        from sklm.cli.main import app
         runner = CliRunner()
         result = runner.invoke(app, ["agent", "detect"])
         assert result.exit_code == 0
 
     def test_agent_list_contains_agents(self, temp_dir):
         from typer.testing import CliRunner
-        from fabrik.cli.main import app
+        from sklm.cli.main import app
         runner = CliRunner()
         result = runner.invoke(app, ["agent", "list"])
         assert result.exit_code == 0
@@ -747,7 +748,7 @@ class TestCLIIntegration:
 
     def test_agent_list_json(self, temp_dir):
         from typer.testing import CliRunner
-        from fabrik.cli.main import app
+        from sklm.cli.main import app
         runner = CliRunner()
         result = runner.invoke(app, ["agent", "list", "--json"])
         assert result.exit_code == 0
@@ -760,7 +761,7 @@ class TestCLIIntegration:
     def test_agent_list_shows_active(self, temp_dir):
         (temp_dir / ".cursor").mkdir()
         from typer.testing import CliRunner
-        from fabrik.cli.main import app
+        from sklm.cli.main import app
         runner = CliRunner()
         result = runner.invoke(app, ["agent", "list"])
         assert result.exit_code == 0
@@ -769,7 +770,7 @@ class TestCLIIntegration:
 
     def test_telemetry_status_active_by_default(self, temp_dir):
         from typer.testing import CliRunner
-        from fabrik.cli.main import app
+        from sklm.cli.main import app
         runner = CliRunner()
         result = runner.invoke(app, ["telemetry", "status"])
         assert result.exit_code == 0
@@ -778,11 +779,11 @@ class TestCLIIntegration:
 
     def test_telemetry_on_off_lifecycle(self, temp_dir, monkeypatch):
         from typer.testing import CliRunner
-        from fabrik.cli.main import app
-        from fabrik.store import GlobalStore
+        from sklm.cli.main import app
+        from sklm.store import GlobalStore
 
-        monkeypatch.setenv("FABRIK_UMAMI_URL", "https://umami.test")
-        monkeypatch.setenv("FABRIK_WEBSITE_ID", "test-id")
+        monkeypatch.setenv("SKLM_UMAMI_URL", "https://umami.test")
+        monkeypatch.setenv("SKLM_WEBSITE_ID", "test-id")
 
         runner = CliRunner()
         result = runner.invoke(app, ["telemetry", "on"])
@@ -803,11 +804,11 @@ class TestCLIIntegration:
     def test_telemetry_ping_success(self, temp_dir, monkeypatch):
         from unittest.mock import Mock
         from typer.testing import CliRunner
-        from fabrik.cli.main import app
+        from sklm.cli.main import app
 
-        monkeypatch.setenv("FABRIK_UMAMI_URL", "https://umami.test")
-        monkeypatch.setenv("FABRIK_WEBSITE_ID", "test-id")
-        monkeypatch.setattr("fabrik.telemetry.umami.new_event", Mock(return_value={}))
+        monkeypatch.setenv("SKLM_UMAMI_URL", "https://umami.test")
+        monkeypatch.setenv("SKLM_WEBSITE_ID", "test-id")
+        monkeypatch.setattr("sklm.telemetry.umami.new_event", Mock(return_value={}))
 
         runner = CliRunner()
         result = runner.invoke(app, ["telemetry", "ping"])
@@ -817,11 +818,11 @@ class TestCLIIntegration:
     def test_telemetry_ping_failure(self, temp_dir, monkeypatch):
         from unittest.mock import Mock
         from typer.testing import CliRunner
-        from fabrik.cli.main import app
+        from sklm.cli.main import app
 
-        monkeypatch.setenv("FABRIK_UMAMI_URL", "https://umami.test")
-        monkeypatch.setenv("FABRIK_WEBSITE_ID", "test-id")
-        monkeypatch.setattr("fabrik.telemetry.umami.new_event", Mock(side_effect=RuntimeError("Connection refused")))
+        monkeypatch.setenv("SKLM_UMAMI_URL", "https://umami.test")
+        monkeypatch.setenv("SKLM_WEBSITE_ID", "test-id")
+        monkeypatch.setattr("sklm.telemetry.umami.new_event", Mock(side_effect=RuntimeError("Connection refused")))
 
         runner = CliRunner()
         result = runner.invoke(app, ["telemetry", "ping"])
@@ -829,30 +830,30 @@ class TestCLIIntegration:
         assert "failed" in result.output.lower()
 
     def test_init_creates_agent_dirs(self, temp_dir):
-        """fabrik init doit créer les dossiers de l'agent détecté."""
+        """sklm init doit créer les dossiers de l'agent détecté."""
         # Simuler un projet OpenCode
         (temp_dir / ".opencode").mkdir()
         from typer.testing import CliRunner
-        from fabrik.cli.main import app
+        from sklm.cli.main import app
         runner = CliRunner()
         result = runner.invoke(app, ["init"])
         assert result.exit_code == 0
         assert (temp_dir / ".opencode" / "skills").is_dir()
 
     def test_init_creates_agent_dirs_with_flag(self, temp_dir):
-        """fabrik init --agent opencode doit créer les dossiers même sans .opencode/."""
+        """sklm init --agent opencode doit créer les dossiers même sans .opencode/."""
         from typer.testing import CliRunner
-        from fabrik.cli.main import app
+        from sklm.cli.main import app
         runner = CliRunner()
         result = runner.invoke(app, ["init", "--agent", "opencode"])
         assert result.exit_code == 0
         assert (temp_dir / ".opencode" / "skills").is_dir()
 
     def test_add_copies_skill_content(self, temp_dir, fake_skill_dir):
-        """fabrik add doit copier le contenu du skill dans .opencode/skills/<name>/."""
+        """sklm add doit copier le contenu du skill dans .opencode/skills/<name>/."""
         (temp_dir / ".opencode").mkdir()
         from typer.testing import CliRunner
-        from fabrik.cli.main import app
+        from sklm.cli.main import app
         runner = CliRunner()
         runner.invoke(app, ["init"])
         runner.invoke(app, ["global", "add", "skill", str(fake_skill_dir), "--name", "test-skill"])
@@ -864,10 +865,10 @@ class TestCLIIntegration:
         assert (agent_skill_dir / "SKILL.md").read_text() == "# My Skill\nA test skill."
 
     def test_rm_removes_agent_skill(self, temp_dir, fake_skill_dir):
-        """fabrik rm doit supprimer le dossier skill de l'agent."""
+        """sklm rm doit supprimer le dossier skill de l'agent."""
         (temp_dir / ".opencode").mkdir()
         from typer.testing import CliRunner
-        from fabrik.cli.main import app
+        from sklm.cli.main import app
         runner = CliRunner()
         runner.invoke(app, ["init"])
         runner.invoke(app, ["global", "add", "skill", str(fake_skill_dir), "--name", "test-skill"])
@@ -879,10 +880,10 @@ class TestCLIIntegration:
         assert not agent_skill_dir.exists()
 
     def test_agent_sync_updates_content(self, temp_dir, fake_skill_dir):
-        """fabrik agent sync doit copier le contenu dans l'agent."""
+        """sklm agent sync doit copier le contenu dans l'agent."""
         (temp_dir / ".opencode").mkdir()
         from typer.testing import CliRunner
-        from fabrik.cli.main import app
+        from sklm.cli.main import app
         runner = CliRunner()
         runner.invoke(app, ["init"])
         runner.invoke(app, ["global", "add", "skill", str(fake_skill_dir), "--name", "test-skill"])
@@ -895,9 +896,9 @@ class TestCLIIntegration:
         assert (temp_dir / ".opencode" / "skills" / "test-skill" / "SKILL.md").read_text() == "# My Skill\nA test skill."
 
     def test_install_command_help(self, temp_dir):
-        """fabrik install --help doit afficher l'aide."""
+        """sklm install --help doit afficher l'aide."""
         from typer.testing import CliRunner
-        from fabrik.cli.main import app
+        from sklm.cli.main import app
         runner = CliRunner()
         result = runner.invoke(app, ["install", "--help"])
         assert result.exit_code == 0
@@ -905,36 +906,36 @@ class TestCLIIntegration:
 
     def test_backward_compat_opencode_yaml(self, temp_dir):
         """Existing agent: opencode in YAML should load without error."""
-        from fabrik.models import WorkspaceConfig
-        path = temp_dir / "fabrik.yaml"
+        from sklm.models import WorkspaceConfig
+        path = temp_dir / "sklm.yaml"
         path.write_text("agent: opencode\nversion: 1\nresources: []\nlinks: []\n")
         config = WorkspaceConfig.from_yaml(path)
         assert config.agent == "opencode"
 
     def test_backward_compat_init_opencode(self, temp_dir):
-        """fabrik init in a project with .opencode/ should work."""
+        """sklm init in a project with .opencode/ should work."""
         (temp_dir / ".opencode").mkdir()
         from typer.testing import CliRunner
-        from fabrik.cli.main import app
+        from sklm.cli.main import app
         runner = CliRunner()
         result = runner.invoke(app, ["init"])
         assert result.exit_code == 0
         assert "opencode" in result.output
 
     def test_add_with_from_flag(self, temp_dir):
-        """fabrik add --help doit mentionner --from."""
+        """sklm add --help doit mentionner --from."""
         from typer.testing import CliRunner
-        from fabrik.cli.main import app
+        from sklm.cli.main import app
         runner = CliRunner()
         result = runner.invoke(app, ["add", "--help"])
         assert result.exit_code == 0
         assert "--from" in result.output
 
     def test_uninstall_command(self, temp_dir, fake_skill_dir):
-        """fabrik uninstall doit supprimer un skill du store."""
+        """sklm uninstall doit supprimer un skill du store."""
         (temp_dir / ".opencode").mkdir()
         from typer.testing import CliRunner
-        from fabrik.cli.main import app
+        from sklm.cli.main import app
         runner = CliRunner()
         runner.invoke(app, ["init"])
         runner.invoke(app, ["global", "add", "skill", str(fake_skill_dir), "--name", "test-skill"])
@@ -943,10 +944,10 @@ class TestCLIIntegration:
         assert "Uninstalled" in result.output
 
     def test_uninstall_linked_skill(self, temp_dir, fake_skill_dir):
-        """fabrik uninstall d'un skill lié doit demander confirmation."""
+        """sklm uninstall d'un skill lié doit demander confirmation."""
         (temp_dir / ".opencode").mkdir()
         from typer.testing import CliRunner
-        from fabrik.cli.main import app
+        from sklm.cli.main import app
         runner = CliRunner()
         runner.invoke(app, ["init"])
         runner.invoke(app, ["global", "add", "skill", str(fake_skill_dir), "--name", "test-skill"])
@@ -957,14 +958,14 @@ class TestCLIIntegration:
         assert "Uninstalled" in result.output
 
     def test_migrate_command(self, temp_dir):
-        """fabrik migrate doit importer depuis ~/.agents/."""
+        """sklm migrate doit importer depuis ~/.agents/."""
         agents_skills = Path.home() / ".agents" / "skills"
         agents_skills.mkdir(parents=True, exist_ok=True)
         test_skill_dir = agents_skills / "test-agent-skill"
         test_skill_dir.mkdir(exist_ok=True)
         (test_skill_dir / "SKILL.md").write_text("# Agent Skill\nFrom skills.sh")
         from typer.testing import CliRunner
-        from fabrik.cli.main import app
+        from sklm.cli.main import app
         runner = CliRunner()
         result = runner.invoke(app, ["migrate", "skill", "test-agent-skill"])
         assert result.exit_code == 0
@@ -974,9 +975,9 @@ class TestCLIIntegration:
         shutil.rmtree(test_skill_dir)
 
     def test_link_unlink_not_in_cli(self, temp_dir):
-        """fabrik link et unlink ne doivent PAS être des commandes accessibles."""
+        """sklm link et unlink ne doivent PAS être des commandes accessibles."""
         from typer.testing import CliRunner
-        from fabrik.cli.main import app
+        from sklm.cli.main import app
         runner = CliRunner()
         result = runner.invoke(app, ["link", "skill", "test"], input="n\n")
         assert result.exit_code != 0
@@ -984,10 +985,10 @@ class TestCLIIntegration:
         assert result.exit_code != 0
 
     def test_install_api(self, temp_dir):
-        """Fabrik.install() avec --from doit appeler add_resource_from_git."""
-        from fabrik.api import Fabrik
-        from fabrik.models import ResourceKind
-        f = Fabrik()
+        """Sklm.install() avec --from doit appeler add_resource_from_git."""
+        from sklm.api import Sklm
+        from sklm.models import ResourceKind
+        f = Sklm()
         mock_resource = MagicMock()
         mock_resource.name = "test-skill"
         mock_resource.kind = ResourceKind.skill
@@ -1000,18 +1001,18 @@ class TestCLIIntegration:
             assert ref.origin == "https://github.com/test/repo"
 
     def test_add_from_url_calls_install(self, temp_dir):
-        """Fabrik.add() avec from_url doit appeler install()."""
-        from fabrik.api import Fabrik
-        from fabrik.models import ResourceKind
+        """Sklm.add() avec from_url doit appeler install()."""
+        from sklm.api import Sklm
+        from sklm.models import ResourceKind
         ref = MagicMock()
         ref.name = "test-skill"
         ref.kind = ResourceKind.skill
         (temp_dir / ".opencode").mkdir()
-        f = Fabrik()
+        f = Sklm()
         f.init_workspace("none")
         with unittest.mock.patch.object(f, "install") as mock_install:
             mock_install.return_value = ref
-            with unittest.mock.patch("fabrik.api._link_resource") as mock_link:
+            with unittest.mock.patch("sklm.api._link_resource") as mock_link:
                 mock_link.return_value = MagicMock()
                 with unittest.mock.patch.object(f, "agent_sync") as mock_sync:
                     mock_sync.return_value = {"agent": "test", "synced": True}
@@ -1022,7 +1023,7 @@ class TestCLIIntegration:
                     )
 
     def test_status_warns_external_skills(self, temp_dir):
-        """fabrik status doit avertir si des skills externes sont détectés."""
+        """sklm status doit avertir si des skills externes sont détectés."""
         agents_skills = Path.home() / ".agents" / "skills"
         agents_skills.mkdir(parents=True, exist_ok=True)
         test_skill_dir = agents_skills / "test-warning-skill"
@@ -1030,11 +1031,11 @@ class TestCLIIntegration:
         (test_skill_dir / "SKILL.md").write_text("# Warning Skill")
         (temp_dir / ".opencode").mkdir()
         from typer.testing import CliRunner
-        from fabrik.cli.main import app
+        from sklm.cli.main import app
         runner = CliRunner()
         runner.invoke(app, ["init"])
         result = runner.invoke(app, ["status"])
-        assert "outside Fabrik's store" in result.output
+        assert "outside Sklm's store" in result.output
         assert "migrate" in result.output
         import shutil
         shutil.rmtree(test_skill_dir)

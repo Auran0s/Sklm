@@ -1,32 +1,32 @@
-"""Fabrik API — main facade for all operations."""
+"""Sklm API — main facade for all operations."""
 
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Optional
 
-from fabrik.models import Link, ResourceKind, ResourceRef
-from fabrik.store import GlobalStore
-from fabrik.core.workspace import Workspace
-from fabrik.core.registry import RegistryManager, RegistrySource
-from fabrik.core.crud import (
+from sklm.models import Link, ResourceKind, ResourceRef
+from sklm.store import GlobalStore
+from sklm.core.workspace import Workspace
+from sklm.core.registry import RegistryManager, RegistrySource
+from sklm.core.crud import (
     add_resource_to_workspace,
     remove_resource_from_workspace,
     list_workspace_resources,
     get_resource_info,
 )
-from fabrik.core.linking import (
+from sklm.core.linking import (
     link_resource as _link_resource,
     unlink_resource as _unlink_resource,
     detect_broken_links,
     repair_links,
 )
-from fabrik.agents.base import AgentAdapter
-from fabrik.agents.registry import AgentRegistry
+from sklm.agents.base import AgentAdapter
+from sklm.agents.registry import AgentRegistry
 
 
-class Fabrik:
-    """Main API for Fabrik operations."""
+class Sklm:
+    """Main API for Sklm operations."""
 
     def __init__(self, project_root: Optional[Path] = None) -> None:
         self.project_root = (project_root or Path.cwd()).resolve()
@@ -263,7 +263,7 @@ class Fabrik:
     def agent_sync(self, dry_run: bool = False) -> dict:
         agent = self.get_agent()
         if not agent:
-            raise RuntimeError("No agent detected. Run 'fabrik init' first.")
+            raise RuntimeError("No agent detected. Run 'sklm init' first.")
         links = self.workspace.list_links()
         linked_skills = [l for l in links if l.kind == ResourceKind.skill]
         if dry_run:

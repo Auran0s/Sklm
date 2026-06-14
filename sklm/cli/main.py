@@ -1,4 +1,4 @@
-"""Fabrik CLI — main entrypoint with real backend."""
+"""Sklm CLI — main entrypoint with real backend."""
 
 from __future__ import annotations
 
@@ -13,19 +13,19 @@ from rich.console import Console
 from rich.table import Table
 from rich import print_json
 
-from fabrik import __version__
-from fabrik.api import Fabrik
-from fabrik.models import ResourceKind
+from sklm import __version__
+from sklm.api import Sklm
+from sklm.models import ResourceKind
 
 app = typer.Typer(
-    name="fabrik",
+    name="sklm",
     help="Skills manager for AI agents",
     no_args_is_help=True,
     rich_markup_mode="rich",
 )
 console = Console()
 
-_fabrik: Optional[Fabrik] = None
+_sklm: Optional[Sklm] = None
 _tracker_start: float = 0.0
 _tracker_command: str = ""
 _tracker: Optional["UmamiTracker"] = None  # type: ignore[name-defined]
@@ -34,8 +34,8 @@ _tracker: Optional["UmamiTracker"] = None  # type: ignore[name-defined]
 def get_tracker() -> Optional["UmamiTracker"]:
     global _tracker
     if _tracker is None:
-        from fabrik.store import GlobalStore
-        from fabrik.telemetry import UmamiTracker
+        from sklm.store import GlobalStore
+        from sklm.telemetry import UmamiTracker
 
         store = GlobalStore()
         cfg = store.get_telemetry_config()
@@ -47,16 +47,16 @@ def get_tracker() -> Optional["UmamiTracker"]:
     return _tracker
 
 
-def get_fabrik() -> Fabrik:
-    global _fabrik
-    if _fabrik is None:
-        _fabrik = Fabrik()
-    return _fabrik
+def get_sklm() -> Sklm:
+    global _sklm
+    if _sklm is None:
+        _sklm = Sklm()
+    return _sklm
 
 
 def version_callback(value: bool):
     if value:
-        console.print(f"fabrik v{__version__}")
+        console.print(f"sklm v{__version__}")
         raise typer.Exit()
 
 
@@ -87,18 +87,18 @@ def init(
         None, "--agent", "-a", help="Agent to configure (auto-detect if omitted)"
     ),
 ):
-    """Initialize a Fabrik workspace in the current directory."""
-    f = get_fabrik()
+    """Initialize a Sklm workspace in the current directory."""
+    f = get_sklm()
     if f.workspace.exists():
         if agent:
             f.set_agent(agent)
-            console.print("[yellow]⚠[/] Workspace already exists at [bold].fabrik/[/]")
+            console.print("[yellow]⚠[/] Workspace already exists at [bold].sklm/[/]")
             console.print(f"   Agent updated to: [cyan]{agent}[/]")
             return
-        console.print("[yellow]⚠[/] Workspace already exists at [bold].fabrik/[/]")
+        console.print("[yellow]⚠[/] Workspace already exists at [bold].sklm/[/]")
         raise typer.Exit(1)
     detected = f.init_workspace(agent)
-    console.print("[green]✓[/] Workspace created at [bold].fabrik/[/]")
+    console.print("[green]✓[/] Workspace created at [bold].sklm/[/]")
     console.print(f"   Agent: [cyan]{detected}[/]")
 
 
@@ -107,9 +107,9 @@ def status(
     repair: bool = typer.Option(False, "--repair", help="Attempt to repair broken links"),
 ):
     """Show workspace status."""
-    f = get_fabrik()
+    f = get_sklm()
     if not f.workspace.exists():
-        console.print("[red]✗[/] No Fabrik workspace found. Run [bold]fabrik init[/] first.")
+        console.print("[red]✗[/] No Sklm workspace found. Run [bold]sklm init[/] first.")
         raise typer.Exit(1)
     if repair:
         result = f.repair_broken_links()
@@ -130,13 +130,13 @@ def status(
     table.add_row("Broken links", str(state["broken_links"]))
     console.print(table)
     if state["broken_links"] > 0:
-        console.print("\n[yellow]💡 Tip:[/] Run [bold]fabrik status --repair[/] to fix broken links")
+        console.print("\n[yellow]💡 Tip:[/] Run [bold]sklm status --repair[/] to fix broken links")
     external_count = state.get("external_skills_count", 0)
     if external_count > 0:
         console.print(
-            f"\n[yellow]⚠ {external_count} skills found outside Fabrik's store[/]"
+            f"\n[yellow]⚠ {external_count} skills found outside Sklm's store[/]"
             "\n   These may be globally visible to your AI agent in every project."
-            "\n   Use [bold]fabrik migrate[/] to import them into the Fabrik store."
+            "\n   Use [bold]sklm migrate[/] to import them into the Sklm store."
         )
 
 
@@ -155,7 +155,7 @@ def install(
     ),
 ):
     """Install a resource into the global store without activating it."""
-    f = get_fabrik()
+    f = get_sklm()
     kind = parse_resource_type(resource_type)
     try:
         ref = f.install(kind, name, from_url=from_url, subdir=subdir)
@@ -174,7 +174,7 @@ def uninstall(
     force: bool = typer.Option(False, "--force", help="Skip confirmation"),
 ):
     """Remove a resource from the global store permanently."""
-    f = get_fabrik()
+    f = get_sklm()
     kind = parse_resource_type(resource_type)
     linked_projects = []
     try:
@@ -205,8 +205,8 @@ def migrate(
         None, help="Resource name (omit to migrate all)"
     ),
 ):
-    """Import resources from ~/.agents/ into the Fabrik global store."""
-    f = get_fabrik()
+    """Import resources from ~/.agents/ into the Sklm global store."""
+    f = get_sklm()
     kind = parse_resource_type(resource_type)
     try:
         refs = f.migrate(kind, name)
@@ -220,9 +220,9 @@ def migrate(
         console.print(f"[green]✓[/] Migrated {kind.value} [bold]{ref.name}[/]")
     console.print(f"\n[green]Done.[/] {len(refs)} resource(s) migrated.")
     if name:
-        console.print("Tip: Run [bold]fabrik add {kind.value} {name}[/] to activate it in this project.")
+        console.print("Tip: Run [bold]sklm add {kind.value} {name}[/] to activate it in this project.")
     else:
-        console.print("Tip: Run [bold]fabrik ls[/] to see available resources, then [bold]fabrik add[/] to activate.")
+        console.print("Tip: Run [bold]sklm ls[/] to see available resources, then [bold]sklm add[/] to activate.")
 
 
 # ─── Resource Management ─────────────────────────────────────────────────────
@@ -240,7 +240,7 @@ def add(
     ),
 ):
     """Add and activate a resource in the project (resolves, stores, links, syncs agent)."""
-    f = get_fabrik()
+    f = get_sklm()
     kind = parse_resource_type(resource_type)
     try:
         ref = f.add(kind, name, from_url=from_url, subdir=subdir)
@@ -256,7 +256,7 @@ def rm(
     name: str = typer.Argument(..., help="Resource name to remove"),
 ):
     """Remove a resource from the workspace (unlinks and syncs agent)."""
-    f = get_fabrik()
+    f = get_sklm()
     kind = parse_resource_type(resource_type)
     try:
         ref = f.remove(kind, name)
@@ -274,12 +274,12 @@ def ls(
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ):
     """List resources in the workspace."""
-    f = get_fabrik()
+    f = get_sklm()
     kind = parse_resource_type(resource_type) if resource_type else None
     try:
         resources = f.list(kind)
     except FileNotFoundError as e:
-        console.print("[red]✗[/] No Fabrik workspace found.")
+        console.print("[red]✗[/] No Sklm workspace found.")
         raise typer.Exit(1) from e
     if json_output:
         data = [r.model_dump(mode="json") for r in resources]
@@ -303,7 +303,7 @@ def info(
     name: str = typer.Argument(..., help="Resource name"),
 ):
     """Show detailed information about a resource."""
-    f = get_fabrik()
+    f = get_sklm()
     kind = parse_resource_type(resource_type)
     ref = f.info(kind, name)
     if not ref:
@@ -323,7 +323,7 @@ def info(
 # ─── Global Store ────────────────────────────────────────────────────────────
 
 
-global_app = typer.Typer(help="Manage the global Fabrik store")
+global_app = typer.Typer(help="Manage the global Sklm store")
 app.add_typer(global_app, name="global")
 
 
@@ -334,7 +334,7 @@ def global_add(
     name: Optional[str] = typer.Option(None, "--name", "-n", help="Custom name for the resource"),
 ):
     """Add a resource to the global store."""
-    f = get_fabrik()
+    f = get_sklm()
     kind = parse_resource_type(resource_type)
     try:
         resource = f.global_add(kind, path, name)
@@ -351,7 +351,7 @@ def global_ls(
     ),
 ):
     """List resources in the global store."""
-    f = get_fabrik()
+    f = get_sklm()
     kind = parse_resource_type(resource_type) if resource_type else None
     resources = f.global_ls(kind)
     if not resources:
@@ -373,7 +373,7 @@ def global_rm(
     name: str = typer.Argument(..., help="Resource name to remove from store"),
 ):
     """Remove a resource from the global store."""
-    f = get_fabrik()
+    f = get_sklm()
     kind = parse_resource_type(resource_type)
     try:
         f.global_rm(kind, name)
@@ -386,7 +386,7 @@ def global_rm(
 # ─── Registry ────────────────────────────────────────────────────────────────
 
 
-registry_app = typer.Typer(help="Manage Fabrik registries")
+registry_app = typer.Typer(help="Manage Sklm registries")
 app.add_typer(registry_app, name="registry")
 
 
@@ -396,7 +396,7 @@ def registry_add(
     name: Optional[str] = typer.Option(None, "--name", "-n", help="Custom name for the registry"),
 ):
     """Add a registry source."""
-    f = get_fabrik()
+    f = get_sklm()
     try:
         src = f.registry_add(source, name)
     except FileExistsError as e:
@@ -408,7 +408,7 @@ def registry_add(
 @registry_app.command("ls")
 def registry_ls():
     """List registered registry sources."""
-    f = get_fabrik()
+    f = get_sklm()
     sources = f.registry_ls()
     if not sources:
         console.print("[yellow]No registries configured.[/]")
@@ -429,7 +429,7 @@ def registry_search(
     resource_type: Optional[str] = typer.Option(None, "--type", "-t", help="Filter by type"),
 ):
     """Search for resources across registries."""
-    f = get_fabrik()
+    f = get_sklm()
     kind = parse_resource_type(resource_type) if resource_type else None
     results = f.registry_search(query, registry, kind)
     if not results:
@@ -457,7 +457,7 @@ def sync(
     dry_run: bool = typer.Option(False, "--dry-run", help="Preview changes without applying"),
 ):
     """Synchronize workspace resources with the active agent config."""
-    f = get_fabrik()
+    f = get_sklm()
     try:
         result = f.agent_sync(dry_run)
     except RuntimeError as e:
@@ -476,7 +476,7 @@ def list_agents(
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ):
     """List all supported AI agents and their detection status."""
-    f = get_fabrik()
+    f = get_sklm()
     agents = f.list_agents()
     if json_output:
         print_json(data=agents)
@@ -502,7 +502,7 @@ def list_agents(
 @agent_app.command()
 def detect():
     """Detect the active AI agent in the current project."""
-    f = get_fabrik()
+    f = get_sklm()
     detected = f.agent_detect()
     if detected:
         console.print(f"[green]✓[/] Detected: [bold]{detected}[/]")
@@ -520,7 +520,7 @@ app.add_typer(telemetry_app, name="telemetry")
 @telemetry_app.command("on")
 def telemetry_on():
     """Enable telemetry."""
-    from fabrik.store import GlobalStore
+    from sklm.store import GlobalStore
 
     store = GlobalStore()
     cfg = store.get_telemetry_config()
@@ -532,7 +532,7 @@ def telemetry_on():
 @telemetry_app.command("off")
 def telemetry_off():
     """Disable telemetry."""
-    from fabrik.store import GlobalStore
+    from sklm.store import GlobalStore
 
     store = GlobalStore()
     cfg = store.get_telemetry_config()
@@ -544,7 +544,7 @@ def telemetry_off():
 @telemetry_app.command("status")
 def telemetry_status():
     """Show telemetry status."""
-    from fabrik.store import GlobalStore
+    from sklm.store import GlobalStore
 
     store = GlobalStore()
     cfg = store.get_telemetry_config()
@@ -556,15 +556,15 @@ def telemetry_status():
 
     if not cfg.umami_url or not cfg.website_id:
         console.print("[yellow]⚠ Telemetry inactive[/]")
-        console.print("   Configure FABRIK_UMAMI_URL and FABRIK_WEBSITE_ID")
-        console.print("   or run: [bold]fabrik telemetry on[/]")
+        console.print("   Configure SKLM_UMAMI_URL and SKLM_WEBSITE_ID")
+        console.print("   or run: [bold]sklm telemetry on[/]")
         raise typer.Exit(1)
 
     if tracker.active:
         console.print(f"[green]Active[/] → {cfg.umami_url}")
     else:
         console.print("[yellow]⚠ Telemetry disabled[/]")
-        console.print("   Run [bold]fabrik telemetry on[/] to enable")
+        console.print("   Run [bold]sklm telemetry on[/] to enable")
 
 
 @telemetry_app.command("ping")
@@ -578,7 +578,7 @@ def telemetry_ping():
 
     if not tracker.active:
         console.print("[yellow]⚠ Telemetry disabled or not configured[/]")
-        console.print("   Run [bold]fabrik telemetry on[/] to enable")
+        console.print("   Run [bold]sklm telemetry on[/] to enable")
         raise typer.Exit(1)
 
     console.print("[dim]Sending test event...[/]")

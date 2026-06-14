@@ -1,4 +1,4 @@
-"""Pydantic data models for Fabrik."""
+"""Pydantic data models for Sklm."""
 
 from __future__ import annotations
 

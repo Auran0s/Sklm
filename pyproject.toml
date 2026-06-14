@@ -3,7 +3,7 @@ requires = ["setuptools>=64", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "fabrik"
+name = "sklm"
 version = "0.1.0"
 description = "Skills manager for AI agents"
 readme = "README.md"
@@ -24,7 +24,7 @@ dependencies = [
 ]
 
 [project.scripts]
-fabrik = "fabrik.cli.main:run"
+sklm = "sklm.cli.main:run"
 
 [tool.setuptools.packages.find]
-include = ["fabrik*"]
+include = ["sklm*"]

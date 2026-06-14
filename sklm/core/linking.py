@@ -6,9 +6,9 @@ import os
 from pathlib import Path
 from typing import Optional
 
-from fabrik.models import Link, ResourceKind
-from fabrik.store import GlobalStore
-from fabrik.core.workspace import Workspace
+from sklm.models import Link, ResourceKind
+from sklm.store import GlobalStore
+from sklm.core.workspace import Workspace
 
 
 def link_resource(

@@ -1,11 +1,11 @@
-"""Workspace — manages .fabrik/ in the current project."""
+"""Workspace — manages .sklm/ in the current project."""
 
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Optional
 
-from fabrik.models import (
+from sklm.models import (
     Link,
     ResourceKind,
     ResourceRef,
@@ -13,20 +13,20 @@ from fabrik.models import (
 )
 
 
-FABRIK_DIR_NAME = ".fabrik"
+SKLM_DIR_NAME = ".sklm"
 
 
 class Workspace:
-    """Manages a project-level Fabrik workspace."""
+    """Manages a project-level Sklm workspace."""
 
     def __init__(self, root: Optional[Path] = None) -> None:
         self.root = (root or Path.cwd()).resolve()
-        self.fabrik_dir = self.root / FABRIK_DIR_NAME
-        self.config_path = self.fabrik_dir / "fabrik.yaml"
-        self.links_dir = self.fabrik_dir / "links"
+        self.sklm_dir = self.root / SKLM_DIR_NAME
+        self.config_path = self.sklm_dir / "sklm.yaml"
+        self.links_dir = self.sklm_dir / "links"
 
     def exists(self) -> bool:
-        return self.fabrik_dir.is_dir()
+        return self.sklm_dir.is_dir()
 
     def set_agent(self, agent: str) -> None:
         config = self.load_config()
@@ -34,7 +34,7 @@ class Workspace:
         self._save_config(config)
 
     def init(self, agent: str = "none") -> WorkspaceConfig:
-        self.fabrik_dir.mkdir(parents=True, exist_ok=True)
+        self.sklm_dir.mkdir(parents=True, exist_ok=True)
         self.links_dir.mkdir(parents=True, exist_ok=True)
         (self.links_dir / "skills").mkdir(exist_ok=True)
         config = WorkspaceConfig(agent=agent)

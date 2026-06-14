@@ -1,4 +1,4 @@
-"""Global store — manages ~/.fabrik/ directory."""
+"""Global store — manages ~/.sklm/ directory."""
 
 from __future__ import annotations
 
@@ -10,18 +10,18 @@ from typing import Optional
 
 import yaml
 
-from fabrik.models import GlobalConfig, Resource, ResourceKind, SourceMetadata, TelemetryConfig
+from sklm.models import GlobalConfig, Resource, ResourceKind, SourceMetadata, TelemetryConfig
 
 
-FABRIK_HOME = Path.home() / ".fabrik"
-SOURCE_META_FILENAME = ".fabrik-source.yaml"
+SKLM_HOME = Path.home() / ".sklm"
+SOURCE_META_FILENAME = ".sklm-source.yaml"
 
 
 class GlobalStore:
-    """Manages the global Fabrik store at ~/.fabrik/."""
+    """Manages the global Sklm store at ~/.sklm/."""
 
     def __init__(self) -> None:
-        self.root = FABRIK_HOME
+        self.root = SKLM_HOME
         self.store_dir = self.root / "store"
         self.skills_dir = self.store_dir / "skills"
         self.config_path = self.root / "config.yaml"
@@ -91,7 +91,7 @@ class GlobalStore:
         subdir: Optional[str] = None,
         ref: str = "HEAD",
     ) -> Resource:
-        from fabrik.core.registry import RegistryManager
+        from sklm.core.registry import RegistryManager
 
         registry = RegistryManager()
         cache_path = registry.clone_or_fetch(repo_url, name, ref=ref)
@@ -185,8 +185,8 @@ class GlobalStore:
         config = self._load_config()
         cfg = config.telemetry
 
-        if "FABRIK_TELEMETRY" in os.environ:
-            enabled = os.environ["FABRIK_TELEMETRY"] not in (
+        if "SKLM_TELEMETRY" in os.environ:
+            enabled = os.environ["SKLM_TELEMETRY"] not in (
                 "0",
                 "false",
                 "no",
@@ -198,8 +198,8 @@ class GlobalStore:
 
         return TelemetryConfig(
             enabled=enabled,
-            umami_url=os.environ.get("FABRIK_UMAMI_URL") or cfg.umami_url,
-            website_id=os.environ.get("FABRIK_WEBSITE_ID") or cfg.website_id,
+            umami_url=os.environ.get("SKLM_UMAMI_URL") or cfg.umami_url,
+            website_id=os.environ.get("SKLM_WEBSITE_ID") or cfg.website_id,
         )
 
     def set_telemetry_config(self, cfg: TelemetryConfig) -> None:

@@ -1,6 +1,6 @@
 <div align="center">
 
-# Fabrik
+# Sklm
 
 *Skills manager for AI agents*
 
@@ -11,106 +11,106 @@
 
 </div>
 
-Fabrik is a CLI tool that centralizes management of **skills** (SKILL.md files) for your AI agents. It solves the tension between wanting skills globally available vs. per-project scoped, without polluting your agent's configuration.
+Sklm is a CLI tool that centralizes management of **skills** (SKILL.md files) for your AI agents. It solves the tension between wanting skills globally available vs. per-project scoped, without polluting your agent's configuration.
 
 > [!TIP]
-> New to Fabrik? Start with [`fabrik init`](#quickstart) — it auto-detects your AI agent and sets up everything in seconds.
+> New to Sklm? Start with [`sklm init`](#quickstart) — it auto-detects your AI agent and sets up everything in seconds.
 
 ## Features
 
 - **Multi-agent support** — recognizes 8 AI agents (OpenCode, Claude Code, Cursor, Windsurf, Gemini CLI, Cline, Amazon Q, GitHub Copilot) and syncs skills to the right place.
-- **Global store** — install skills once in `~/.fabrik/`, reuse across projects.
+- **Global store** — install skills once in `~/.sklm/`, reuse across projects.
 - **Per-project scoping** — activate only the skills each project needs via symlinks; your agent only sees what you explicitly add.
 - **Registry discovery** — index local directories or git repos as resource catalogs, searchable by keyword.
-- **Auto-sync** — `fabrik add` and `fabrik rm` automatically sync your agent's configuration directory — no manual copying.
-- **Telemetry (opt-out)** — anonymous usage tracking via Umami. Disable with `FABRIK_TELEMETRY=0`.
+- **Auto-sync** — `sklm add` and `sklm rm` automatically sync your agent's configuration directory — no manual copying.
+- **Telemetry (opt-out)** — anonymous usage tracking via Umami. Disable with `SKLM_TELEMETRY=0`.
 
 ## Installation
 
 ```bash
-git clone https://github.com/Auran0s/fabrik.git
-cd fabrik
+git clone https://github.com/Auran0s/sklm.git
+cd sklm
 pip install -e .
 ```
 
 ## Quickstart
 
 ```bash
-fabrik init                          # Creates .fabrik/ and detects your agent
-fabrik install skill my-skill \
+sklm init                          # Creates .sklm/ and detects your agent
+sklm install skill my-skill \
   --from https://github.com/user/skills   # Install into global store
-fabrik add skill my-skill            # Activate in the current project
+sklm add skill my-skill            # Activate in the current project
 ```
 
 That's it — your AI agent can now use the skill.
 
 > [!TIP]
-> If you already have skills in `~/.agents/skills/`, import them with `fabrik migrate`.
+> If you already have skills in `~/.agents/skills/`, import them with `sklm migrate`.
 
 ## Usage
 
 ### Workspace setup
 
 ```bash
-fabrik init                          # Auto-detect agent and create .fabrik/
-fabrik init --agent opencode         # Force a specific agent
-fabrik status                        # Show workspace health
-fabrik status --repair               # Fix broken symlinks
+sklm init                          # Auto-detect agent and create .sklm/
+sklm init --agent opencode         # Force a specific agent
+sklm status                        # Show workspace health
+sklm status --repair               # Fix broken symlinks
 ```
 
 ### Global store (install once)
 
 ```bash
-fabrik install skill find-skills \
+sklm install skill find-skills \
   --from https://github.com/vercel-labs/skills
-fabrik uninstall skill find-skills   # Remove from global store
-fabrik uninstall skill find-skills --force   # Skip confirmation
-fabrik migrate                       # Import from ~/.agents/skills/
-fabrik migrate skill find-skills     # Import a single skill
+sklm uninstall skill find-skills   # Remove from global store
+sklm uninstall skill find-skills --force   # Skip confirmation
+sklm migrate                       # Import from ~/.agents/skills/
+sklm migrate skill find-skills     # Import a single skill
 ```
 
 ### Resource management (activate per project)
 
 ```bash
-fabrik add skill my-skill            # Full pipeline: resolve → store → link → sync
-fabrik add skill my-skill \
+sklm add skill my-skill            # Full pipeline: resolve → store → link → sync
+sklm add skill my-skill \
   --from https://github.com/user/skills   # Install from git and activate
-fabrik ls                             # List active resources
-fabrik ls --json                      # Machine-readable output
-fabrik info skill my-skill           # Show origin, path, status
-fabrik rm skill my-skill             # Remove, unlink, and clean agent
+sklm ls                             # List active resources
+sklm ls --json                      # Machine-readable output
+sklm info skill my-skill           # Show origin, path, status
+sklm rm skill my-skill             # Remove, unlink, and clean agent
 ```
 
 ### Registry discovery
 
 ```bash
-fabrik registry add ~/my-skills                  # Local folder as registry
-fabrik registry add https://github.com/org/skills.git   # Git repo as registry
-fabrik registry ls                                # List registries
-fabrik registry search scraper                    # Search across all registries
-fabrik registry search scraper --registry my-skills   # Within a specific registry
+sklm registry add ~/my-skills                  # Local folder as registry
+sklm registry add https://github.com/org/skills.git   # Git repo as registry
+sklm registry ls                                # List registries
+sklm registry search scraper                    # Search across all registries
+sklm registry search scraper --registry my-skills   # Within a specific registry
 ```
 
 ### Agent management
 
 ```bash
-fabrik agent detect                   # Identify the active AI agent
-fabrik agent list                     # List all known agents
-fabrik agent sync                     # Force re-sync all linked skills
-fabrik agent sync --dry-run           # Preview changes without applying
+sklm agent detect                   # Identify the active AI agent
+sklm agent list                     # List all known agents
+sklm agent sync                     # Force re-sync all linked skills
+sklm agent sync --dry-run           # Preview changes without applying
 ```
 
 ### Telemetry
 
 ```bash
-fabrik telemetry status              # Check if telemetry is enabled
-fabrik telemetry off                  # Disable anonymous usage data
-fabrik telemetry on                   # Re-enable
+sklm telemetry status              # Check if telemetry is enabled
+sklm telemetry off                  # Disable anonymous usage data
+sklm telemetry on                   # Re-enable
 ```
 
 ## Supported Agents
 
-Fabrik detects the active agent by checking which config directories exist in your project:
+Sklm detects the active agent by checking which config directories exist in your project:
 
 | Agent | Config directory | Skills path | Auto-detect |
 |---|---|---|---|
@@ -123,35 +123,35 @@ Fabrik detects the active agent by checking which config directories exist in yo
 | Amazon Q | `.amazonq/` | `.amazonq/skills/` | ✅ |
 | GitHub Copilot | `.github/` | `.github/skills/` | 🔲 (explicit only) |
 
-GitHub Copilot requires `fabrik init --agent github-copilot` because `.github/` is too common to auto-detect.
+GitHub Copilot requires `sklm init --agent github-copilot` because `.github/` is too common to auto-detect.
 
 ## Architecture
 
-Fabrik uses a two-level store model:
+Sklm uses a two-level store model:
 
 ```
-~/.fabrik/               # Global store (user-wide)
+~/.sklm/                 # Global store (user-wide)
   config.yaml            # Resource catalog
   registries.yaml        # Registry sources
   cache/                 # Cloned git repos (for install --from)
   store/skills/          # Installed skill directories
 
-./.fabrik/               # Per-project workspace (gitignored)
-  fabrik.yaml            # Project config (agent, links, resources)
-  links/skills/          # Symlinks → ~/.fabrik/store/skills/
+./.sklm/                 # Per-project workspace (gitignored)
+  sklm.yaml              # Project config (agent, links, resources)
+  links/skills/          # Symlinks → ~/.sklm/store/skills/
 
 <agent-dir>/skills/      # Agent-visible copies (auto-synced)
                          # e.g., .opencode/skills/ for OpenCode
 ```
 
-The `fabrik add` command runs four steps in sequence:
+The `sklm add` command runs four steps in sequence:
 
 1. **Resolve** — find the resource (global store → registries → local path)
-2. **Store** — copy it into `~/.fabrik/store/` if not already there
-3. **Link** — create a symlink in `./.fabrik/links/`
+2. **Store** — copy it into `~/.sklm/store/` if not already there
+3. **Link** — create a symlink in `./.sklm/links/`
 4. **Sync** — copy linked skills to the agent's config directory
 
-Removal (`fabrik rm`) reverses steps 3 and 4. The global store is untouched — skills remain available for other projects.
+Removal (`sklm rm`) reverses steps 3 and 4. The global store is untouched — skills remain available for other projects.
 
 ## Development
 

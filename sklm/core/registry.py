@@ -8,11 +8,11 @@ from typing import Optional
 
 import yaml
 
-from fabrik.models import RegistrySource, RegistryType, Resource, ResourceKind
+from sklm.models import RegistrySource, RegistryType, Resource, ResourceKind
 
 
-REGISTRIES_PATH = Path.home() / ".fabrik" / "registries.yaml"
-REGISTRY_CACHE = Path.home() / ".fabrik" / "cache"
+REGISTRIES_PATH = Path.home() / ".sklm" / "registries.yaml"
+REGISTRY_CACHE = Path.home() / ".sklm" / "cache"
 
 
 class RegistryManager:

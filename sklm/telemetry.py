@@ -1,4 +1,4 @@
-"""Telemetry — Umami analytics for Fabrik CLI."""
+"""Telemetry — Umami analytics for Sklm CLI."""
 from __future__ import annotations
 
 import os
@@ -9,7 +9,7 @@ from typing import Optional
 
 import umami
 
-from fabrik import __version__
+from sklm import __version__
 
 
 class UmamiTracker:
@@ -32,7 +32,7 @@ class UmamiTracker:
         if self._configured:
             umami.set_url_base(umami_url)
             umami.set_website_id(website_id)
-            umami.set_hostname("fabrik-cli")
+            umami.set_hostname("sklm-cli")
 
         if enabled:
             umami.enable()
@@ -43,7 +43,7 @@ class UmamiTracker:
     def active(self) -> bool:
         if not self.enabled:
             return False
-        override = os.environ.get("FABRIK_TELEMETRY")
+        override = os.environ.get("SKLM_TELEMETRY")
         if override is not None and override in ("0", "false", "no", "off", ""):
             return False
         return self._configured
@@ -83,7 +83,7 @@ class UmamiTracker:
         t.join(timeout=2)
 
     def _send_event(self, event_name: str, custom_data: dict) -> None:
-        path = f"/fabrik/{event_name}"
+        path = f"/sklm/{event_name}"
         try:
             umami.new_event(
                 event_name=event_name,
@@ -103,7 +103,7 @@ class UmamiTracker:
         try:
             umami.new_event(
                 event_name="ping",
-                url="/fabrik/ping",
+                url="/sklm/ping",
                 custom_data={"version": __version__, "success": True},
             )
             dur = (time.monotonic() - start) * 1000

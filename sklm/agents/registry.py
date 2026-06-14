@@ -7,7 +7,7 @@ from typing import Optional
 
 import yaml
 
-from fabrik.agents.base import AgentAdapter
+from sklm.agents.base import AgentAdapter
 
 
 class AgentRegistry:
@@ -45,13 +45,13 @@ class AgentRegistry:
 
     def get_adapter(self, agent_id: str) -> Optional[AgentAdapter]:
         """Return an adapter instance for the given agent ID."""
-        from fabrik.agents.generic import GenericAdapter
+        from sklm.agents.generic import GenericAdapter
 
         config = self._agents.get(agent_id)
         if not config:
             return None
         if agent_id == "github-copilot":
-            from fabrik.agents.github_copilot import GitHubCopilotAdapter
+            from sklm.agents.github_copilot import GitHubCopilotAdapter
             return GitHubCopilotAdapter()
         return GenericAdapter(agent_id, config)
 

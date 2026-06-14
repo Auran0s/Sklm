@@ -5,10 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
-from fabrik.models import ResourceKind, ResourceRef
-from fabrik.core.workspace import Workspace
-from fabrik.core.registry import RegistryManager
-from fabrik.store import GlobalStore
+from sklm.models import ResourceKind, ResourceRef
+from sklm.core.workspace import Workspace
+from sklm.core.registry import RegistryManager
+from sklm.store import GlobalStore
 
 
 def add_resource_to_workspace(
@@ -32,7 +32,7 @@ def remove_resource_from_workspace(
     if not ref:
         raise KeyError(f"Resource '{kind.value}:{name}' not found in workspace")
     if ref.linked:
-        from fabrik.core.linking import unlink_resource
+        from sklm.core.linking import unlink_resource
         unlink_resource(workspace, kind, name)
     return workspace.remove_resource(kind, name)
 

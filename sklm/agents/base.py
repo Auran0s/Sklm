@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from pathlib import Path
 
-from fabrik.models import Link
+from sklm.models import Link
 
 
 class AgentAdapter(ABC):
