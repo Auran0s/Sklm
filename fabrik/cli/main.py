@@ -131,11 +131,11 @@ def status(
     console.print(table)
     if state["broken_links"] > 0:
         console.print("\n[yellow]💡 Tip:[/] Run [bold]fabrik status --repair[/] to fix broken links")
-    agents_count = state.get("agents_skills_count", 0)
-    if agents_count > 0:
+    external_count = state.get("external_skills_count", 0)
+    if external_count > 0:
         console.print(
-            f"\n[yellow]⚠ {agents_count} skills detected in ~/.agents/skills/[/]"
-            "\n   These are globally available in all projects and bypass Fabrik scoping."
+            f"\n[yellow]⚠ {external_count} skills found outside Fabrik's store[/]"
+            "\n   These may be globally visible to your AI agent in every project."
             "\n   Use [bold]fabrik migrate[/] to import them into the Fabrik store."
         )
 

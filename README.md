@@ -3,7 +3,7 @@
 **Skills manager for AI agents.**
 
 Fabrik is a Python CLI that centralizes management of **skills** (SKILL.md files)
-for your AI agents — OpenCode, Claude Code, Cursor, etc.
+for your AI agents. Currently supports **OpenCode**, with more on the way.
 
 ## Problem
 
@@ -29,9 +29,7 @@ Fabrik provides a simple lifecycle for skills:
     INSTALL ──→ ACTIVATE ──→ DEACTIVATE ──→ UNINSTALL
    install        add            rm           uninstall
    migrate        ls            (keep in       (remove
-   (import         info          store)        from store)
-    from
-   ~/.agents/)
+       (import)       info          store)        from store)
 ```
 
 Use the sections below to find the right command for your current stage.
@@ -65,13 +63,13 @@ fabrik uninstall skill find-skills                # Remove from store permanentl
 fabrik uninstall skill find-skills --force        # Skip confirmation
 ```
 
-### Import from skills.sh
+### Migrating from existing tools
 
-If you already have skills installed via `npx skills` in `~/.agents/skills/`,
-import them into Fabrik's store:
+If you're coming from another tool — for example, skills installed via `npx skills`
+in `~/.agents/skills/` — import them into Fabrik's store:
 
 ```bash
-fabrik migrate                         # Import all skills from ~/.agents/skills/
+fabrik migrate                         # Import all externally managed skills
 fabrik migrate skill find-skills       # Import a specific skill
 ```
 
@@ -109,17 +107,17 @@ fabrik registry search scraper --type skill       # Filter search results by res
 
 ### Per-Project Scoping
 
-By default, skills installed globally (via `npx skills`) in `~/.agents/skills/`
-are visible to OpenCode in **every** project. Fabrik changes this: when
-`~/.agents/skills/` is empty, the agent only sees skills that Fabrik
-explicitly syncs into `.opencode/skills/`.
+Skills installed globally (e.g., via `npx skills` in `~/.agents/skills/`) may be
+visible to your AI agent in **every** project. Fabrik changes this by scoping
+skills per-project: your agent only sees skills that Fabrik explicitly syncs
+into its configuration directory (e.g., `.opencode/skills/` for OpenCode).
 
-Use `fabrik status` to check for globally installed skills that bypass scoping.
+Use `fabrik status` to check for unmanaged skills that may bypass scoping.
 
 ```bash
 fabrik status
-# ⚠ 5 skills detected in ~/.agents/skills/
-#    These are globally available in all projects and bypass Fabrik scoping.
+# ⚠ 5 skills found outside Fabrik's store
+#    These may be globally visible to your AI agent in every project.
 #    Use fabrik migrate to import them into the Fabrik store.
 ```
 
@@ -145,7 +143,8 @@ fabrik agent detect                   # Identify which AI agent is active in thi
   fabrik.yaml            # Project configuration
   links/skills/          # Linked skill symlinks → ~/.fabrik/store/skills/
 
-.opencode/skills/        # Agent sees only these (per-project scoping)
+<agent-dir>/skills/      # Agent sees only these (per-project scoping)
+                         # e.g., .opencode/skills/ for OpenCode
 ```
 
 ## Development

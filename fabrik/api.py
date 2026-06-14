@@ -58,11 +58,11 @@ class Fabrik:
         resources = config.resources
         links = config.links
         broken = detect_broken_links(self.workspace)
-        agents_skills_path = Path.home() / ".agents" / "skills"
-        agents_skills_count = 0
-        if agents_skills_path.exists():
-            agents_skills_count = len([
-                d for d in agents_skills_path.iterdir()
+        external_skills_path = Path.home() / ".agents" / "skills"
+        external_skills_count = 0
+        if external_skills_path.exists():
+            external_skills_count = len([
+                d for d in external_skills_path.iterdir()
                 if d.is_dir() and (d / "SKILL.md").exists()
             ])
         return {
@@ -73,7 +73,7 @@ class Fabrik:
             "linked_skills": len([l for l in links if l.kind == ResourceKind.skill]),
             "broken_links": len(broken),
             "broken_link_details": broken,
-            "agents_skills_count": agents_skills_count,
+            "external_skills_count": external_skills_count,
         }
 
     def repair_broken_links(self) -> dict:

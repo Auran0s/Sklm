@@ -784,8 +784,8 @@ class TestCLIIntegration:
                         from_url="https://github.com/test/repo", subdir=None
                     )
 
-    def test_status_warns_agents_skills(self, temp_dir):
-        """fabrik status doit avertir si ~/.agents/skills/ est non vide."""
+    def test_status_warns_external_skills(self, temp_dir):
+        """fabrik status doit avertir si des skills externes sont détectés."""
         agents_skills = Path.home() / ".agents" / "skills"
         agents_skills.mkdir(parents=True, exist_ok=True)
         test_skill_dir = agents_skills / "test-warning-skill"
@@ -797,7 +797,7 @@ class TestCLIIntegration:
         runner = CliRunner()
         runner.invoke(app, ["init"])
         result = runner.invoke(app, ["status"])
-        assert "~/.agents/skills/" in result.output
+        assert "outside Fabrik's store" in result.output
         assert "migrate" in result.output
         import shutil
         shutil.rmtree(test_skill_dir)
