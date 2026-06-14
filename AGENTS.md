@@ -9,25 +9,25 @@ python3 -m pytest tests/      # run all tests (single file: tests/test_fabrik.py
 python3 -m pytest tests/ -k <pattern>  # run a subset
 ```
 
-No linting or typechecking tools are configured yet.
+No linting or typechecking tools are configured. No CI.
 
 ## Architecture
 
-Fabrik is a Python CLI (Typer + Rich) that manages skills and MCPs for AI agents via a two-level store:
+Fabrik is a Python 3.9+ CLI (Typer + Rich) that manages skills for AI agents via a two-level store:
 
 ```
 ~/.fabrik/          # global store (user-wide library)
   store/skills/     #   skill directories (each contains a SKILL.md)
-  store/mcps/       #   MCP dirs (each contains a config.yaml or config.json)
 
-./.fabrik/          # per-project workspace
+./.fabrik/          # per-project workspace (gitignored)
   links/skills/     #   symlinks → global store
-  links/mcps/       #   symlinks → global store
+  fabrik.yaml       #   WorkspaceConfig per project
 ```
 
-- `fabrik add` does everything: resolve → store → link → sync to agent config.
-- Agent sync copies (not symlinks) skill/MCP content into the agent's config dir (e.g. `.opencode/skills/`, `.opencode/mcps/`).
-- `.fabrik/` and `.opencode/` are **gitignored** — they are generated/derived, never committed.
+- `_type_dir(kind)` in `GlobalStore` always returns `skills_dir` — the `kind` parameter is ignored (only `skill` exists).
+- `fabrik add` pipeline: resolve → store → link → sync to agent config.
+- Agent sync **copies** (not symlinks) skill content into the agent's config dir (e.g. `.opencode/skills/`).
+- Entrypoint: `fabrik.cli.main:run` (Typer app, `no_args_is_help=True`).
 
 ### Source layout
 
@@ -41,7 +41,7 @@ Fabrik is a Python CLI (Typer + Rich) that manages skills and MCPs for AI agents
 | `fabrik/core/registry.py` | `RegistryManager` — registry discovery |
 | `fabrik/core/crud.py` | CRUD operations |
 | `fabrik/core/linking.py` | Symlink create/remove/repair |
-| `fabrik/agents/` | Agent adapters (only `OpencodeAdapter` so far) |
+| `fabrik/agents/` | 8 agents in `agents.yaml`; `GenericAdapter` handles 7, `GitHubCopilotAdapter` is custom |
 | `fabrik/telemetry.py` | `UmamiTracker` — telemetry |
 
 ## Conventions
@@ -49,29 +49,28 @@ Fabrik is a Python CLI (Typer + Rich) that manages skills and MCPs for AI agents
 - **Every `.py` file** starts with `from __future__ import annotations`.
 - **Resource names** must be **kebab-case** (enforced by Pydantic validator).
 - **No spaces** in registry names.
-- Persistence format is **YAML** everywhere (`yaml.safe_load` / `yaml.dump`).
+- Persistence is **YAML** everywhere (`yaml.safe_load` / `yaml.dump`).
 - All `Path` arguments are `.resolve()`d eagerly.
 - CLI output uses **Rich** (tables, `print_json`, `Console`); use `--json` for machine-readable output.
-- Only `skill` resource kind exists — no MCP or other kinds yet.
+- Only `skill` resource kind exists — the `ResourceKind` enum has a single value.
 - `link`/`unlink` are **internal API only** (not CLI commands). Use `add`/`rm`.
-- `install --from` resolves skill dirs in this order: `skills/<name>` → repo root (if has SKILL.md) → `<name>` subdir.
+- `install --from` resolves skill dirs in this order: `skills/<name>` → repo root (if `SKILL.md` present) → `<name>` subdir.
 
 ## OpenSpec workflow
 
-The project uses **OpenSpec** for spec-driven development:
-- Specs live in `openspec/specs/` (8 capabilities).
-- Active changes in `openspec/changes/`.
-- Slash commands available via `.opencode/commands/`: `/opsx-propose`, `/opsx-explore`, `/opsx-apply`, `/opsx-sync`, `/opsx-archive`.
+Spec-driven development via `.opencode/commands/` slash commands:
+- `/opsx-propose`, `/opsx-explore`, `/opsx-apply`, `/opsx-sync`, `/opsx-archive`.
+- Specs in `openspec/specs/` (9 specs). Active changes in `openspec/changes/`.
 
 ## Testing
 
-- Single test file: `tests/test_fabrik.py`
+- Single test file: `tests/test_fabrik.py` (no `__init__.py`).
 - Uses `pytest` fixtures (`temp_dir`, `isolated_store`, `fake_skill_dir`).
 - CLI integration tests use `typer.testing.CliRunner`.
 - Global store tests patch `FABRIK_HOME` via `monkeypatch`.
 
 ## Telemetry
 
-- Powered by Umami Analytics.
-- Disable with `FABRIK_TELEMETRY=0` (or `false`/`no`/`off`).
+- Umami Analytics; disable with `FABRIK_TELEMETRY=0` (or `false`/`no`/`off`/`""`).
+- Also overridable via `FABRIK_UMAMI_URL`, `FABRIK_WEBSITE_ID`.
 - Tracker runs in a daemon thread with 2s timeout — never raises, never blocks.
