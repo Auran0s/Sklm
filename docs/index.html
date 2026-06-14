@@ -8,6 +8,7 @@
   <link href="https://api.fontshare.com/v2/css?f[]=geist@400,500,600,700&f[]=geist-mono@400,500&f[]=clash-display@400,500,600,700&display=swap" rel="stylesheet" />
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/@phosphor-icons/web@2.1.1"></script>
+  <script defer src="https://analytics.victorbeysseriat.fr/script.js" data-website-id="44b6ba7d-94a8-4aa2-8a77-f3ced19ae047"></script>
 
   <script>
     tailwind.config = {
@@ -259,10 +260,10 @@
       <a href="#" class="font-display text-sm font-semibold tracking-tight text-white/90">Sklm</a>
 
       <div class="hidden md:flex items-center gap-6">
-        <a href="#features" class="text-xs font-medium text-white/40 hover:text-white/80 transition-colors duration-300">Features</a>
-        <a href="#agents" class="text-xs font-medium text-white/40 hover:text-white/80 transition-colors duration-300">Agents</a>
-        <a href="#quickstart" class="text-xs font-medium text-white/40 hover:text-white/80 transition-colors duration-300">Quickstart</a>
-        <a href="https://github.com/Auran0s/sklm" target="_blank" rel="noopener noreferrer" class="text-xs font-medium text-white/40 hover:text-white/80 transition-colors duration-300">GitHub</a>
+        <a href="#features" data-umami-event="nav-click" data-umami-event-section="features" class="text-xs font-medium text-white/40 hover:text-white/80 transition-colors duration-300">Features</a>
+        <a href="#agents" data-umami-event="nav-click" data-umami-event-section="agents" class="text-xs font-medium text-white/40 hover:text-white/80 transition-colors duration-300">Agents</a>
+        <a href="#quickstart" data-umami-event="nav-click" data-umami-event-section="quickstart" class="text-xs font-medium text-white/40 hover:text-white/80 transition-colors duration-300">Quickstart</a>
+        <a href="https://github.com/Auran0s/sklm" target="_blank" rel="noopener noreferrer" data-umami-event="nav-click" data-umami-event-section="github" class="text-xs font-medium text-white/40 hover:text-white/80 transition-colors duration-300">GitHub</a>
       </div>
 
       <button id="menuToggle" class="relative w-6 h-5 md:hidden focus:outline-none" aria-label="Toggle menu">
@@ -275,10 +276,10 @@
   <!-- === NAV OVERLAY === -->
   <div id="navOverlay" class="nav-overlay fixed inset-0 glass-overlay bg-black/80 z-40 flex flex-col items-center justify-center">
     <div class="flex flex-col items-center gap-8">
-      <a href="#features" class="nav-link text-4xl font-display font-semibold text-white/90 hover:text-white transition-colors">Features</a>
-      <a href="#agents" class="nav-link text-4xl font-display font-semibold text-white/90 hover:text-white transition-colors">Agents</a>
-      <a href="#quickstart" class="nav-link text-4xl font-display font-semibold text-white/90 hover:text-white transition-colors">Quickstart</a>
-      <a href="https://github.com/Auran0s/sklm" target="_blank" rel="noopener noreferrer" class="nav-link text-4xl font-display font-semibold text-white/90 hover:text-white transition-colors">GitHub</a>
+      <a href="#features" data-umami-event="nav-click" data-umami-event-section="features" class="nav-link text-4xl font-display font-semibold text-white/90 hover:text-white transition-colors">Features</a>
+      <a href="#agents" data-umami-event="nav-click" data-umami-event-section="agents" class="nav-link text-4xl font-display font-semibold text-white/90 hover:text-white transition-colors">Agents</a>
+      <a href="#quickstart" data-umami-event="nav-click" data-umami-event-section="quickstart" class="nav-link text-4xl font-display font-semibold text-white/90 hover:text-white transition-colors">Quickstart</a>
+      <a href="https://github.com/Auran0s/sklm" target="_blank" rel="noopener noreferrer" data-umami-event="nav-click" data-umami-event-section="github" class="nav-link text-4xl font-display font-semibold text-white/90 hover:text-white transition-colors">GitHub</a>
     </div>
   </div>
 
@@ -298,7 +299,7 @@
 
     <div class="mt-10 reveal reveal-delay-3">
       <div class="p-[1.5px] rounded-full bg-gradient-to-r from-purple-500/40 to-emerald-500/40">
-        <a href="https://github.com/Auran0s/sklm" target="_blank" rel="noopener noreferrer"
+        <a href="https://github.com/Auran0s/sklm" target="_blank" rel="noopener noreferrer" data-umami-event="cta-get-started"
            class="group relative inline-flex items-center gap-3 px-8 py-4 rounded-full bg-[#0a0a0a] text-white text-sm font-medium ring-1 ring-white/10 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)] active:scale-[0.98] transition-all duration-500 var(--ease-spring)">
           <span>Get Started</span>
           <span class="inline-flex w-8 h-8 rounded-full bg-white/10 items-center justify-center transition-all duration-500 var(--ease-spring) group-hover:translate-x-1 group-hover:-translate-y-px group-hover:scale-105">
@@ -653,11 +654,11 @@
   <footer class="relative z-10 border-t border-white/5 py-12 px-4">
     <div class="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
       <p class="text-white/30 text-sm font-sans">
-        Built by <a href="https://github.com/Auran0s" target="_blank" rel="noopener noreferrer" class="text-white/50 hover:text-white/80 transition-colors">Auran0s</a>
+        Built by <a href="https://github.com/Auran0s" target="_blank" rel="noopener noreferrer" data-umami-event="footer-click" data-umami-event-link="author" class="text-white/50 hover:text-white/80 transition-colors">Auran0s</a>
       </p>
       <div class="flex items-center gap-6">
-        <a href="https://github.com/Auran0s/sklm/blob/main/LICENSE" target="_blank" rel="noopener noreferrer" class="text-white/30 text-xs font-mono hover:text-white/60 transition-colors">MIT License</a>
-        <a href="https://github.com/Auran0s/sklm" target="_blank" rel="noopener noreferrer" class="text-white/30 hover:text-white/60 transition-colors">
+        <a href="https://github.com/Auran0s/sklm/blob/main/LICENSE" target="_blank" rel="noopener noreferrer" data-umami-event="footer-click" data-umami-event-link="license" class="text-white/30 text-xs font-mono hover:text-white/60 transition-colors">MIT License</a>
+        <a href="https://github.com/Auran0s/sklm" target="_blank" rel="noopener noreferrer" data-umami-event="footer-click" data-umami-event-link="github" class="text-white/30 hover:text-white/60 transition-colors">
           <i class="ph ph-github-logo text-lg"></i>
         </a>
       </div>
