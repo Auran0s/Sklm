@@ -99,9 +99,15 @@ class GlobalStore:
         if subdir:
             src = cache_path / subdir
         else:
+            # Try standard layouts in priority order:
+            # 1. skills/<name> subdirectory (multi-skill repo)
+            # 2. repo root (single-skill repo with SKILL.md at root)
+            # 3. <name> subdirectory (repo with nested subdir of same name)
             candidate = cache_path / "skills" / name
             if candidate.exists():
                 src = candidate
+            elif (cache_path / "SKILL.md").exists():
+                src = cache_path
             else:
                 src = cache_path / name
 

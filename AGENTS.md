@@ -52,18 +52,21 @@ Fabrik is a Python CLI (Typer + Rich) that manages skills and MCPs for AI agents
 - Persistence format is **YAML** everywhere (`yaml.safe_load` / `yaml.dump`).
 - All `Path` arguments are `.resolve()`d eagerly.
 - CLI output uses **Rich** (tables, `print_json`, `Console`); use `--json` for machine-readable output.
+- Only `skill` resource kind exists — no MCP or other kinds yet.
+- `link`/`unlink` are **internal API only** (not CLI commands). Use `add`/`rm`.
+- `install --from` resolves skill dirs in this order: `skills/<name>` → repo root (if has SKILL.md) → `<name>` subdir.
 
 ## OpenSpec workflow
 
 The project uses **OpenSpec** for spec-driven development:
-- Specs live in `openspec/specs/` (7 capabilities).
+- Specs live in `openspec/specs/` (8 capabilities).
 - Active changes in `openspec/changes/`.
 - Slash commands available via `.opencode/commands/`: `/opsx-propose`, `/opsx-explore`, `/opsx-apply`, `/opsx-sync`, `/opsx-archive`.
 
 ## Testing
 
 - Single test file: `tests/test_fabrik.py`
-- Uses `pytest` fixtures (`temp_dir`, `isolated_store`, `fake_skill_dir`, `fake_mcp_dir`).
+- Uses `pytest` fixtures (`temp_dir`, `isolated_store`, `fake_skill_dir`).
 - CLI integration tests use `typer.testing.CliRunner`.
 - Global store tests patch `FABRIK_HOME` via `monkeypatch`.
 

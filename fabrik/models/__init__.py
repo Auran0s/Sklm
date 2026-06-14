@@ -20,6 +20,17 @@ class RegistryType(str, Enum):
     git = "git"
 
 
+class AgentKind(str, Enum):
+    opencode = "opencode"
+    claude = "claude"
+    cursor = "cursor"
+    windsurf = "windsurf"
+    gemini = "gemini"
+    cline = "cline"
+    amazon_q = "amazon-q"
+    github_copilot = "github-copilot"
+
+
 class Resource(BaseModel):
     name: str = Field(description="Unique identifier (kebab-case)")
     kind: ResourceKind = Field(description="Type of resource")
@@ -69,6 +80,20 @@ class WorkspaceConfig(BaseModel):
     agent: str = Field(default="none", description="Active agent name")
     resources: list[ResourceRef] = Field(default_factory=list)
     links: list[Link] = Field(default_factory=list)
+
+    @field_validator("agent")
+    @classmethod
+    def agent_must_be_known(cls, v: str) -> str:
+        if v == "none":
+            return v
+        try:
+            AgentKind(v)
+        except ValueError:
+            known = ", ".join(m.value for m in AgentKind)
+            raise ValueError(
+                f"Unknown agent '{v}'. Known agents: {known}"
+            )
+        return v
 
     @classmethod
     def from_yaml(cls, path: Path) -> "WorkspaceConfig":

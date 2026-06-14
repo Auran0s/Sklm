@@ -60,28 +60,51 @@ class RegistryManager:
 
         Returns:
             Path to the cached repository root.
+
+        Raises:
+            ValueError: If the git operation fails or the URL is not a valid git repo.
         """
         repo_cache = self.cache_dir / name
         if repo_cache.exists():
-            subprocess.run(
+            result = subprocess.run(
                 ["git", "-C", str(repo_cache), "pull", "--ff-only"],
                 capture_output=True,
+                text=True,
             )
+            if result.returncode != 0:
+                raise ValueError(
+                    f"Failed to update cached repo '{name}' from {url}: {result.stderr.strip()}"
+                )
             if ref != "HEAD":
-                subprocess.run(
+                result = subprocess.run(
                     ["git", "-C", str(repo_cache), "checkout", ref],
                     capture_output=True,
+                    text=True,
                 )
+                if result.returncode != 0:
+                    raise ValueError(
+                        f"Failed to checkout ref '{ref}' in '{name}': {result.stderr.strip()}"
+                    )
         else:
-            subprocess.run(
+            result = subprocess.run(
                 ["git", "clone", url, str(repo_cache)],
                 capture_output=True,
+                text=True,
             )
+            if result.returncode != 0:
+                raise ValueError(
+                    f"Failed to clone '{url}': {result.stderr.strip()}"
+                )
             if ref != "HEAD":
-                subprocess.run(
+                result = subprocess.run(
                     ["git", "-C", str(repo_cache), "checkout", ref],
                     capture_output=True,
+                    text=True,
                 )
+                if result.returncode != 0:
+                    raise ValueError(
+                        f"Failed to checkout ref '{ref}' in '{name}': {result.stderr.strip()}"
+                    )
         return repo_cache
 
     def _scan_directory(self, path: Path) -> list[Resource]:

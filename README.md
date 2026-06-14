@@ -3,7 +3,7 @@
 **Skills manager for AI agents.**
 
 Fabrik is a Python CLI that centralizes management of **skills** (SKILL.md files)
-for your AI agents. Currently supports **OpenCode**, with more on the way.
+for your AI agents.
 
 ## Problem
 
@@ -129,6 +129,34 @@ only need the agent commands for setup and diagnostics.
 ```bash
 fabrik agent detect                   # Identify which AI agent is active in this project
 ```
+
+## Supported Agents
+
+Fabrik recognizes and can sync skills with the following AI agents:
+
+| Agent | ID | Skills | Commands | Auto-detect |
+|---|---|---|---|---|
+| OpenCode | `opencode` | `.opencode/skills/` | `init`, `add`, `rm`, `agent sync` | ✅ |
+| Claude Code | `claude` | `.claude/skills/` | `init`, `add`, `rm`, `agent sync` | ✅ |
+| Cursor | `cursor` | `.cursor/skills/` | `init`, `add`, `rm`, `agent sync` | ✅ |
+| Windsurf | `windsurf` | `.windsurf/skills/` | `init`, `add`, `rm`, `agent sync` | ✅ |
+| Gemini CLI | `gemini` | `.gemini/skills/` | `init`, `add`, `rm`, `agent sync` | ✅ |
+| Cline | `cline` | `.cline/skills/` | `init`, `add`, `rm`, `agent sync` | ✅ |
+| Amazon Q | `amazon-q` | `.amazonq/skills/` | `init`, `add`, `rm`, `agent sync` | ✅ |
+| GitHub Copilot | `github-copilot` | `.github/skills/` | `init --agent github-copilot` | 🔲 (explicit only) |
+
+### Other agents
+
+The following agents are recognized but not yet supported. Pull requests welcome!
+
+| Agent | Status |
+|---|---|
+| Agent (`~/.agent/`) | 🔲 |
+| Augment (`~/.augment/`) | 🔲 |
+| Codex (`~/.codex/`) | 🔲 |
+| Forge (`~/.forge/`) | 🔲 |
+| Cospec (`~/.cospec/`) | 🔲 |
+| Roo (`~/.roo/`) | 🔲 |
 
 ## Architecture
 

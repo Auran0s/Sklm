@@ -422,6 +422,193 @@ class TestWorkspace:
         assert resources[0].linked is True
 
 
+# ─── Agent Registry ───────────────────────────────────────────────────────────
+
+
+class TestAgentRegistry:
+    def test_loads_all_agents(self, temp_dir):
+        from fabrik.agents.registry import AgentRegistry
+        registry = AgentRegistry()
+        agents = registry.get_agent_ids()
+        assert len(agents) == 8
+        assert "opencode" in agents
+        assert "claude" in agents
+        assert "cursor" in agents
+        assert "windsurf" in agents
+        assert "gemini" in agents
+        assert "cline" in agents
+        assert "amazon-q" in agents
+        assert "github-copilot" in agents
+
+    def test_detect_returns_none_when_no_agent_dir(self, temp_dir):
+        from fabrik.agents.registry import AgentRegistry
+        registry = AgentRegistry()
+        assert registry.detect(temp_dir) is None
+
+    def test_detect_opencode(self, temp_dir):
+        from fabrik.agents.registry import AgentRegistry
+        (temp_dir / ".opencode").mkdir()
+        registry = AgentRegistry()
+        assert registry.detect(temp_dir) == "opencode"
+
+    def test_detect_priority_order(self, temp_dir):
+        from fabrik.agents.registry import AgentRegistry
+        (temp_dir / ".opencode").mkdir()
+        (temp_dir / ".claude").mkdir()
+        registry = AgentRegistry()
+        assert registry.detect(temp_dir) == "opencode"
+
+    def test_get_adapter_returns_generic(self, temp_dir):
+        from fabrik.agents.registry import AgentRegistry
+        registry = AgentRegistry()
+        adapter = registry.get_adapter("cursor")
+        from fabrik.agents.generic import GenericAdapter
+        assert isinstance(adapter, GenericAdapter)
+
+    def test_get_adapter_handles_github_copilot(self, temp_dir):
+        from fabrik.agents.registry import AgentRegistry
+        registry = AgentRegistry()
+        adapter = registry.get_adapter("github-copilot")
+        from fabrik.agents.github_copilot import GitHubCopilotAdapter
+        assert isinstance(adapter, GitHubCopilotAdapter)
+
+    def test_get_adapter_returns_none_for_unknown(self, temp_dir):
+        from fabrik.agents.registry import AgentRegistry
+        registry = AgentRegistry()
+        assert registry.get_adapter("nonexistent") is None
+
+    def test_list_agents_shows_active(self, temp_dir):
+        from fabrik.agents.registry import AgentRegistry
+        (temp_dir / ".cursor").mkdir()
+        registry = AgentRegistry()
+        agents = registry.list_agents(temp_dir)
+        cursor = [a for a in agents if a["id"] == "cursor"][0]
+        assert cursor["active"] is True
+        opencode = [a for a in agents if a["id"] == "opencode"][0]
+        assert opencode["active"] is False
+
+    def test_detect_adapter_returns_adapter(self, temp_dir):
+        from fabrik.agents.registry import AgentRegistry
+        (temp_dir / ".claude").mkdir()
+        registry = AgentRegistry()
+        adapter = registry.detect_adapter(temp_dir)
+        from fabrik.agents.generic import GenericAdapter
+        assert isinstance(adapter, GenericAdapter)
+
+    def test_copilot_not_auto_detected(self, temp_dir):
+        from fabrik.agents.registry import AgentRegistry
+        (temp_dir / ".github").mkdir()
+        registry = AgentRegistry()
+        assert registry.detect(temp_dir) is None
+
+
+# ─── GenericAdapter ──────────────────────────────────────────────────────────
+
+
+class TestGenericAdapter:
+    def test_detect(self, temp_dir):
+        from fabrik.agents.generic import GenericAdapter
+        (temp_dir / ".cursor").mkdir()
+        adapter = GenericAdapter("cursor", {"dir_name": ".cursor"})
+        assert adapter.detect(temp_dir) is True
+
+    def test_no_detect_without_dir(self, temp_dir):
+        from fabrik.agents.generic import GenericAdapter
+        adapter = GenericAdapter("cursor", {"dir_name": ".cursor"})
+        assert adapter.detect(temp_dir) is False
+
+    def test_get_skills_path(self, temp_dir):
+        from fabrik.agents.generic import GenericAdapter
+        adapter = GenericAdapter("cursor", {"dir_name": ".cursor"})
+        assert adapter.get_skills_path(temp_dir) == temp_dir / ".cursor" / "skills"
+
+    def test_sync_creates_skills(self, temp_dir):
+        from fabrik.agents.generic import GenericAdapter
+        from fabrik.models import Link, ResourceKind
+        skill_dir = temp_dir / "source-skill"
+        skill_dir.mkdir()
+        (skill_dir / "SKILL.md").write_text("# Test")
+        link = Link(
+            name="test-skill",
+            kind=ResourceKind.skill,
+            target=skill_dir,
+            link_path=skill_dir,
+        )
+        adapter = GenericAdapter("cursor", {"dir_name": ".cursor"})
+        adapter.sync(temp_dir, [link])
+        assert (temp_dir / ".cursor" / "skills" / "test-skill" / "SKILL.md").exists()
+
+    def test_sync_removes_unlinked(self, temp_dir):
+        from fabrik.agents.generic import GenericAdapter
+        from fabrik.models import Link, ResourceKind
+        skill_dir = temp_dir / "source-skill"
+        skill_dir.mkdir()
+        (skill_dir / "SKILL.md").write_text("# Test")
+        link = Link(
+            name="test-skill",
+            kind=ResourceKind.skill,
+            target=skill_dir,
+            link_path=skill_dir,
+        )
+        adapter = GenericAdapter("cursor", {"dir_name": ".cursor"})
+        adapter.sync(temp_dir, [link])
+        assert (temp_dir / ".cursor" / "skills" / "test-skill").exists()
+        adapter.sync(temp_dir, [])
+        assert not (temp_dir / ".cursor" / "skills" / "test-skill").exists()
+
+
+# ─── GitHubCopilotAdapter ────────────────────────────────────────────────────
+
+
+class TestGitHubCopilotAdapter:
+    def test_detect_always_false(self, temp_dir):
+        from fabrik.agents.github_copilot import GitHubCopilotAdapter
+        (temp_dir / ".github").mkdir()
+        adapter = GitHubCopilotAdapter()
+        assert adapter.detect(temp_dir) is False
+
+    def test_get_skills_path(self, temp_dir):
+        from fabrik.agents.github_copilot import GitHubCopilotAdapter
+        adapter = GitHubCopilotAdapter()
+        assert adapter.get_skills_path(temp_dir) == temp_dir / ".github" / "skills"
+
+
+# ─── Agent Kind ───────────────────────────────────────────────────────────────
+
+
+class TestAgentKind:
+    def test_known_agents(self):
+        from fabrik.models import AgentKind
+        assert AgentKind("opencode") == AgentKind.opencode
+        assert AgentKind("claude") == AgentKind.claude
+        assert AgentKind("cursor") == AgentKind.cursor
+        assert AgentKind("windsurf") == AgentKind.windsurf
+        assert AgentKind("gemini") == AgentKind.gemini
+        assert AgentKind("cline") == AgentKind.cline
+        assert AgentKind("amazon-q") == AgentKind.amazon_q
+        assert AgentKind("github-copilot") == AgentKind.github_copilot
+
+    def test_unknown_agent_raises(self):
+        from fabrik.models import AgentKind
+        with pytest.raises(ValueError):
+            AgentKind("nonexistent-agent")
+
+    def test_workspace_config_validates_agent(self, temp_dir):
+        from fabrik.models import WorkspaceConfig
+        config = WorkspaceConfig(agent="claude")
+        assert config.agent == "claude"
+
+    def test_workspace_config_rejects_unknown(self, temp_dir):
+        from fabrik.models import WorkspaceConfig
+        with pytest.raises(ValueError, match="Unknown agent"):
+            WorkspaceConfig(agent="nonexistent-agent")
+
+    def test_workspace_config_accepts_none(self, temp_dir):
+        from fabrik.models import WorkspaceConfig
+        config = WorkspaceConfig(agent="none")
+        assert config.agent == "none"
+
+
 # ─── Integration: CLI ────────────────────────────────────────────────────────
 
 
@@ -547,6 +734,38 @@ class TestCLIIntegration:
         runner = CliRunner()
         result = runner.invoke(app, ["agent", "detect"])
         assert result.exit_code == 0
+
+    def test_agent_list_contains_agents(self, temp_dir):
+        from typer.testing import CliRunner
+        from fabrik.cli.main import app
+        runner = CliRunner()
+        result = runner.invoke(app, ["agent", "list"])
+        assert result.exit_code == 0
+        assert "opencode" in result.output
+        assert "claude" in result.output
+        assert "github-copilot" in result.output
+
+    def test_agent_list_json(self, temp_dir):
+        from typer.testing import CliRunner
+        from fabrik.cli.main import app
+        runner = CliRunner()
+        result = runner.invoke(app, ["agent", "list", "--json"])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert len(data) == 8
+        ids = [a["id"] for a in data]
+        assert "opencode" in ids
+        assert "github-copilot" in ids
+
+    def test_agent_list_shows_active(self, temp_dir):
+        (temp_dir / ".cursor").mkdir()
+        from typer.testing import CliRunner
+        from fabrik.cli.main import app
+        runner = CliRunner()
+        result = runner.invoke(app, ["agent", "list"])
+        assert result.exit_code == 0
+        assert "ACTIVE" in result.output
+        assert "cursor" in result.output
 
     def test_telemetry_status_active_by_default(self, temp_dir):
         from typer.testing import CliRunner
@@ -683,6 +902,24 @@ class TestCLIIntegration:
         result = runner.invoke(app, ["install", "--help"])
         assert result.exit_code == 0
         assert "Install" in result.output
+
+    def test_backward_compat_opencode_yaml(self, temp_dir):
+        """Existing agent: opencode in YAML should load without error."""
+        from fabrik.models import WorkspaceConfig
+        path = temp_dir / "fabrik.yaml"
+        path.write_text("agent: opencode\nversion: 1\nresources: []\nlinks: []\n")
+        config = WorkspaceConfig.from_yaml(path)
+        assert config.agent == "opencode"
+
+    def test_backward_compat_init_opencode(self, temp_dir):
+        """fabrik init in a project with .opencode/ should work."""
+        (temp_dir / ".opencode").mkdir()
+        from typer.testing import CliRunner
+        from fabrik.cli.main import app
+        runner = CliRunner()
+        result = runner.invoke(app, ["init"])
+        assert result.exit_code == 0
+        assert "opencode" in result.output
 
     def test_add_with_from_flag(self, temp_dir):
         """fabrik add --help doit mentionner --from."""

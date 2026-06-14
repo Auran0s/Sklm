@@ -22,7 +22,7 @@ from fabrik.core.linking import (
     repair_links,
 )
 from fabrik.agents.base import AgentAdapter
-from fabrik.agents.opencode import OpencodeAdapter
+from fabrik.agents.registry import AgentRegistry
 
 
 class Fabrik:
@@ -33,6 +33,7 @@ class Fabrik:
         self.global_store = GlobalStore()
         self.workspace = Workspace(self.project_root)
         self.registry_manager = RegistryManager()
+        self.agent_registry = AgentRegistry()
         self._agent: Optional[AgentAdapter] = None
 
     def init_workspace(self, agent: Optional[str] = None) -> str:
@@ -176,6 +177,7 @@ class Fabrik:
     ) -> ResourceRef:
         if from_url:
             ref = self.install(kind, name, from_url=from_url, subdir=subdir)
+            self.workspace.add_resource(ref)
         else:
             ref = add_resource_to_workspace(
                 self.workspace, self.global_store, self.registry_manager, kind, name
@@ -250,6 +252,9 @@ class Fabrik:
 
     # ── Agent ────────────────────────────────────────────────────────────
 
+    def list_agents(self) -> list[dict]:
+        return self.agent_registry.list_agents(self.project_root)
+
     def get_agent(self) -> Optional[AgentAdapter]:
         if self._agent is None:
             self._agent = self._detect_agent_adapter()
@@ -278,23 +283,11 @@ class Fabrik:
     # ── Internal ─────────────────────────────────────────────────────────
 
     def _detect_agent(self) -> str:
-        adapters: list[AgentAdapter] = [OpencodeAdapter()]
-        for adapter in adapters:
-            if adapter.detect(self.project_root):
-                return type(adapter).__name__.replace("Adapter", "").lower()
-        return "none"
+        detected = self.agent_registry.detect(self.project_root)
+        return detected or "none"
 
     def _detect_agent_adapter(self) -> Optional[AgentAdapter]:
-        adapters: list[AgentAdapter] = [OpencodeAdapter()]
-        for adapter in adapters:
-            if adapter.detect(self.project_root):
-                return adapter
-        return None
+        return self.agent_registry.detect_adapter(self.project_root)
 
     def _find_adapter_by_name(self, agent_name: str) -> Optional[AgentAdapter]:
-        adapters: list[type[AgentAdapter]] = [OpencodeAdapter]
-        for adapter_cls in adapters:
-            name = adapter_cls.__name__.replace("Adapter", "").lower()
-            if name == agent_name:
-                return adapter_cls()
-        return None
+        return self.agent_registry.get_adapter(agent_name)

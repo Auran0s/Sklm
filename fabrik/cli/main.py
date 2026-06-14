@@ -471,6 +471,34 @@ def sync(
         console.print(f"[green]✓[/] Synced with {result['agent']}")
 
 
+@agent_app.command("list")
+def list_agents(
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
+):
+    """List all supported AI agents and their detection status."""
+    f = get_fabrik()
+    agents = f.list_agents()
+    if json_output:
+        print_json(data=agents)
+        return
+    table = Table(title="Supported Agents")
+    table.add_column("Agent", style="cyan")
+    table.add_column("ID", style="green")
+    table.add_column("Directory", style="white")
+    table.add_column("Detect", style="magenta")
+    table.add_column("Status", style="yellow")
+    for a in agents:
+        status = "[green]ACTIVE[/]" if a["active"] else "—"
+        table.add_row(
+            a["id"].replace("-", " ").title(),
+            a["id"],
+            a["dir"],
+            a["detect"],
+            status,
+        )
+    console.print(table)
+
+
 @agent_app.command()
 def detect():
     """Detect the active AI agent in the current project."""

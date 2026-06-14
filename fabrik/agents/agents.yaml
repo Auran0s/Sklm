@@ -1,0 +1,18 @@
+agents:
+  opencode:
+    dir_name: .opencode
+  claude:
+    dir_name: .claude
+  cursor:
+    dir_name: .cursor
+  windsurf:
+    dir_name: .windsurf
+  gemini:
+    dir_name: .gemini
+  cline:
+    dir_name: .cline
+  amazon-q:
+    dir_name: .amazonq
+  github-copilot:
+    dir_name: .github
+    detect: explicit
