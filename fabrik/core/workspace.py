@@ -37,7 +37,6 @@ class Workspace:
         self.fabrik_dir.mkdir(parents=True, exist_ok=True)
         self.links_dir.mkdir(parents=True, exist_ok=True)
         (self.links_dir / "skills").mkdir(exist_ok=True)
-        (self.links_dir / "mcps").mkdir(exist_ok=True)
         config = WorkspaceConfig(agent=agent)
         self._save_config(config)
         return config

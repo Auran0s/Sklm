@@ -19,7 +19,7 @@ from fabrik.models import ResourceKind
 
 app = typer.Typer(
     name="fabrik",
-    help="MCP/Skills manager for AI agents",
+    help="Skills manager for AI agents",
     no_args_is_help=True,
     rich_markup_mode="rich",
 )
@@ -63,9 +63,7 @@ def version_callback(value: bool):
 def parse_resource_type(val: str) -> ResourceKind:
     if val in ("skill", "skills"):
         return ResourceKind.skill
-    if val in ("mcp", "mcps"):
-        return ResourceKind.mcp
-    raise typer.BadParameter(f"Invalid type '{val}'. Use 'skill' or 'mcp'.")
+    raise typer.BadParameter(f"Invalid type '{val}'. Use 'skill'.")
 
 
 @app.callback()
@@ -128,7 +126,6 @@ def status(
     table.add_column("Value", style="white")
     table.add_row("Agent", state["agent"])
     table.add_row("Skills", str(state["skills"]))
-    table.add_row("MCPs", str(state["mcps"]))
     table.add_row("Total links", str(state["total_links"]))
     table.add_row("Broken links", str(state["broken_links"]))
     console.print(table)
@@ -148,7 +145,7 @@ def status(
 
 @app.command()
 def install(
-    resource_type: str = typer.Argument(..., help="Resource type: skill or mcp"),
+    resource_type: str = typer.Argument(..., help="Resource type: skill"),
     name: str = typer.Argument(..., help="Resource name"),
     from_url: Optional[str] = typer.Option(
         None, "--from", help="Git repository URL to install from"
@@ -172,7 +169,7 @@ def install(
 
 @app.command()
 def uninstall(
-    resource_type: str = typer.Argument(..., help="Resource type: skill or mcp"),
+    resource_type: str = typer.Argument(..., help="Resource type: skill"),
     name: str = typer.Argument(..., help="Resource name to uninstall"),
     force: bool = typer.Option(False, "--force", help="Skip confirmation"),
 ):
@@ -203,7 +200,7 @@ def uninstall(
 
 @app.command()
 def migrate(
-    resource_type: str = typer.Argument("skill", help="Resource type: skill or mcp"),
+    resource_type: str = typer.Argument("skill", help="Resource type: skill"),
     name: Optional[str] = typer.Argument(
         None, help="Resource name (omit to migrate all)"
     ),
@@ -233,7 +230,7 @@ def migrate(
 
 @app.command()
 def add(
-    resource_type: str = typer.Argument(..., help="Resource type: skill or mcp"),
+    resource_type: str = typer.Argument(..., help="Resource type: skill"),
     name: str = typer.Argument(..., help="Resource name (optionally prefixed: registry:name)"),
     from_url: Optional[str] = typer.Option(
         None, "--from", help="Git repository URL to install from"
@@ -255,7 +252,7 @@ def add(
 
 @app.command()
 def rm(
-    resource_type: str = typer.Argument(..., help="Resource type: skill or mcp"),
+    resource_type: str = typer.Argument(..., help="Resource type: skill"),
     name: str = typer.Argument(..., help="Resource name to remove"),
 ):
     """Remove a resource from the workspace (unlinks and syncs agent)."""
@@ -272,7 +269,7 @@ def rm(
 @app.command()
 def ls(
     resource_type: Optional[str] = typer.Argument(
-        None, help="Filter by type: skills or mcps"
+        None, help="Filter by type: skills"
     ),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ):
@@ -302,7 +299,7 @@ def ls(
 
 @app.command()
 def info(
-    resource_type: str = typer.Argument(..., help="Resource type: skill or mcp"),
+    resource_type: str = typer.Argument(..., help="Resource type: skill"),
     name: str = typer.Argument(..., help="Resource name"),
 ):
     """Show detailed information about a resource."""
@@ -332,7 +329,7 @@ app.add_typer(global_app, name="global")
 
 @global_app.command("add")
 def global_add(
-    resource_type: str = typer.Argument(..., help="Resource type: skill or mcp"),
+    resource_type: str = typer.Argument(..., help="Resource type: skill"),
     path: str = typer.Argument(..., help="Path to the resource"),
     name: Optional[str] = typer.Option(None, "--name", "-n", help="Custom name for the resource"),
 ):
@@ -350,7 +347,7 @@ def global_add(
 @global_app.command("ls")
 def global_ls(
     resource_type: Optional[str] = typer.Argument(
-        None, help="Filter by type: skills or mcps"
+        None, help="Filter by type: skills"
     ),
 ):
     """List resources in the global store."""
@@ -372,7 +369,7 @@ def global_ls(
 
 @global_app.command("rm")
 def global_rm(
-    resource_type: str = typer.Argument(..., help="Resource type: skill or mcp"),
+    resource_type: str = typer.Argument(..., help="Resource type: skill"),
     name: str = typer.Argument(..., help="Resource name to remove from store"),
 ):
     """Remove a resource from the global store."""
@@ -470,7 +467,6 @@ def sync(
         console.print("[blue]DRY-RUN[/]")
         console.print(f"   Agent: {result['agent']}")
         console.print(f"   Skills to add: {', '.join(result['skills_to_add']) or 'none'}")
-        console.print(f"   MCPs to add: {', '.join(result['mcps_to_add']) or 'none'}")
     else:
         console.print(f"[green]✓[/] Synced with {result['agent']}")
 

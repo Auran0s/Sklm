@@ -13,7 +13,6 @@ from pydantic import BaseModel, Field, field_validator
 
 class ResourceKind(str, Enum):
     skill = "skill"
-    mcp = "mcp"
 
 
 class RegistryType(str, Enum):

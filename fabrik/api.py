@@ -46,7 +46,7 @@ class Fabrik:
         else:
             adapter = self._detect_agent_adapter()
         if adapter:
-            adapter.sync(self.project_root, [], [])
+            adapter.sync(self.project_root, [])
         return detected
 
     def set_agent(self, agent: str) -> str:
@@ -69,10 +69,8 @@ class Fabrik:
             "agent": config.agent,
             "total_resources": len(resources),
             "skills": len([r for r in resources if r.kind == ResourceKind.skill]),
-            "mcps": len([r for r in resources if r.kind == ResourceKind.mcp]),
             "total_links": len(links),
             "linked_skills": len([l for l in links if l.kind == ResourceKind.skill]),
-            "linked_mcps": len([l for l in links if l.kind == ResourceKind.mcp]),
             "broken_links": len(broken),
             "broken_link_details": broken,
             "agents_skills_count": agents_skills_count,
@@ -201,13 +199,7 @@ class Fabrik:
         return ref
 
     def list(self, kind: Optional[ResourceKind] = None) -> list[ResourceRef]:
-        if kind and kind == ResourceKind.mcp:
-            kind_filter = ResourceKind.mcp
-        elif kind:
-            kind_filter = ResourceKind.skill
-        else:
-            kind_filter = None
-        return list_workspace_resources(self.workspace, kind_filter)
+        return list_workspace_resources(self.workspace, kind)
 
     def info(self, kind: ResourceKind, name: str) -> Optional[ResourceRef]:
         return get_resource_info(self.workspace, self.global_store, kind, name)
@@ -269,14 +261,12 @@ class Fabrik:
             raise RuntimeError("No agent detected. Run 'fabrik init' first.")
         links = self.workspace.list_links()
         linked_skills = [l for l in links if l.kind == ResourceKind.skill]
-        linked_mcps = [l for l in links if l.kind == ResourceKind.mcp]
         if dry_run:
             return {
                 "agent": type(agent).__name__,
                 "skills_to_add": [l.name for l in linked_skills],
-                "mcps_to_add": [l.name for l in linked_mcps],
             }
-        agent.sync(self.project_root, linked_skills, linked_mcps)
+        agent.sync(self.project_root, linked_skills)
         return {"agent": type(agent).__name__, "synced": True}
 
     def agent_detect(self) -> Optional[str]:

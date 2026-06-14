@@ -24,7 +24,6 @@ class GlobalStore:
         self.root = FABRIK_HOME
         self.store_dir = self.root / "store"
         self.skills_dir = self.store_dir / "skills"
-        self.mcps_dir = self.store_dir / "mcps"
         self.config_path = self.root / "config.yaml"
         self.cache_dir = self.root / "cache"
         self._ensure_dirs()
@@ -32,7 +31,6 @@ class GlobalStore:
     def _ensure_dirs(self) -> None:
         self.root.mkdir(parents=True, exist_ok=True)
         self.skills_dir.mkdir(parents=True, exist_ok=True)
-        self.mcps_dir.mkdir(parents=True, exist_ok=True)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
     def _load_config(self) -> GlobalConfig:
@@ -42,7 +40,7 @@ class GlobalStore:
         config.to_yaml(self.config_path)
 
     def _type_dir(self, kind: ResourceKind) -> Path:
-        return self.skills_dir if kind == ResourceKind.skill else self.mcps_dir
+        return self.skills_dir
 
     def add_resource(
         self, kind: ResourceKind, source_path: Path, name: Optional[str] = None

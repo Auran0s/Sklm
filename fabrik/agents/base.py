@@ -22,11 +22,6 @@ class AgentAdapter(ABC):
         ...
 
     @abstractmethod
-    def get_mcps_path(self, project_root: Path) -> Path:
-        """Return the path where MCP configs are stored for this agent."""
-        ...
-
-    @abstractmethod
-    def sync(self, project_root: Path, linked_skills: list[Link], linked_mcps: list[Link]) -> None:
-        """Synchronize linked resources with the agent's configuration."""
+    def sync(self, project_root: Path, linked_skills: list[Link]) -> None:
+        """Synchronize linked skills with the agent's configuration."""
         ...

@@ -92,22 +92,11 @@ class RegistryManager:
             if not entry.is_dir():
                 continue
             skill_file = entry / "SKILL.md"
-            mcp_config = entry / "config.yaml"
-            alt_mcp_config = entry / "config.json"
             if skill_file.exists():
                 resources.append(
                     Resource(
                         name=entry.name,
                         kind=ResourceKind.skill,
-                        source=str(entry),
-                        path=entry.resolve(),
-                    )
-                )
-            elif mcp_config.exists() or alt_mcp_config.exists():
-                resources.append(
-                    Resource(
-                        name=entry.name,
-                        kind=ResourceKind.mcp,
                         source=str(entry),
                         path=entry.resolve(),
                     )

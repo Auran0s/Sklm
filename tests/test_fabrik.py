@@ -52,12 +52,7 @@ def fake_skill_dir(temp_dir):
     return d
 
 
-@pytest.fixture
-def fake_mcp_dir(temp_dir):
-    d = temp_dir / "my-mcp"
-    d.mkdir()
-    (d / "config.yaml").write_text("name: my-mcp\ncommand: python server.py")
-    return d
+
 
 
 # ─── Models ──────────────────────────────────────────────────────────────────
@@ -66,7 +61,6 @@ def fake_mcp_dir(temp_dir):
 class TestResourceKind:
     def test_values(self):
         assert ResourceKind.skill.value == "skill"
-        assert ResourceKind.mcp.value == "mcp"
 
 
 class TestResource:
@@ -151,7 +145,6 @@ class TestGlobalStore:
     def test_init_creates_dirs(self, isolated_store):
         assert isolated_store.root.exists()
         assert isolated_store.skills_dir.exists()
-        assert isolated_store.mcps_dir.exists()
 
     def test_add_resource_skill(self, isolated_store, fake_skill_dir):
         resource = isolated_store.add_resource(ResourceKind.skill, fake_skill_dir, "my-skill")
@@ -159,12 +152,6 @@ class TestGlobalStore:
         assert resource.kind == ResourceKind.skill
         assert resource.path.exists()
         assert (resource.path / "SKILL.md").exists()
-
-    def test_add_resource_mcp(self, isolated_store, fake_mcp_dir):
-        resource = isolated_store.add_resource(ResourceKind.mcp, fake_mcp_dir, "my-mcp")
-        assert resource.name == "my-mcp"
-        assert resource.kind == ResourceKind.mcp
-        assert (resource.path / "config.yaml").exists()
 
     def test_add_duplicate_raises(self, isolated_store, fake_skill_dir):
         isolated_store.add_resource(ResourceKind.skill, fake_skill_dir, "dup")
@@ -174,11 +161,10 @@ class TestGlobalStore:
     def test_list_empty(self, isolated_store):
         assert isolated_store.list_resources() == []
 
-    def test_list_resources(self, isolated_store, fake_skill_dir, fake_mcp_dir):
+    def test_list_resources(self, isolated_store, fake_skill_dir):
         isolated_store.add_resource(ResourceKind.skill, fake_skill_dir, "s1")
-        isolated_store.add_resource(ResourceKind.mcp, fake_mcp_dir, "m1")
         all_res = isolated_store.list_resources()
-        assert len(all_res) == 2
+        assert len(all_res) == 1
         skills = isolated_store.list_resources(ResourceKind.skill)
         assert len(skills) == 1
         assert skills[0].name == "s1"
@@ -452,7 +438,7 @@ class TestCLIIntegration:
         runner = CliRunner()
         result = runner.invoke(app, ["--help"])
         assert result.exit_code == 0
-        assert "MCP/Skills manager" in result.output
+        assert "Skills manager" in result.output
 
     def test_version(self):
         from typer.testing import CliRunner
@@ -633,7 +619,6 @@ class TestCLIIntegration:
         result = runner.invoke(app, ["init"])
         assert result.exit_code == 0
         assert (temp_dir / ".opencode" / "skills").is_dir()
-        assert (temp_dir / ".opencode" / "mcps").is_dir()
 
     def test_init_creates_agent_dirs_with_flag(self, temp_dir):
         """fabrik init --agent opencode doit créer les dossiers même sans .opencode/."""
@@ -643,7 +628,6 @@ class TestCLIIntegration:
         result = runner.invoke(app, ["init", "--agent", "opencode"])
         assert result.exit_code == 0
         assert (temp_dir / ".opencode" / "skills").is_dir()
-        assert (temp_dir / ".opencode" / "mcps").is_dir()
 
     def test_add_copies_skill_content(self, temp_dir, fake_skill_dir):
         """fabrik add doit copier le contenu du skill dans .opencode/skills/<name>/."""

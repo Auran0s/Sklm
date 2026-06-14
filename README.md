@@ -1,10 +1,9 @@
 # Fabrik
 
-**MCP/Skills manager for AI agents.**
+**Skills manager for AI agents.**
 
 Fabrik is a Python CLI that centralizes management of **skills** (SKILL.md files)
-and **MCPs** (Model Context Protocol configurations) for your AI agents —
-OpenCode, Claude Code, Cursor, etc.
+for your AI agents — OpenCode, Claude Code, Cursor, etc.
 
 ## Problem
 
@@ -86,7 +85,6 @@ if needed, links it into the workspace, and syncs with your AI agent
 ```bash
 fabrik add skill my-skill              # Add and activate (from store, registry, or local path)
 fabrik add skill find-skills --from https://github.com/vercel-labs/skills  # Install from GitHub + activate
-fabrik add mcp registry:my-mcp         # Add and activate an MCP from a specific registry
 fabrik ls                               # List all active resources
 fabrik ls skills                        # List only active skills
 fabrik ls --json                        # Machine-readable JSON output
@@ -97,7 +95,7 @@ fabrik rm skill my-skill               # Remove from project, unlink, and clean 
 ### Registry
 
 Registries are discovery sources — local directories or git repos
-where you can find and import skills and MCPs. Think of them as
+where you can find and import skills. Think of them as
 package indexes for agent resources.
 
 ```bash
@@ -142,15 +140,12 @@ fabrik agent detect                   # Identify which AI agent is active in thi
   registries.yaml        # Registry sources
   cache/                 # Cloned git repositories (for install --from)
   store/skills/          # Global skills (each may have .fabrik-source.yaml)
-  store/mcps/            # Global MCPs
 
 ./.fabrik/               # Project workspace (not committed)
   fabrik.yaml            # Project configuration
   links/skills/          # Linked skill symlinks → ~/.fabrik/store/skills/
-  links/mcps/            # Linked MCP symlinks → ~/.fabrik/store/mcps/
 
 .opencode/skills/        # Agent sees only these (per-project scoping)
-.opencode/mcps/
 ```
 
 ## Development
