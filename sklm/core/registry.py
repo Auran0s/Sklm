@@ -77,7 +77,7 @@ class RegistryManager:
                 )
             if ref != "HEAD":
                 result = subprocess.run(
-                    ["git", "-C", str(repo_cache), "checkout", ref],
+                    ["git", "-C", str(repo_cache), "checkout", "--", ref],
                     capture_output=True,
                     text=True,
                 )
@@ -87,7 +87,7 @@ class RegistryManager:
                     )
         else:
             result = subprocess.run(
-                ["git", "clone", url, str(repo_cache)],
+                ["git", "clone", "--", url, str(repo_cache)],
                 capture_output=True,
                 text=True,
             )
@@ -97,7 +97,7 @@ class RegistryManager:
                 )
             if ref != "HEAD":
                 result = subprocess.run(
-                    ["git", "-C", str(repo_cache), "checkout", ref],
+                    ["git", "-C", str(repo_cache), "checkout", "--", ref],
                     capture_output=True,
                     text=True,
                 )

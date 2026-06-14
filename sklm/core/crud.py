@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Optional
 
@@ -104,12 +105,20 @@ def _resolve_resource(
         )
     path = Path(name)
     if path.exists():
+        resolved = path.resolve()
+        if not str(resolved).startswith(str(Path.cwd())):
+            logging.warning(
+                "Path '%s' is outside the current project directory (%s). "
+                "Ensure this is intentional.",
+                resolved,
+                Path.cwd(),
+            )
         return ResourceRef(
             name=path.name,
             kind=kind,
             origin="local",
             linked=False,
-            path=path.resolve(),
+            path=resolved,
         )
     raise FileNotFoundError(
         f"Resource '{kind.value}:{name}' not found in global store, registries, or local path"

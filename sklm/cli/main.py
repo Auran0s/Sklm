@@ -613,18 +613,18 @@ def run():
         if cause:
             _track_success = False
             _track_error = type(cause).__name__
-            _track_error_message = str(cause) or None
+            _track_error_message = (str(cause).replace(str(Path.home()), "~")) or None
             tb_frames = tb_mod.extract_tb(cause.__traceback__)
             if tb_frames:
                 tail = tb_frames[-3:]
-                _track_traceback = "".join(tb_mod.format_list(tail)).rstrip()
+                _track_traceback = "".join(tb_mod.format_list(tail)).replace(str(Path.home()), "~").rstrip()
         else:
             _track_success = error.code in (None, 0)
             _track_error = None if _track_success else "error"
     elif error is not None:
         _track_success = False
         _track_error = type(error).__name__
-        _track_error_message = str(error) or None
+        _track_error_message = (str(error).replace(str(Path.home()), "~")) or None
 
     if _tracker_start > 0:
         duration = (time.monotonic() - _tracker_start) * 1000
