@@ -134,6 +134,98 @@ def status(
     console.print(table)
     if state["broken_links"] > 0:
         console.print("\n[yellow]💡 Tip:[/] Run [bold]fabrik status --repair[/] to fix broken links")
+    agents_count = state.get("agents_skills_count", 0)
+    if agents_count > 0:
+        console.print(
+            f"\n[yellow]⚠ {agents_count} skills detected in ~/.agents/skills/[/]"
+            "\n   These are globally available in all projects and bypass Fabrik scoping."
+            "\n   Use [bold]fabrik migrate[/] to import them into the Fabrik store."
+        )
+
+
+# ─── Install / Uninstall ────────────────────────────────────────────────────
+
+
+@app.command()
+def install(
+    resource_type: str = typer.Argument(..., help="Resource type: skill or mcp"),
+    name: str = typer.Argument(..., help="Resource name"),
+    from_url: Optional[str] = typer.Option(
+        None, "--from", help="Git repository URL to install from"
+    ),
+    subdir: Optional[str] = typer.Option(
+        None, "--subdir", help="Subdirectory within the repo (default: skills/<name>)"
+    ),
+):
+    """Install a resource into the global store without activating it."""
+    f = get_fabrik()
+    kind = parse_resource_type(resource_type)
+    try:
+        ref = f.install(kind, name, from_url=from_url, subdir=subdir)
+    except (FileNotFoundError, FileExistsError, ValueError) as e:
+        console.print(f"[red]✗[/] {e}")
+        raise typer.Exit(1) from e
+    console.print(f"[green]✓[/] Installed {kind.value} [bold]{ref.name}[/] in global store")
+    if ref.origin:
+        console.print(f"   Source: {ref.origin}")
+
+
+@app.command()
+def uninstall(
+    resource_type: str = typer.Argument(..., help="Resource type: skill or mcp"),
+    name: str = typer.Argument(..., help="Resource name to uninstall"),
+    force: bool = typer.Option(False, "--force", help="Skip confirmation"),
+):
+    """Remove a resource from the global store permanently."""
+    f = get_fabrik()
+    kind = parse_resource_type(resource_type)
+    linked_projects = []
+    try:
+        f.workspace.get_resource(kind, name)
+        linked_projects.append("current project")
+    except KeyError:
+        pass
+    if linked_projects and not force:
+        console.print(
+            f"[yellow]⚠[/] {kind.value} [bold]{name}[/] is linked in the current project."
+        )
+        confirm = typer.confirm("Unlink and uninstall?")
+        if not confirm:
+            console.print("[yellow]Cancelled.[/]")
+            raise typer.Exit(0)
+    try:
+        f.uninstall(kind, name)
+    except KeyError as e:
+        console.print(f"[red]✗[/] {e}")
+        raise typer.Exit(1) from e
+    console.print(f"[green]✓[/] Uninstalled {kind.value} [bold]{name}[/] from global store")
+
+
+@app.command()
+def migrate(
+    resource_type: str = typer.Argument("skill", help="Resource type: skill or mcp"),
+    name: Optional[str] = typer.Argument(
+        None, help="Resource name (omit to migrate all)"
+    ),
+):
+    """Import resources from ~/.agents/ into the Fabrik global store."""
+    f = get_fabrik()
+    kind = parse_resource_type(resource_type)
+    try:
+        refs = f.migrate(kind, name)
+    except (FileNotFoundError, FileExistsError, ValueError) as e:
+        console.print(f"[red]✗[/] {e}")
+        raise typer.Exit(1) from e
+    if not refs:
+        console.print("[yellow]No resources to migrate.[/]")
+        return
+    for ref in refs:
+        console.print(f"[green]✓[/] Migrated {kind.value} [bold]{ref.name}[/]")
+    console.print(f"\n[green]Done.[/] {len(refs)} resource(s) migrated.")
+    if name:
+        console.print("Tip: Run [bold]fabrik add {kind.value} {name}[/] to activate it in this project.")
+    else:
+        console.print("Tip: Run [bold]fabrik ls[/] to see available resources, then [bold]fabrik add[/] to activate.")
 
 
 # ─── Resource Management ─────────────────────────────────────────────────────
@@ -143,12 +235,18 @@ def status(
 def add(
     resource_type: str = typer.Argument(..., help="Resource type: skill or mcp"),
     name: str = typer.Argument(..., help="Resource name (optionally prefixed: registry:name)"),
+    from_url: Optional[str] = typer.Option(
+        None, "--from", help="Git repository URL to install from"
+    ),
+    subdir: Optional[str] = typer.Option(
+        None, "--subdir", help="Subdirectory within the repo (default: skills/<name>)"
+    ),
 ):
     """Add and activate a resource in the project (resolves, stores, links, syncs agent)."""
     f = get_fabrik()
     kind = parse_resource_type(resource_type)
     try:
-        ref = f.add(kind, name)
+        ref = f.add(kind, name, from_url=from_url, subdir=subdir)
     except (FileNotFoundError, FileExistsError, ValueError) as e:
         console.print(f"[red]✗[/] {e}")
         raise typer.Exit(1) from e
@@ -223,55 +321,6 @@ def info(
     table.add_row("Linked", "[green]✓[/]" if ref.linked else "")
     table.add_row("Path", str(ref.path) if ref.path else "N/A")
     console.print(table)
-
-
-# ─── Linking ─────────────────────────────────────────────────────────────────
-
-
-@app.command()
-def link(
-    resource_type: str = typer.Argument(..., help="Resource type: skill or mcp"),
-    name: str = typer.Argument(..., help="Resource name to link"),
-    no_sync: bool = typer.Option(False, "--no-sync", help="Skip agent config sync"),
-):
-    """Link a global resource into the project workspace."""
-    f = get_fabrik()
-    kind = parse_resource_type(resource_type)
-    try:
-        result = f.link(kind, name)
-    except (FileNotFoundError, FileExistsError) as e:
-        console.print(f"[red]✗[/] {e}")
-        raise typer.Exit(1) from e
-    console.print(f"[green]✓[/] Linked {kind.value} [bold]{result.name}[/]")
-    if not no_sync:
-        try:
-            f.agent_sync()
-            console.print("   [dim]Agent config synced.[/]")
-        except RuntimeError:
-            pass
-
-
-@app.command()
-def unlink(
-    resource_type: str = typer.Argument(..., help="Resource type: skill or mcp"),
-    name: str = typer.Argument(..., help="Resource name to unlink"),
-    no_sync: bool = typer.Option(False, "--no-sync", help="Skip agent config sync"),
-):
-    """Unlink a resource from the project workspace."""
-    f = get_fabrik()
-    kind = parse_resource_type(resource_type)
-    try:
-        f.unlink(kind, name)
-    except KeyError as e:
-        console.print(f"[red]✗[/] {e}")
-        raise typer.Exit(1) from e
-    console.print(f"[green]✓[/] Unlinked {kind.value} [bold]{name}[/]")
-    if not no_sync:
-        try:
-            f.agent_sync()
-            console.print("   [dim]Agent config synced.[/]")
-        except RuntimeError:
-            pass
 
 
 # ─── Global Store ────────────────────────────────────────────────────────────

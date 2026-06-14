@@ -10,7 +10,9 @@ OpenCode, Claude Code, Cursor, etc.
 
 Agent resources are either **global** (available everywhere but pollute
 every project) or **local** (project-specific but must be reinstalled
-each time). Fabrik resolves this tension.
+each time). Fabrik resolves this tension with a **per-project scoping**
+model: install skills globally in a hidden store, then activate only
+what you need in each project.
 
 ## Installation
 
@@ -22,15 +24,15 @@ pip install -e .
 
 ## Usage
 
-Fabrik manages resources through a simple three-step flow. `add` does
-everything — resolve, store, link, and sync — in a single command.
+Fabrik provides a simple lifecycle for skills:
 
 ```
-    COLLECTION ──→ ACTIVATE
-   global ls          add
-   global rm          ls
-                      info
-                      rm
+    INSTALL ──→ ACTIVATE ──→ DEACTIVATE ──→ UNINSTALL
+   install        add            rm           uninstall
+   migrate        ls            (keep in       (remove
+   (import         info          store)        from store)
+    from
+   ~/.agents/)
 ```
 
 Use the sections below to find the right command for your current stage.
@@ -50,34 +52,46 @@ fabrik status                        # Show workspace health (resources, links, 
 fabrik status --repair               # Auto-fix any broken symlinks
 ```
 
-### Global Store
+### Install (Store without Activating)
 
-The global store (`~/.fabrik/`) is your personal curated library of
-skills and MCPs. Resources are automatically copied here when you
-run `fabrik add` from a registry or local path.
+Install a skill from a GitHub repository into the global store without
+activating it in the current project. This lets you pre-install skills
+and activate them later per project.
 
 ```bash
-fabrik global ls                        # Browse your entire library
-fabrik global ls skills                 # Browse only skills (filter by type)
-fabrik global rm skill my-skill         # Remove from your library
+fabrik install skill find-skills --from https://github.com/vercel-labs/skills
+fabrik install skill flask-api --from https://github.com/aj-geddes/useful-ai-prompts \
+  --subdir skills/flask-api-development
+fabrik uninstall skill find-skills                # Remove from store permanently
+fabrik uninstall skill find-skills --force        # Skip confirmation
+```
+
+### Import from skills.sh
+
+If you already have skills installed via `npx skills` in `~/.agents/skills/`,
+import them into Fabrik's store:
+
+```bash
+fabrik migrate                         # Import all skills from ~/.agents/skills/
+fabrik migrate skill find-skills       # Import a specific skill
 ```
 
 ### Resource Management
 
-`fabrik add` is the single command to add and activate a resource in
+`fabrik add` is the single command to install and activate a resource in
 your project. It resolves the resource, copies it to the global store
 if needed, links it into the workspace, and syncs with your AI agent
 — all in one step.
 
 ```bash
-fabrik add skill my-skill              # Add and activate a skill (from global store or registry)
-fabrik add skill ./my-skill/           # Add and activate a skill from a local path
+fabrik add skill my-skill              # Add and activate (from store, registry, or local path)
+fabrik add skill find-skills --from https://github.com/vercel-labs/skills  # Install from GitHub + activate
 fabrik add mcp registry:my-mcp         # Add and activate an MCP from a specific registry
 fabrik ls                               # List all active resources
 fabrik ls skills                        # List only active skills
 fabrik ls --json                        # Machine-readable JSON output
 fabrik info skill my-skill             # Show details (origin, path, status)
-fabrik rm skill my-skill               # Remove, unlink, and clean up from agent in one step
+fabrik rm skill my-skill               # Remove from project, unlink, and clean agent
 ```
 
 ### Registry
@@ -95,6 +109,22 @@ fabrik registry search scraper --registry my-skills # Search within a specific r
 fabrik registry search scraper --type skill       # Filter search results by resource type
 ```
 
+### Per-Project Scoping
+
+By default, skills installed globally (via `npx skills`) in `~/.agents/skills/`
+are visible to OpenCode in **every** project. Fabrik changes this: when
+`~/.agents/skills/` is empty, the agent only sees skills that Fabrik
+explicitly syncs into `.opencode/skills/`.
+
+Use `fabrik status` to check for globally installed skills that bypass scoping.
+
+```bash
+fabrik status
+# ⚠ 5 skills detected in ~/.agents/skills/
+#    These are globally available in all projects and bypass Fabrik scoping.
+#    Use fabrik migrate to import them into the Fabrik store.
+```
+
 ### Agent
 
 Agent synchronization runs automatically during `add` and `rm`. You
@@ -107,16 +137,20 @@ fabrik agent detect                   # Identify which AI agent is active in thi
 ## Architecture
 
 ```
-~/.fabrik/               # Global store (user-wide)
+~/.fabrik/               # Global store (user-wide, hidden from agents)
   config.yaml            # Global resource catalog
   registries.yaml        # Registry sources
-  store/skills/          # Global skills
+  cache/                 # Cloned git repositories (for install --from)
+  store/skills/          # Global skills (each may have .fabrik-source.yaml)
   store/mcps/            # Global MCPs
 
-./.fabrik/               # Project workspace
+./.fabrik/               # Project workspace (not committed)
   fabrik.yaml            # Project configuration
-  links/skills/          # Linked skill symlinks
-  links/mcps/            # Linked MCP symlinks
+  links/skills/          # Linked skill symlinks → ~/.fabrik/store/skills/
+  links/mcps/            # Linked MCP symlinks → ~/.fabrik/store/mcps/
+
+.opencode/skills/        # Agent sees only these (per-project scoping)
+.opencode/mcps/
 ```
 
 ## Development

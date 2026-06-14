@@ -85,6 +85,13 @@ class WorkspaceConfig(BaseModel):
             yaml.dump(self.model_dump(mode="json"), f, default_flow_style=False)
 
 
+class SourceMetadata(BaseModel):
+    source_repo: str
+    source_subdir: str
+    installed_at: str
+    ref: str = "HEAD"
+
+
 class TelemetryConfig(BaseModel):
     enabled: bool = Field(default=True, description="Enable telemetry")
     umami_url: str = Field(

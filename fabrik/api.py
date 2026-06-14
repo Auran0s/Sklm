@@ -41,7 +41,6 @@ class Fabrik:
         else:
             detected = self._detect_agent()
         self.workspace.init(agent=detected)
-        # Prepare agent infrastructure directories
         if agent:
             adapter = self._find_adapter_by_name(agent)
         else:
@@ -59,6 +58,13 @@ class Fabrik:
         resources = config.resources
         links = config.links
         broken = detect_broken_links(self.workspace)
+        agents_skills_path = Path.home() / ".agents" / "skills"
+        agents_skills_count = 0
+        if agents_skills_path.exists():
+            agents_skills_count = len([
+                d for d in agents_skills_path.iterdir()
+                if d.is_dir() and (d / "SKILL.md").exists()
+            ])
         return {
             "agent": config.agent,
             "total_resources": len(resources),
@@ -69,21 +75,116 @@ class Fabrik:
             "linked_mcps": len([l for l in links if l.kind == ResourceKind.mcp]),
             "broken_links": len(broken),
             "broken_link_details": broken,
+            "agents_skills_count": agents_skills_count,
         }
 
     def repair_broken_links(self) -> dict:
         repaired, still_broken = repair_links(self.workspace, self.global_store)
         return {"repaired": repaired, "still_broken": still_broken}
 
-    # ── Resource CRUD ────────────────────────────────────────────────────
+    # ── Install / Uninstall ───────────────────────────────────────────────
 
-    def add(self, kind: ResourceKind, name: str) -> ResourceRef:
+    def install(
+        self,
+        kind: ResourceKind,
+        name: str,
+        from_url: Optional[str] = None,
+        subdir: Optional[str] = None,
+    ) -> ResourceRef:
+        if from_url:
+            resource = self.global_store.add_resource_from_git(
+                kind, name, from_url, subdir=subdir
+            )
+            return ResourceRef(
+                name=resource.name,
+                kind=resource.kind,
+                origin=from_url,
+                linked=False,
+                path=resource.path,
+            )
         ref = add_resource_to_workspace(
             self.workspace, self.global_store, self.registry_manager, kind, name
         )
         existing = self.global_store.get_resource(kind, ref.name)
         if not existing and ref.path:
             self.global_store.add_resource(kind, ref.path, ref.name)
+        return ResourceRef(
+            name=ref.name,
+            kind=ref.kind,
+            origin=ref.origin,
+            linked=False,
+            path=ref.path,
+        )
+
+    def uninstall(self, kind: ResourceKind, name: str) -> None:
+        linked = False
+        try:
+            _unlink_resource(self.workspace, kind, name)
+            linked = True
+        except (KeyError, FileNotFoundError):
+            pass
+        self.global_store.remove_resource(kind, name)
+
+    def migrate(
+        self, kind: ResourceKind, name: Optional[str] = None
+    ) -> list[ResourceRef]:
+        agents_dir = Path.home() / ".agents" / f"{kind.value}s"
+        if not agents_dir.exists():
+            raise FileNotFoundError(f"No resources found at {agents_dir}")
+        results: list[ResourceRef] = []
+        if name:
+            src = agents_dir / name
+            if not src.exists() or not (src / "SKILL.md").exists():
+                raise FileNotFoundError(f"Resource '{name}' not found in {agents_dir}")
+            resource = self.global_store.add_resource(kind, src, name)
+            results.append(
+                ResourceRef(
+                    name=resource.name,
+                    kind=resource.kind,
+                    origin=str(src),
+                    linked=False,
+                    path=resource.path,
+                )
+            )
+        else:
+            for d in sorted(agents_dir.iterdir()):
+                if not d.is_dir():
+                    continue
+                if not (d / "SKILL.md").exists():
+                    continue
+                try:
+                    resource = self.global_store.add_resource(kind, d)
+                    results.append(
+                        ResourceRef(
+                            name=resource.name,
+                            kind=resource.kind,
+                            origin=str(d),
+                            linked=False,
+                            path=resource.path,
+                        )
+                    )
+                except FileExistsError:
+                    continue
+        return results
+
+    # ── Resource CRUD ────────────────────────────────────────────────────
+
+    def add(
+        self,
+        kind: ResourceKind,
+        name: str,
+        from_url: Optional[str] = None,
+        subdir: Optional[str] = None,
+    ) -> ResourceRef:
+        if from_url:
+            ref = self.install(kind, name, from_url=from_url, subdir=subdir)
+        else:
+            ref = add_resource_to_workspace(
+                self.workspace, self.global_store, self.registry_manager, kind, name
+            )
+            existing = self.global_store.get_resource(kind, ref.name)
+            if not existing and ref.path:
+                self.global_store.add_resource(kind, ref.path, ref.name)
         _link_resource(self.workspace, self.global_store, kind, ref.name)
         try:
             self.agent_sync()
@@ -111,7 +212,7 @@ class Fabrik:
     def info(self, kind: ResourceKind, name: str) -> Optional[ResourceRef]:
         return get_resource_info(self.workspace, self.global_store, kind, name)
 
-    # ── Linking ──────────────────────────────────────────────────────────
+    # ── Linking (internal) ───────────────────────────────────────────────
 
     def link(self, kind: ResourceKind, name: str) -> Link:
         return _link_resource(self.workspace, self.global_store, kind, name)
@@ -201,7 +302,6 @@ class Fabrik:
         return None
 
     def _find_adapter_by_name(self, agent_name: str) -> Optional[AgentAdapter]:
-        """Instantiate an adapter by its canonical name, bypassing detection."""
         adapters: list[type[AgentAdapter]] = [OpencodeAdapter]
         for adapter_cls in adapters:
             name = adapter_cls.__name__.replace("Adapter", "").lower()

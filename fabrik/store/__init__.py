@@ -4,13 +4,17 @@ from __future__ import annotations
 
 import os
 import shutil
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from fabrik.models import GlobalConfig, Resource, ResourceKind, TelemetryConfig
+import yaml
+
+from fabrik.models import GlobalConfig, Resource, ResourceKind, SourceMetadata, TelemetryConfig
 
 
 FABRIK_HOME = Path.home() / ".fabrik"
+SOURCE_META_FILENAME = ".fabrik-source.yaml"
 
 
 class GlobalStore:
@@ -22,12 +26,14 @@ class GlobalStore:
         self.skills_dir = self.store_dir / "skills"
         self.mcps_dir = self.store_dir / "mcps"
         self.config_path = self.root / "config.yaml"
+        self.cache_dir = self.root / "cache"
         self._ensure_dirs()
 
     def _ensure_dirs(self) -> None:
         self.root.mkdir(parents=True, exist_ok=True)
         self.skills_dir.mkdir(parents=True, exist_ok=True)
         self.mcps_dir.mkdir(parents=True, exist_ok=True)
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
 
     def _load_config(self) -> GlobalConfig:
         return GlobalConfig.from_yaml(self.config_path)
@@ -75,8 +81,90 @@ class GlobalStore:
                 shutil.rmtree(dest)
             else:
                 dest.unlink()
+        self.remove_source_metadata(kind, name)
         del config.resources[key]
         self._save_config(config)
+
+    def add_resource_from_git(
+        self,
+        kind: ResourceKind,
+        name: str,
+        repo_url: str,
+        subdir: Optional[str] = None,
+        ref: str = "HEAD",
+    ) -> Resource:
+        from fabrik.core.registry import RegistryManager
+
+        registry = RegistryManager()
+        cache_path = registry.clone_or_fetch(repo_url, name, ref=ref)
+
+        if subdir:
+            src = cache_path / subdir
+        else:
+            candidate = cache_path / "skills" / name
+            if candidate.exists():
+                src = candidate
+            else:
+                src = cache_path / name
+
+        if not src.exists() or not src.is_dir():
+            raise FileNotFoundError(
+                f"Skill directory '{name}' not found at expected path '{src}' in repo '{repo_url}'."
+            )
+
+        dest = self._type_dir(kind) / name
+        if dest.exists():
+            if dest.is_dir():
+                shutil.rmtree(dest)
+            else:
+                dest.unlink()
+        shutil.copytree(src, dest)
+
+        resource = Resource(
+            name=name,
+            kind=kind,
+            source=repo_url,
+            path=dest,
+        )
+        config = self._load_config()
+        config.resources[f"{kind.value}:{name}"] = resource
+        self._save_config(config)
+
+        self.save_source_metadata(
+            kind,
+            name,
+            SourceMetadata(
+                source_repo=repo_url,
+                source_subdir=str(subdir or f"skills/{name}"),
+                installed_at=datetime.now(timezone.utc).isoformat(),
+                ref=ref,
+            ),
+        )
+        return resource
+
+    def _source_meta_path(self, kind: ResourceKind, name: str) -> Path:
+        return self._type_dir(kind) / name / SOURCE_META_FILENAME
+
+    def save_source_metadata(self, kind: ResourceKind, name: str, meta: SourceMetadata) -> None:
+        meta_path = self._source_meta_path(kind, name)
+        meta_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(meta_path, "w") as f:
+            yaml.dump(meta.model_dump(mode="json"), f, default_flow_style=False)
+
+    def get_source_metadata(self, kind: ResourceKind, name: str) -> Optional[SourceMetadata]:
+        meta_path = self._source_meta_path(kind, name)
+        if not meta_path.exists():
+            return None
+        with open(meta_path) as f:
+            data = yaml.safe_load(f)
+        if not data:
+            return None
+        return SourceMetadata(**data)
+
+    def remove_source_metadata(self, kind: ResourceKind, name: str) -> None:
+        meta_path = self._source_meta_path(kind, name)
+        if meta_path.exists():
+            meta_path.unlink()
 
     def list_resources(self, kind: Optional[ResourceKind] = None) -> list[Resource]:
         config = self._load_config()

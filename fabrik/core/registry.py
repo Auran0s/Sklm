@@ -43,25 +43,46 @@ class RegistryManager:
         if source.name in sources:
             raise FileExistsError(f"Registry '{source.name}' already exists")
         if source.type == RegistryType.git:
-            self._clone_or_fetch(source)
+            self.clone_or_fetch(source.url_or_path, source.name)
         sources[source.name] = source
         self._save_sources(sources)
 
     def list_sources(self) -> dict[str, RegistrySource]:
         return self._load_sources()
 
-    def _clone_or_fetch(self, source: RegistrySource) -> None:
-        repo_cache = self.cache_dir / source.name
+    def clone_or_fetch(self, url: str, name: str, ref: str = "HEAD") -> Path:
+        """Clone or update a git repository into the cache directory.
+
+        Args:
+            url: Git remote URL to clone/fetch.
+            name: Local cache directory name (e.g. registry name or repo slug).
+            ref: Git ref to checkout after clone/fetch (default: HEAD).
+
+        Returns:
+            Path to the cached repository root.
+        """
+        repo_cache = self.cache_dir / name
         if repo_cache.exists():
             subprocess.run(
                 ["git", "-C", str(repo_cache), "pull", "--ff-only"],
                 capture_output=True,
             )
+            if ref != "HEAD":
+                subprocess.run(
+                    ["git", "-C", str(repo_cache), "checkout", ref],
+                    capture_output=True,
+                )
         else:
             subprocess.run(
-                ["git", "clone", source.url_or_path, str(repo_cache)],
+                ["git", "clone", url, str(repo_cache)],
                 capture_output=True,
             )
+            if ref != "HEAD":
+                subprocess.run(
+                    ["git", "-C", str(repo_cache), "checkout", ref],
+                    capture_output=True,
+                )
+        return repo_cache
 
     def _scan_directory(self, path: Path) -> list[Resource]:
         resources: list[Resource] = []

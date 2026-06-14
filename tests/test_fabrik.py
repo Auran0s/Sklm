@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+import unittest
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -644,25 +645,23 @@ class TestCLIIntegration:
         assert (temp_dir / ".opencode" / "skills").is_dir()
         assert (temp_dir / ".opencode" / "mcps").is_dir()
 
-    def test_link_copies_skill_content(self, temp_dir, fake_skill_dir):
-        """fabrik link doit copier le contenu du skill dans .opencode/skills/<name>/."""
-        # Simuler un projet OpenCode
+    def test_add_copies_skill_content(self, temp_dir, fake_skill_dir):
+        """fabrik add doit copier le contenu du skill dans .opencode/skills/<name>/."""
         (temp_dir / ".opencode").mkdir()
         from typer.testing import CliRunner
         from fabrik.cli.main import app
         runner = CliRunner()
         runner.invoke(app, ["init"])
         runner.invoke(app, ["global", "add", "skill", str(fake_skill_dir), "--name", "test-skill"])
-        runner.invoke(app, ["add", "skill", "test-skill"])
-        result = runner.invoke(app, ["link", "skill", "test-skill"])
+        result = runner.invoke(app, ["add", "skill", "test-skill"])
         assert result.exit_code == 0
         agent_skill_dir = temp_dir / ".opencode" / "skills" / "test-skill"
         assert agent_skill_dir.is_dir()
         assert (agent_skill_dir / "SKILL.md").exists()
         assert (agent_skill_dir / "SKILL.md").read_text() == "# My Skill\nA test skill."
 
-    def test_link_no_sync_skips_agent(self, temp_dir, fake_skill_dir):
-        """fabrik link --no-sync ne doit pas copier le contenu dans l'agent."""
+    def test_rm_removes_agent_skill(self, temp_dir, fake_skill_dir):
+        """fabrik rm doit supprimer le dossier skill de l'agent."""
         (temp_dir / ".opencode").mkdir()
         from typer.testing import CliRunner
         from fabrik.cli.main import app
@@ -670,29 +669,14 @@ class TestCLIIntegration:
         runner.invoke(app, ["init"])
         runner.invoke(app, ["global", "add", "skill", str(fake_skill_dir), "--name", "test-skill"])
         runner.invoke(app, ["add", "skill", "test-skill"])
-        result = runner.invoke(app, ["link", "skill", "test-skill", "--no-sync"])
-        assert result.exit_code == 0
-        agent_skill_dir = temp_dir / ".opencode" / "skills" / "test-skill"
-        assert not agent_skill_dir.exists()
-
-    def test_unlink_removes_agent_skill(self, temp_dir, fake_skill_dir):
-        """fabrik unlink doit supprimer le dossier skill de l'agent."""
-        (temp_dir / ".opencode").mkdir()
-        from typer.testing import CliRunner
-        from fabrik.cli.main import app
-        runner = CliRunner()
-        runner.invoke(app, ["init"])
-        runner.invoke(app, ["global", "add", "skill", str(fake_skill_dir), "--name", "test-skill"])
-        runner.invoke(app, ["add", "skill", "test-skill"])
-        runner.invoke(app, ["link", "skill", "test-skill"])
         agent_skill_dir = temp_dir / ".opencode" / "skills" / "test-skill"
         assert agent_skill_dir.is_dir()
-        result = runner.invoke(app, ["unlink", "skill", "test-skill"])
+        result = runner.invoke(app, ["rm", "skill", "test-skill"])
         assert result.exit_code == 0
         assert not agent_skill_dir.exists()
 
     def test_agent_sync_updates_content(self, temp_dir, fake_skill_dir):
-        """fabrik agent sync doit mettre à jour le contenu si le skill change."""
+        """fabrik agent sync doit copier le contenu dans l'agent."""
         (temp_dir / ".opencode").mkdir()
         from typer.testing import CliRunner
         from fabrik.cli.main import app
@@ -700,10 +684,136 @@ class TestCLIIntegration:
         runner.invoke(app, ["init"])
         runner.invoke(app, ["global", "add", "skill", str(fake_skill_dir), "--name", "test-skill"])
         runner.invoke(app, ["add", "skill", "test-skill"])
-        runner.invoke(app, ["link", "skill", "test-skill", "--no-sync"])
-        # Vérifier que le skill n'est PAS présent (no-sync)
-        assert not (temp_dir / ".opencode" / "skills" / "test-skill").exists()
-        # Puis synchroniser
-        result = runner.invoke(app, ["agent", "sync"])
-        assert result.exit_code == 0
         assert (temp_dir / ".opencode" / "skills" / "test-skill" / "SKILL.md").exists()
+        runner.invoke(app, ["rm", "skill", "test-skill"])
+        assert not (temp_dir / ".opencode" / "skills" / "test-skill").exists()
+        runner.invoke(app, ["add", "skill", "test-skill"])
+        assert (temp_dir / ".opencode" / "skills" / "test-skill" / "SKILL.md").exists()
+        assert (temp_dir / ".opencode" / "skills" / "test-skill" / "SKILL.md").read_text() == "# My Skill\nA test skill."
+
+    def test_install_command_help(self, temp_dir):
+        """fabrik install --help doit afficher l'aide."""
+        from typer.testing import CliRunner
+        from fabrik.cli.main import app
+        runner = CliRunner()
+        result = runner.invoke(app, ["install", "--help"])
+        assert result.exit_code == 0
+        assert "Install" in result.output
+
+    def test_add_with_from_flag(self, temp_dir):
+        """fabrik add --help doit mentionner --from."""
+        from typer.testing import CliRunner
+        from fabrik.cli.main import app
+        runner = CliRunner()
+        result = runner.invoke(app, ["add", "--help"])
+        assert result.exit_code == 0
+        assert "--from" in result.output
+
+    def test_uninstall_command(self, temp_dir, fake_skill_dir):
+        """fabrik uninstall doit supprimer un skill du store."""
+        (temp_dir / ".opencode").mkdir()
+        from typer.testing import CliRunner
+        from fabrik.cli.main import app
+        runner = CliRunner()
+        runner.invoke(app, ["init"])
+        runner.invoke(app, ["global", "add", "skill", str(fake_skill_dir), "--name", "test-skill"])
+        result = runner.invoke(app, ["uninstall", "skill", "test-skill", "--force"])
+        assert result.exit_code == 0
+        assert "Uninstalled" in result.output
+
+    def test_uninstall_linked_skill(self, temp_dir, fake_skill_dir):
+        """fabrik uninstall d'un skill lié doit demander confirmation."""
+        (temp_dir / ".opencode").mkdir()
+        from typer.testing import CliRunner
+        from fabrik.cli.main import app
+        runner = CliRunner()
+        runner.invoke(app, ["init"])
+        runner.invoke(app, ["global", "add", "skill", str(fake_skill_dir), "--name", "test-skill"])
+        runner.invoke(app, ["add", "skill", "test-skill"])
+        # sans --force, avec input "y"
+        result = runner.invoke(app, ["uninstall", "skill", "test-skill"], input="y\n")
+        assert result.exit_code == 0
+        assert "Uninstalled" in result.output
+
+    def test_migrate_command(self, temp_dir):
+        """fabrik migrate doit importer depuis ~/.agents/."""
+        agents_skills = Path.home() / ".agents" / "skills"
+        agents_skills.mkdir(parents=True, exist_ok=True)
+        test_skill_dir = agents_skills / "test-agent-skill"
+        test_skill_dir.mkdir(exist_ok=True)
+        (test_skill_dir / "SKILL.md").write_text("# Agent Skill\nFrom skills.sh")
+        from typer.testing import CliRunner
+        from fabrik.cli.main import app
+        runner = CliRunner()
+        result = runner.invoke(app, ["migrate", "skill", "test-agent-skill"])
+        assert result.exit_code == 0
+        assert "Migrated" in result.output
+        # cleanup
+        import shutil
+        shutil.rmtree(test_skill_dir)
+
+    def test_link_unlink_not_in_cli(self, temp_dir):
+        """fabrik link et unlink ne doivent PAS être des commandes accessibles."""
+        from typer.testing import CliRunner
+        from fabrik.cli.main import app
+        runner = CliRunner()
+        result = runner.invoke(app, ["link", "skill", "test"], input="n\n")
+        assert result.exit_code != 0
+        result = runner.invoke(app, ["unlink", "skill", "test"], input="n\n")
+        assert result.exit_code != 0
+
+    def test_install_api(self, temp_dir):
+        """Fabrik.install() avec --from doit appeler add_resource_from_git."""
+        from fabrik.api import Fabrik
+        from fabrik.models import ResourceKind
+        f = Fabrik()
+        mock_resource = MagicMock()
+        mock_resource.name = "test-skill"
+        mock_resource.kind = ResourceKind.skill
+        mock_resource.path = Path("/tmp/test")
+        with unittest.mock.patch.object(f.global_store, "add_resource_from_git") as mock_add:
+            mock_add.return_value = mock_resource
+            ref = f.install(ResourceKind.skill, "test-skill", from_url="https://github.com/test/repo")
+            mock_add.assert_called_once()
+            assert ref.name == "test-skill"
+            assert ref.origin == "https://github.com/test/repo"
+
+    def test_add_from_url_calls_install(self, temp_dir):
+        """Fabrik.add() avec from_url doit appeler install()."""
+        from fabrik.api import Fabrik
+        from fabrik.models import ResourceKind
+        ref = MagicMock()
+        ref.name = "test-skill"
+        ref.kind = ResourceKind.skill
+        (temp_dir / ".opencode").mkdir()
+        f = Fabrik()
+        f.init_workspace("none")
+        with unittest.mock.patch.object(f, "install") as mock_install:
+            mock_install.return_value = ref
+            with unittest.mock.patch("fabrik.api._link_resource") as mock_link:
+                mock_link.return_value = MagicMock()
+                with unittest.mock.patch.object(f, "agent_sync") as mock_sync:
+                    mock_sync.return_value = {"agent": "test", "synced": True}
+                    f.add(ResourceKind.skill, "test-skill", from_url="https://github.com/test/repo")
+                    mock_install.assert_called_once_with(
+                        ResourceKind.skill, "test-skill",
+                        from_url="https://github.com/test/repo", subdir=None
+                    )
+
+    def test_status_warns_agents_skills(self, temp_dir):
+        """fabrik status doit avertir si ~/.agents/skills/ est non vide."""
+        agents_skills = Path.home() / ".agents" / "skills"
+        agents_skills.mkdir(parents=True, exist_ok=True)
+        test_skill_dir = agents_skills / "test-warning-skill"
+        test_skill_dir.mkdir(exist_ok=True)
+        (test_skill_dir / "SKILL.md").write_text("# Warning Skill")
+        (temp_dir / ".opencode").mkdir()
+        from typer.testing import CliRunner
+        from fabrik.cli.main import app
+        runner = CliRunner()
+        runner.invoke(app, ["init"])
+        result = runner.invoke(app, ["status"])
+        assert "~/.agents/skills/" in result.output
+        assert "migrate" in result.output
+        import shutil
+        shutil.rmtree(test_skill_dir)
