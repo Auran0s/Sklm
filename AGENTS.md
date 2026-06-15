@@ -41,6 +41,7 @@ Sklm is a Python 3.9+ CLI (Typer + Rich) that manages skills for AI agents via a
 | `sklm/core/registry.py` | `RegistryManager` — registry discovery |
 | `sklm/core/crud.py` | CRUD operations |
 | `sklm/core/linking.py` | Symlink create/remove/repair |
+| `sklm/core/update.py` | `UpdateChecker` — version check and self-update |
 | `sklm/agents/` | 8 agents in `agents.yaml`; `GenericAdapter` handles 7, `GitHubCopilotAdapter` is custom |
 | `sklm/telemetry.py` | `UmamiTracker` — telemetry |
 
@@ -54,13 +55,8 @@ Sklm is a Python 3.9+ CLI (Typer + Rich) that manages skills for AI agents via a
 - CLI output uses **Rich** (tables, `print_json`, `Console`); use `--json` for machine-readable output.
 - Only `skill` resource kind exists — the `ResourceKind` enum has a single value.
 - `link`/`unlink` are **internal API only** (not CLI commands). Use `add`/`rm`.
-- `install --from` resolves skill dirs in this order: `skills/<name>` → repo root (if `SKILL.md` present) → `<name>` subdir.
-
-## OpenSpec workflow
-
-Spec-driven development via `.opencode/commands/` slash commands:
-- `/opsx-propose`, `/opsx-explore`, `/opsx-apply`, `/opsx-sync`, `/opsx-archive`.
-- Specs in `openspec/specs/` (9 specs). Active changes in `openspec/changes/`.
+- `install --from` resolves skill dirs in this order: `skills/<name>` → repo root (if `SKILL.md` present) → `<name>` subdir → recursive walk of `skills/` for `<name>/SKILL.md`.
+- `SKLM_HOME` overrides the global store root (`~/.sklm/` by default); tests patch `sklm.store.SKLM_HOME`.
 
 ## Testing
 
