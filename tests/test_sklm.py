@@ -94,14 +94,14 @@ class TestResourceRef:
 
 class TestWorkspaceConfig:
     def test_round_trip(self, temp_dir):
-        config = WorkspaceConfig(agent="opencode")
+        config = WorkspaceConfig(agents=["opencode"])
         config.resources.append(
             ResourceRef(name="s1", kind=ResourceKind.skill, origin="global")
         )
         path = temp_dir / "sklm.yaml"
         config.to_yaml(path)
         loaded = WorkspaceConfig.from_yaml(path)
-        assert loaded.agent == "opencode"
+        assert loaded.agents == ["opencode"]
         assert len(loaded.resources) == 1
         assert loaded.resources[0].name == "s1"
 
@@ -469,9 +469,9 @@ class TestWorkspace:
 
     def test_init_creates_structure(self, temp_dir):
         ws = Workspace(temp_dir)
-        config = ws.init(agent="opencode")
+        config = ws.init(agents=["opencode"])
         assert ws.exists()
-        assert config.agent == "opencode"
+        assert config.agents == ["opencode"]
         assert (temp_dir / ".sklm").is_dir()
         assert (temp_dir / ".sklm" / "sklm.yaml").exists()
 
@@ -546,20 +546,20 @@ class TestAgentRegistry:
     def test_detect_returns_none_when_no_agent_dir(self, temp_dir):
         from sklm.agents.registry import AgentRegistry
         registry = AgentRegistry()
-        assert registry.detect(temp_dir) is None
+        assert registry.detect(temp_dir) == []
 
     def test_detect_opencode(self, temp_dir):
         from sklm.agents.registry import AgentRegistry
         (temp_dir / ".opencode").mkdir()
         registry = AgentRegistry()
-        assert registry.detect(temp_dir) == "opencode"
+        assert registry.detect(temp_dir) == ["opencode"]
 
     def test_detect_priority_order(self, temp_dir):
         from sklm.agents.registry import AgentRegistry
         (temp_dir / ".opencode").mkdir()
         (temp_dir / ".claude").mkdir()
         registry = AgentRegistry()
-        assert registry.detect(temp_dir) == "opencode"
+        assert registry.detect(temp_dir) == ["opencode", "claude"]
 
     def test_get_adapter_returns_generic(self, temp_dir):
         from sklm.agents.registry import AgentRegistry
@@ -602,7 +602,7 @@ class TestAgentRegistry:
         from sklm.agents.registry import AgentRegistry
         (temp_dir / ".github").mkdir()
         registry = AgentRegistry()
-        assert registry.detect(temp_dir) is None
+        assert registry.detect(temp_dir) == []
 
 
 # ─── GenericAdapter ──────────────────────────────────────────────────────────
@@ -698,18 +698,208 @@ class TestAgentKind:
 
     def test_workspace_config_validates_agent(self, temp_dir):
         from sklm.models import WorkspaceConfig
-        config = WorkspaceConfig(agent="claude")
-        assert config.agent == "claude"
+        config = WorkspaceConfig(agents=["claude"])
+        assert config.agents == ["claude"]
 
     def test_workspace_config_rejects_unknown(self, temp_dir):
         from sklm.models import WorkspaceConfig
         with pytest.raises(ValueError, match="Unknown agent"):
-            WorkspaceConfig(agent="nonexistent-agent")
+            WorkspaceConfig(agents=["nonexistent-agent"])
 
     def test_workspace_config_accepts_none(self, temp_dir):
         from sklm.models import WorkspaceConfig
-        config = WorkspaceConfig(agent="none")
-        assert config.agent == "none"
+        config = WorkspaceConfig(agents=["none"])
+        assert config.agents == ["none"]
+
+
+# ─── Multi-agent / Tests additionnels ──────────────────────────────────────
+
+
+class TestMultiAgentWorkspaceConfig:
+    def test_default_agents_list(self):
+        config = WorkspaceConfig()
+        assert config.agents == ["none"]
+
+    def test_single_agent(self):
+        config = WorkspaceConfig(agents=["opencode"])
+        assert config.agents == ["opencode"]
+
+    def test_multiple_agents(self):
+        config = WorkspaceConfig(agents=["opencode", "claude"])
+        assert config.agents == ["opencode", "claude"]
+
+    def test_rejects_unknown_agent(self):
+        with pytest.raises(ValueError, match="Unknown agent"):
+            WorkspaceConfig(agents=["nonexistent"])
+
+    def test_accepts_none_in_list(self):
+        config = WorkspaceConfig(agents=["none"])
+        assert config.agents == ["none"]
+
+    def test_yaml_round_trip_multiple(self, temp_dir):
+        config = WorkspaceConfig(agents=["cursor", "gemini"])
+        path = temp_dir / "sklm.yaml"
+        config.to_yaml(path)
+        loaded = WorkspaceConfig.from_yaml(path)
+        assert loaded.agents == ["cursor", "gemini"]
+
+
+class TestMultiAgentWorkspace:
+    def test_set_agents_replaces(self, temp_dir):
+        ws = Workspace(temp_dir)
+        ws.init()
+        ws.set_agents(["cursor", "gemini"])
+        config = ws.load_config()
+        assert config.agents == ["cursor", "gemini"]
+
+    def test_add_agent(self, temp_dir):
+        ws = Workspace(temp_dir)
+        ws.init(agents=["opencode"])
+        ws.add_agent("claude")
+        config = ws.load_config()
+        assert config.agents == ["opencode", "claude"]
+
+    def test_add_agent_idempotent(self, temp_dir):
+        ws = Workspace(temp_dir)
+        ws.init(agents=["opencode"])
+        ws.add_agent("opencode")
+        config = ws.load_config()
+        assert config.agents == ["opencode"]
+
+    def test_remove_agent(self, temp_dir):
+        ws = Workspace(temp_dir)
+        ws.init(agents=["opencode", "claude"])
+        ws.remove_agent("claude")
+        config = ws.load_config()
+        assert config.agents == ["opencode"]
+
+    def test_remove_agent_raises_if_not_found(self, temp_dir):
+        ws = Workspace(temp_dir)
+        ws.init(agents=["opencode"])
+        with pytest.raises(KeyError):
+            ws.remove_agent("nonexistent")
+
+
+class TestMultiAgentCLI:
+    """CLI tests for multi-agent init, add/remove, warnings."""
+
+    @pytest.fixture(autouse=True)
+    def setup(self, monkeypatch, temp_dir):
+        monkeypatch.setattr("sklm.store.SKLM_HOME", temp_dir / ".sklm-home")
+        monkeypatch.setattr("sklm.core.registry.REGISTRIES_PATH", temp_dir / ".sklm-home" / "registries.yaml")
+        monkeypatch.setattr("sklm.core.registry.REGISTRY_CACHE", temp_dir / ".sklm-home" / "cache")
+        monkeypatch.setattr("sklm.cli.main._sklm", None)
+
+    def test_init_repeatable_agent(self, temp_dir):
+        """sklm init --agent opencode --agent claude doit configurer les deux."""
+        from typer.testing import CliRunner
+        from sklm.cli.main import app
+        runner = CliRunner()
+        result = runner.invoke(app, ["init", "--agent", "opencode", "--agent", "claude"])
+        assert result.exit_code == 0
+        assert "opencode" in result.output
+        assert "claude" in result.output
+        from sklm.api import Sklm
+        f = Sklm()
+        config = f.workspace.load_config()
+        assert config.agents == ["opencode", "claude"]
+
+    def test_init_multiple_agents_syncs_dirs(self, temp_dir):
+        """sklm init --agent opencode --agent claude doit créer les deux dossiers skills."""
+        from typer.testing import CliRunner
+        from sklm.cli.main import app
+        runner = CliRunner()
+        result = runner.invoke(app, ["init", "--agent", "opencode", "--agent", "claude"])
+        assert result.exit_code == 0
+        assert (temp_dir / ".opencode" / "skills").is_dir()
+        assert (temp_dir / ".claude" / "skills").is_dir()
+
+    def test_init_prompt_cancel(self, temp_dir):
+        """sklm init (sans --agent, sans dossier) avec cancel → agents: none."""
+        from typer.testing import CliRunner
+        from sklm.cli.main import app
+        runner = CliRunner()
+        result = runner.invoke(app, ["init"], input="c\n")
+        assert result.exit_code == 0
+        assert "none" in result.output
+        from sklm.api import Sklm
+        f = Sklm()
+        config = f.workspace.load_config()
+        assert config.agents == ["none"]
+
+    def test_init_prompt_selects_one(self, temp_dir):
+        """sklm init (sans --agent, sans dossier) avec choix 1 → opencode."""
+        from typer.testing import CliRunner
+        from sklm.cli.main import app
+        runner = CliRunner()
+        result = runner.invoke(app, ["init"], input="1\n")
+        assert result.exit_code == 0
+        assert "opencode" in result.output
+        from sklm.api import Sklm
+        f = Sklm()
+        config = f.workspace.load_config()
+        assert config.agents == ["opencode"]
+        assert (temp_dir / ".opencode" / "skills").is_dir()
+
+    def test_agent_add_command(self, temp_dir):
+        """sklm agent add claude après init doit configurer Claude."""
+        from typer.testing import CliRunner
+        from sklm.cli.main import app
+        runner = CliRunner()
+        runner.invoke(app, ["init", "--agent", "opencode"])
+        result = runner.invoke(app, ["agent", "add", "claude"])
+        assert result.exit_code == 0
+        from sklm.api import Sklm
+        f = Sklm()
+        config = f.workspace.load_config()
+        assert "claude" in config.agents
+        assert (temp_dir / ".claude" / "skills").is_dir()
+
+    def test_agent_add_unknown(self, temp_dir):
+        """sklm agent add unknown doit échouer."""
+        from typer.testing import CliRunner
+        from sklm.cli.main import app
+        runner = CliRunner()
+        runner.invoke(app, ["init", "--agent", "opencode"])
+        result = runner.invoke(app, ["agent", "add", "nonexistent"])
+        assert result.exit_code != 0
+        assert "Unknown" in result.output
+
+    def test_agent_remove_command(self, temp_dir):
+        """sklm agent remove claude après add doit retirer Claude de la config."""
+        from typer.testing import CliRunner
+        from sklm.cli.main import app
+        runner = CliRunner()
+        runner.invoke(app, ["init", "--agent", "opencode", "--agent", "claude"])
+        result = runner.invoke(app, ["agent", "remove", "claude"])
+        assert result.exit_code == 0
+        from sklm.api import Sklm
+        f = Sklm()
+        config = f.workspace.load_config()
+        assert config.agents == ["opencode"]
+
+    def test_add_warns_when_no_agent(self, temp_dir, fake_skill_dir):
+        """sklm add sans agent configuré doit afficher un avertissement."""
+        from typer.testing import CliRunner
+        from sklm.cli.main import app
+        runner = CliRunner()
+        runner.invoke(app, ["init"], input="c\n")
+        runner.invoke(app, ["global", "add", "skill", str(fake_skill_dir), "--name", "test-skill"])
+        result = runner.invoke(app, ["add", "skill", "test-skill"])
+        assert result.exit_code == 0
+        assert "no agent configured" in result.output.lower() or "Warning" in result.output
+
+    def test_rm_warns_when_no_agent(self, temp_dir, fake_skill_dir):
+        """sklm rm sans agent configuré doit afficher un avertissement."""
+        from typer.testing import CliRunner
+        from sklm.cli.main import app
+        runner = CliRunner()
+        runner.invoke(app, ["init"], input="c\n")
+        runner.invoke(app, ["global", "add", "skill", str(fake_skill_dir), "--name", "test-skill"])
+        runner.invoke(app, ["add", "skill", "test-skill"])
+        result = runner.invoke(app, ["rm", "skill", "test-skill"])
+        assert result.exit_code == 0
+        assert "no agent configured" in result.output.lower() or "Warning" in result.output
 
 
 # ─── Integration: CLI ────────────────────────────────────────────────────────
@@ -757,6 +947,7 @@ class TestCLIIntegration:
         result = runner.invoke(app, ["init", "--agent", "opencode"])
         assert result.exit_code == 0
         assert "opencode" in result.output
+        assert "Agents" in result.output
 
     def test_global_ls_rm(self, temp_dir, fake_skill_dir, monkeypatch):
         from typer.testing import CliRunner
@@ -1008,12 +1199,13 @@ class TestCLIIntegration:
         assert "Install" in result.output
 
     def test_backward_compat_opencode_yaml(self, temp_dir):
-        """Existing agent: opencode in YAML should load without error."""
+        """Existing agent: opencode in YAML should load without error (ignored)."""
         from sklm.models import WorkspaceConfig
         path = temp_dir / "sklm.yaml"
         path.write_text("agent: opencode\nversion: 1\nresources: []\nlinks: []\n")
         config = WorkspaceConfig.from_yaml(path)
-        assert config.agent == "opencode"
+        assert config.agents == ["none"]
+        assert config.version == 1
 
     def test_backward_compat_init_opencode(self, temp_dir):
         """sklm init in a project with .opencode/ should work."""
@@ -1024,6 +1216,7 @@ class TestCLIIntegration:
         result = runner.invoke(app, ["init"])
         assert result.exit_code == 0
         assert "opencode" in result.output
+        assert "Agents" in result.output
 
     def test_add_with_from_flag(self, temp_dir):
         """sklm add --help doit mentionner --from."""
@@ -1263,7 +1456,7 @@ class TestCLIIntegration:
         ref.kind = ResourceKind.skill
         (temp_dir / ".opencode").mkdir()
         f = Sklm()
-        f.init_workspace("none")
+        f.init_workspace(["none"])
         with unittest.mock.patch.object(f, "install") as mock_install:
             mock_install.return_value = ref
             with unittest.mock.patch("sklm.api._link_resource") as mock_link:
@@ -1293,3 +1486,230 @@ class TestCLIIntegration:
         assert "migrate" in result.output
         import shutil
         shutil.rmtree(test_skill_dir)
+
+
+# ─── Update Checker ──────────────────────────────────────────────────────────
+
+
+class TestUpdateChecker:
+    """Tests for sklm.core.update.UpdateChecker."""
+
+    @pytest.fixture(autouse=True)
+    def setup(self, monkeypatch, temp_dir):
+        cache_dir = temp_dir / ".sklm-cache"
+        monkeypatch.setattr("sklm.core.update.CACHE_DIR", cache_dir)
+        monkeypatch.setattr("sklm.core.update.CACHE_FILE", cache_dir / "update-check")
+        monkeypatch.setattr("sklm.__version__", "0.1.0")
+
+    def test_parse_version_strips_v_prefix(self):
+        from sklm.core.update import UpdateChecker
+        assert UpdateChecker._parse_version("v0.2.0") == (0, 2, 0)
+        assert UpdateChecker._parse_version("v1.0.0") == (1, 0, 0)
+
+    def test_parse_version_no_prefix(self):
+        from sklm.core.update import UpdateChecker
+        assert UpdateChecker._parse_version("0.2.0") == (0, 2, 0)
+
+    def test_parse_version_strips_suffix(self):
+        from sklm.core.update import UpdateChecker
+        assert UpdateChecker._parse_version("v0.2.0-alpha") == (0, 2, 0)
+        assert UpdateChecker._parse_version("v0.2.0+build") == (0, 2, 0)
+
+    def test_parse_version_invalid_returns_zero(self):
+        from sklm.core.update import UpdateChecker
+        assert UpdateChecker._parse_version("invalid") == (0,)
+
+    def test_is_newer_returns_true(self):
+        from sklm.core.update import UpdateChecker
+        checker = UpdateChecker()
+        assert checker._is_newer("v0.2.0") is True
+        assert checker._is_newer("v1.0.0") is True
+
+    def test_is_newer_returns_false(self):
+        from sklm.core.update import UpdateChecker
+        checker = UpdateChecker()
+        assert checker._is_newer("v0.1.0") is False
+        assert checker._is_newer("v0.0.9") is False
+
+    def test_should_check_no_cache(self, temp_dir):
+        from sklm.core.update import UpdateChecker
+        checker = UpdateChecker()
+        assert checker._should_check() is True
+
+    def test_should_check_cached_recently(self, temp_dir, monkeypatch):
+        from sklm.core.update import UpdateChecker
+        cache = temp_dir / ".sklm-cache" / "update-check"
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        cache.write_text("0")
+        checker = UpdateChecker()
+        assert checker._should_check() is False
+
+    def test_should_check_cache_expired(self, temp_dir, monkeypatch):
+        from sklm.core.update import UpdateChecker
+        import os
+        import time
+        cache = temp_dir / ".sklm-cache" / "update-check"
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        cache.write_text("0")
+        old = time.time() - 90000
+        os.utime(cache, (old, old))
+        checker = UpdateChecker()
+        assert checker._should_check() is True
+
+    def test_update_cache_creates_file(self, temp_dir):
+        from sklm.core.update import UpdateChecker
+        checker = UpdateChecker()
+        checker._update_cache()
+        assert checker.cache_path.exists()
+
+    def test_check_returns_none_when_cached(self, temp_dir, monkeypatch):
+        from sklm.core.update import UpdateChecker
+        cache = temp_dir / ".sklm-cache" / "update-check"
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        cache.write_text("9999999999")
+        checker = UpdateChecker()
+        assert checker.check() is None
+
+    def test_check_returns_latest_when_newer(self, temp_dir, monkeypatch):
+        from sklm.core.update import UpdateChecker
+        monkeypatch.setattr(
+            "sklm.core.update.UpdateChecker._get_latest_version_via_api",
+            lambda self: "v0.2.0",
+        )
+        checker = UpdateChecker()
+        result = checker.check()
+        assert result == "v0.2.0"
+
+    def test_check_returns_none_when_same_version(self, temp_dir, monkeypatch):
+        from sklm.core.update import UpdateChecker
+        monkeypatch.setattr(
+            "sklm.core.update.UpdateChecker._get_latest_version_via_api",
+            lambda self: "v0.1.0",
+        )
+        checker = UpdateChecker()
+        assert checker.check() is None
+
+    def test_find_repo_root_returns_none_when_no_git(self, temp_dir, monkeypatch):
+        from sklm.core.update import UpdateChecker
+        monkeypatch.setattr("sklm.__file__", str(temp_dir / "sklm" / "__init__.py"))
+        checker = UpdateChecker()
+        assert checker.find_repo_root() is None
+
+    def test_find_repo_root_finds_parent_git(self, temp_dir, monkeypatch):
+        from sklm.core.update import UpdateChecker
+        git_dir = temp_dir / ".git"
+        git_dir.mkdir()
+        pkg_dir = temp_dir / "src" / "sklm"
+        pkg_dir.mkdir(parents=True)
+        monkeypatch.setattr("sklm.__file__", str(pkg_dir / "__init__.py"))
+        checker = UpdateChecker()
+        assert checker.find_repo_root() == temp_dir.resolve()
+
+
+class TestUpdateCLI:
+    """CLI tests for update commands and passive notice."""
+
+    @pytest.fixture(autouse=True)
+    def setup(self, monkeypatch, temp_dir):
+        monkeypatch.setattr("sklm.store.SKLM_HOME", temp_dir / ".sklm-home")
+        monkeypatch.setattr("sklm.core.registry.REGISTRIES_PATH", temp_dir / ".sklm-home" / "registries.yaml")
+        monkeypatch.setattr("sklm.core.registry.REGISTRY_CACHE", temp_dir / ".sklm-home" / "cache")
+        monkeypatch.setattr("sklm.cli.main._sklm", None)
+        monkeypatch.setattr("sklm.core.update.CACHE_DIR", temp_dir / ".sklm-cache")
+
+    def test_update_check_no_update(self, temp_dir, monkeypatch):
+        monkeypatch.setattr("sklm.__version__", "0.1.0")
+        monkeypatch.setattr(
+            "sklm.core.update.UpdateChecker._get_latest_version_via_api",
+            lambda self: "v0.1.0",
+        )
+        from typer.testing import CliRunner
+        from sklm.cli.main import app
+        runner = CliRunner()
+        result = runner.invoke(app, ["update", "--check"])
+        assert result.exit_code == 0
+        assert "up to date" in result.output.lower()
+
+    def test_update_check_new_version(self, temp_dir, monkeypatch):
+        monkeypatch.setattr("sklm.__version__", "0.1.0")
+        monkeypatch.setattr(
+            "sklm.core.update.UpdateChecker._get_latest_version_via_api",
+            lambda self: "v0.2.0",
+        )
+        from typer.testing import CliRunner
+        from sklm.cli.main import app
+        runner = CliRunner()
+        result = runner.invoke(app, ["update", "--check", "--force"])
+        assert result.exit_code == 0
+        assert "v0.2.0" in result.output
+
+    def test_update_no_repo(self, temp_dir, monkeypatch):
+        monkeypatch.setattr("sklm.__version__", "0.1.0")
+        monkeypatch.setattr(
+            "sklm.core.update.UpdateChecker._get_latest_version_via_api",
+            lambda self: "v0.2.0",
+        )
+        monkeypatch.setattr(
+            "sklm.core.update.UpdateChecker.find_repo_root",
+            lambda self: None,
+        )
+        from typer.testing import CliRunner
+        from sklm.cli.main import app
+        runner = CliRunner()
+        result = runner.invoke(app, ["update", "--force"])
+        assert result.exit_code == 1
+        assert "Cannot find" in result.output
+
+    def test_update_success(self, temp_dir, monkeypatch):
+        from unittest.mock import Mock
+        monkeypatch.setattr("sklm.__version__", "0.1.0")
+        monkeypatch.setattr(
+            "sklm.core.update.UpdateChecker._get_latest_version_via_api",
+            lambda self: "v0.2.0",
+        )
+        repo_dir = temp_dir / "repo"
+        repo_dir.mkdir()
+        (repo_dir / ".git").mkdir()
+        monkeypatch.setattr(
+            "sklm.core.update.UpdateChecker.find_repo_root",
+            lambda self: repo_dir,
+        )
+        monkeypatch.setattr(
+            "sklm.core.update.UpdateChecker.is_editable",
+            lambda self: True,
+        )
+        mock_run = Mock(return_value=Mock(returncode=0))
+        monkeypatch.setattr("sklm.cli.main.subprocess.run", mock_run)
+        from typer.testing import CliRunner
+        from sklm.cli.main import app
+        runner = CliRunner()
+        result = runner.invoke(app, ["update", "--force"])
+        assert result.exit_code == 0, f"Failed: {result.output}"
+        assert "Updated" in result.output
+
+    def test_update_git_fetch_fails(self, temp_dir, monkeypatch):
+        from unittest.mock import Mock
+        monkeypatch.setattr("sklm.__version__", "0.1.0")
+        monkeypatch.setattr(
+            "sklm.core.update.UpdateChecker._get_latest_version_via_api",
+            lambda self: "v0.2.0",
+        )
+        repo_dir = temp_dir / "repo"
+        repo_dir.mkdir()
+        (repo_dir / ".git").mkdir()
+        monkeypatch.setattr(
+            "sklm.core.update.UpdateChecker.find_repo_root",
+            lambda self: repo_dir,
+        )
+        mock_run = Mock(return_value=Mock(returncode=1, stderr=b"error"))
+        monkeypatch.setattr("sklm.cli.main.subprocess.run", mock_run)
+        from typer.testing import CliRunner
+        from sklm.cli.main import app
+        runner = CliRunner()
+        result = runner.invoke(app, ["update", "--force"])
+        assert result.exit_code == 1
+
+    def test_sklm_no_update_check_env(self, temp_dir, monkeypatch):
+        monkeypatch.setenv("SKLM_NO_UPDATE_CHECK", "1")
+        from sklm.cli.main import _show_update_notice
+        _show_update_notice()
