@@ -57,8 +57,7 @@ That's it. Your AI agent can now use the skill.
 
 ## Usage
 
-<details>
-<summary><b>Workspace setup</b></summary>
+### Workspace setup
 
 ```bash
 sklm init                          # auto-detect or prompt for agent(s)
@@ -70,10 +69,7 @@ sklm status --repair               # fix broken symlinks
 
 If no agent directory is detected, Sklm shows an interactive prompt. Select one or more agents (e.g. `1,3,5`) or press `c` to skip.
 
-</details>
-
-<details>
-<summary><b>Global store (install once, activate anywhere)</b></summary>
+### Global store (install once, activate anywhere)
 
 ```bash
 sklm install skill find-skills \
@@ -87,10 +83,8 @@ sklm migrate --from-registry my-reg            # import from a local registry
 sklm migrate --force-cleanup                   # delete sources after import
 ```
 
-</details>
 
-<details>
-<summary><b>Project resources (activate per project)</b></summary>
+### Project resources (activate per project)
 
 ```bash
 sklm add skill my-skill                        # resolve → store → link → sync
@@ -102,10 +96,8 @@ sklm info skill my-skill                       # origin, path, link status
 sklm rm skill my-skill                         # unlink + clean agent config
 ```
 
-</details>
 
-<details>
-<summary><b>Registry discovery</b></summary>
+### Registry discovery
 
 ```bash
 sklm registry add ~/my-skills                           # local folder
@@ -121,10 +113,7 @@ You can also reference skills by registry when adding:
 sklm add skill my-registry:my-skill
 ```
 
-</details>
-
-<details>
-<summary><b>Agent management</b></summary>
+### Agent management
 
 ```bash
 sklm agent detect                    # identify the active agent
@@ -135,10 +124,7 @@ sklm agent sync                      # force re-sync all linked skills
 sklm agent sync --dry-run            # preview without applying
 ```
 
-</details>
-
-<details>
-<summary><b>Telemetry</b></summary>
+### Telemetry
 
 Anonymous usage data via Umami. Opt out anytime.
 
@@ -150,9 +136,8 @@ sklm telemetry on                    # re-enable
 
 Telemetry is also disabled by setting `SKLM_TELEMETRY=0` in your environment.
 
-</details>
 
-## Updating
+### Updating
 
 sklm checks for new versions automatically after every command (once per day).
 When a new release is available, a notice is shown with upgrade instructions.
@@ -171,7 +156,7 @@ export SKLM_NO_UPDATE_CHECK=1
 
 Updates are fetched from [GitHub Releases](https://github.com/Auran0s/Sklm/releases).
 
-## Supported Agents
+### Supported Agents
 
 | Agent | Config dir | Skills path | Auto-detected |
 |---|---|---|---|
@@ -189,7 +174,7 @@ GitHub Copilot requires `sklm init --agent github-copilot` because `.github/` ex
 > [!TIP]
 > `sklm init` without `--agent` shows an interactive prompt if no agent directory is found. Use `--agent` for non-interactive setups.
 
-## How it Works
+### How it Works
 
 Sklm manages three locations to keep skills organized:
 
@@ -217,7 +202,7 @@ Running `sklm add skill my-skill` does four things in sequence:
 
 Removal (`sklm rm`) reverses steps 3 and 4. The global store is untouched, so skills stay available for other projects.
 
-## Development
+### Development
 
 ```bash
 pip install -e .                    # editable install
@@ -227,7 +212,7 @@ python3 -m pytest tests/ -k <pattern>   # run a subset
 sklm --version                      # check installed version
 ```
 
-## Troubleshooting
+### Troubleshooting
 
 **"No Sklm workspace found"**
 Run `sklm init` first. It creates the `.sklm/` directory and configures your agent.
