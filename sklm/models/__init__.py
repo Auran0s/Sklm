@@ -85,16 +85,15 @@ class WorkspaceConfig(BaseModel):
     @classmethod
     def agents_must_be_known(cls, v: list[str]) -> list[str]:
         known = ", ".join(m.value for m in AgentKind)
-        for agent in v:
-            if agent == "none":
-                continue
+        real = [a for a in v if a != "none"]
+        for agent in real:
             try:
                 AgentKind(agent)
             except ValueError:
                 raise ValueError(
                     f"Unknown agent '{agent}'. Known agents: {known}"
                 )
-        return v
+        return real if real else ["none"]
 
     @classmethod
     def from_yaml(cls, path: Path) -> "WorkspaceConfig":
