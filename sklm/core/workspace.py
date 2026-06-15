@@ -35,15 +35,19 @@ class Workspace:
 
     def add_agent(self, agent: str) -> None:
         config = self.load_config()
+        if "none" in config.agents:
+            config.agents = [a for a in config.agents if a != "none"]
         if agent not in config.agents:
             config.agents.append(agent)
-            self._save_config(config)
+        self._save_config(config)
 
     def remove_agent(self, agent: str) -> None:
         config = self.load_config()
         if agent not in config.agents:
             raise KeyError(f"Agent '{agent}' not found in workspace config")
         config.agents.remove(agent)
+        if not config.agents:
+            config.agents = ["none"]
         self._save_config(config)
 
     def init(self, agents: list[str] | None = None) -> WorkspaceConfig:

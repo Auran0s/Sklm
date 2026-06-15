@@ -743,6 +743,22 @@ class TestMultiAgentWorkspaceConfig:
         loaded = WorkspaceConfig.from_yaml(path)
         assert loaded.agents == ["cursor", "gemini"]
 
+    def test_strips_none_when_real_agents_present(self):
+        config = WorkspaceConfig(agents=["none", "opencode"])
+        assert config.agents == ["opencode"]
+
+    def test_strips_none_from_mixed_list(self):
+        config = WorkspaceConfig(agents=["none", "opencode", "claude"])
+        assert config.agents == ["opencode", "claude"]
+
+    def test_normalizes_empty_list_to_none(self):
+        config = WorkspaceConfig(agents=[])
+        assert config.agents == ["none"]
+
+    def test_collapses_duplicate_none(self):
+        config = WorkspaceConfig(agents=["none", "none"])
+        assert config.agents == ["none"]
+
 
 class TestMultiAgentWorkspace:
     def test_set_agents_replaces(self, temp_dir):
@@ -778,6 +794,20 @@ class TestMultiAgentWorkspace:
         ws.init(agents=["opencode"])
         with pytest.raises(KeyError):
             ws.remove_agent("nonexistent")
+
+    def test_add_agent_to_none_workspace_strips_sentinel(self, temp_dir):
+        ws = Workspace(temp_dir)
+        ws.init(agents=["none"])
+        ws.add_agent("opencode")
+        config = ws.load_config()
+        assert config.agents == ["opencode"]
+
+    def test_remove_last_agent_resets_to_none(self, temp_dir):
+        ws = Workspace(temp_dir)
+        ws.init(agents=["opencode"])
+        ws.remove_agent("opencode")
+        config = ws.load_config()
+        assert config.agents == ["none"]
 
 
 class TestMultiAgentCLI:
