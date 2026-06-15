@@ -260,9 +260,9 @@
       <a href="#" class="font-display text-sm font-semibold tracking-tight text-white/90">Sklm</a>
 
       <div class="hidden md:flex items-center gap-6">
+        <a href="#quickstart" data-umami-event="nav-click" data-umami-event-section="quickstart" class="text-xs font-medium text-white/40 hover:text-white/80 transition-colors duration-300">Quickstart</a>
         <a href="#features" data-umami-event="nav-click" data-umami-event-section="features" class="text-xs font-medium text-white/40 hover:text-white/80 transition-colors duration-300">Features</a>
         <a href="#agents" data-umami-event="nav-click" data-umami-event-section="agents" class="text-xs font-medium text-white/40 hover:text-white/80 transition-colors duration-300">Agents</a>
-        <a href="#quickstart" data-umami-event="nav-click" data-umami-event-section="quickstart" class="text-xs font-medium text-white/40 hover:text-white/80 transition-colors duration-300">Quickstart</a>
         <a href="https://github.com/Auran0s/sklm" target="_blank" rel="noopener noreferrer" data-umami-event="nav-click" data-umami-event-section="github" class="text-xs font-medium text-white/40 hover:text-white/80 transition-colors duration-300">GitHub</a>
       </div>
 
@@ -276,9 +276,9 @@
   <!-- === NAV OVERLAY === -->
   <div id="navOverlay" class="nav-overlay fixed inset-0 glass-overlay bg-black/80 z-40 flex flex-col items-center justify-center">
     <div class="flex flex-col items-center gap-8">
+      <a href="#quickstart" data-umami-event="nav-click" data-umami-event-section="quickstart" class="nav-link text-4xl font-display font-semibold text-white/90 hover:text-white transition-colors">Quickstart</a>
       <a href="#features" data-umami-event="nav-click" data-umami-event-section="features" class="nav-link text-4xl font-display font-semibold text-white/90 hover:text-white transition-colors">Features</a>
       <a href="#agents" data-umami-event="nav-click" data-umami-event-section="agents" class="nav-link text-4xl font-display font-semibold text-white/90 hover:text-white transition-colors">Agents</a>
-      <a href="#quickstart" data-umami-event="nav-click" data-umami-event-section="quickstart" class="nav-link text-4xl font-display font-semibold text-white/90 hover:text-white transition-colors">Quickstart</a>
       <a href="https://github.com/Auran0s/sklm" target="_blank" rel="noopener noreferrer" data-umami-event="nav-click" data-umami-event-section="github" class="nav-link text-4xl font-display font-semibold text-white/90 hover:text-white transition-colors">GitHub</a>
     </div>
   </div>
@@ -311,6 +311,28 @@
 
     <div class="absolute bottom-10 left-1/2 -translate-x-1/2 scroll-indicator">
       <i class="ph ph-chevron-down text-white/30 text-xl"></i>
+    </div>
+  </section>
+
+  <!-- === QUICKSTART === -->
+  <section id="quickstart" class="relative z-10 py-32 px-4 max-w-4xl mx-auto">
+    <div class="text-center mb-16 reveal">
+      <span class="inline-flex items-center rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.2em] font-medium bg-white/[0.06] ring-1 ring-white/10 text-white/50 mb-6">Quickstart</span>
+      <h2 class="font-display text-4xl md:text-6xl font-semibold text-white leading-tight">Up and running in seconds</h2>
+    </div>
+
+    <div class="reveal reveal-delay-1">
+      <div class="p-[1.5px] rounded-[var(--outer-radius)] bg-white/5 border border-white/10 glass-card">
+        <div class="rounded-[var(--inner-radius)] bg-[#0a0a0a] p-6 md:p-8 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]">
+          <div class="flex items-center gap-2 mb-5">
+            <span class="w-3 h-3 rounded-full bg-red-500/60"></span>
+            <span class="w-3 h-3 rounded-full bg-yellow-500/60"></span>
+            <span class="w-3 h-3 rounded-full bg-emerald-500/60"></span>
+            <span class="font-mono text-xs text-white/30 ml-2">terminal</span>
+          </div>
+          <pre id="terminal" class="font-mono text-sm md:text-base leading-relaxed text-white/80 min-h-[8rem]"><span id="terminalContent"></span><span id="terminalCursor" class="cursor-blink text-white/60">▎</span></pre>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -625,29 +647,7 @@
     </div>
   </section>
 
-  <!-- === QUICKSTART === -->
-  <section id="quickstart" class="relative z-10 py-32 px-4 max-w-4xl mx-auto">
-    <div class="text-center mb-16 reveal">
-      <span class="inline-flex items-center rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.2em] font-medium bg-white/[0.06] ring-1 ring-white/10 text-white/50 mb-6">Quickstart</span>
-      <h2 class="font-display text-4xl md:text-6xl font-semibold text-white leading-tight">Up and running in seconds</h2>
-    </div>
 
-    <div class="reveal reveal-delay-1">
-      <div class="p-[1.5px] rounded-[var(--outer-radius)] bg-white/5 border border-white/10 glass-card">
-        <div class="rounded-[var(--inner-radius)] bg-[#0a0a0a] p-6 md:p-8 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]">
-          <div class="flex items-center gap-2 mb-5">
-            <span class="w-3 h-3 rounded-full bg-red-500/60"></span>
-            <span class="w-3 h-3 rounded-full bg-yellow-500/60"></span>
-            <span class="w-3 h-3 rounded-full bg-emerald-500/60"></span>
-            <span class="font-mono text-xs text-white/30 ml-2">terminal</span>
-          </div>
-          <pre id="terminal" class="font-mono text-sm md:text-base leading-relaxed text-white/80 min-h-[8rem]">
-            <span class="text-white/30">$ </span><span id="terminalContent"></span><span id="terminalCursor" class="cursor-blink text-white/60">▎</span>
-          </pre>
-        </div>
-      </div>
-    </div>
-  </section>
 
   <!-- === FOOTER === -->
   <footer class="relative z-10 border-t border-white/5 py-12 px-4">
