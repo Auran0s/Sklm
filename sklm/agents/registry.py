@@ -27,8 +27,8 @@ class AgentRegistry:
             data = yaml.safe_load(f)
         self._agents = (data or {}).get("agents", {})
 
-    def detect(self, project_root: Path) -> Optional[str]:
-        """Detect the active agent by checking for agent dirs in order."""
+    def detect_first(self, project_root: Path) -> Optional[str]:
+        """Detect the first active agent by checking for agent dirs in order."""
         for agent_id, config in self._agents.items():
             if config.get("detect") == "explicit":
                 continue
@@ -36,12 +36,26 @@ class AgentRegistry:
                 return agent_id
         return None
 
+    def detect(self, project_root: Path) -> list[str]:
+        """Return all detected agent IDs whose config directories exist."""
+        detected: list[str] = []
+        for agent_id, config in self._agents.items():
+            if config.get("detect") == "explicit":
+                continue
+            if (project_root / config["dir_name"]).is_dir():
+                detected.append(agent_id)
+        return detected
+
     def detect_adapter(self, project_root: Path) -> Optional[AgentAdapter]:
         """Detect active agent and return its adapter instance."""
-        agent_id = self.detect(project_root)
+        agent_id = self.detect_first(project_root)
         if agent_id:
             return self.get_adapter(agent_id)
         return None
+
+    def detect_all_adapters(self, project_root: Path) -> list[AgentAdapter]:
+        """Return adapters for all detected agent directories."""
+        return [self.get_adapter(aid) for aid in self.detect(project_root) if self.get_adapter(aid)]
 
     def get_adapter(self, agent_id: str) -> Optional[AgentAdapter]:
         """Return an adapter instance for the given agent ID."""

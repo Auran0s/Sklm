@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import subprocess
 import sys
 import time
 import traceback as tb_mod
@@ -19,6 +20,7 @@ from rich import print_json
 from sklm import __version__
 from sklm.api import Sklm
 from sklm.models import RegistryType, ResourceKind
+from sklm.agents.registry import AgentRegistry
 
 app = typer.Typer(
     name="sklm",
@@ -123,28 +125,86 @@ def main(
     _tracker_command = ctx.invoked_subcommand or ""
 
 
+def _prompt_agent_selection(f: Sklm) -> list[str]:
+    """Show interactive prompt for agent selection."""
+    registry = AgentRegistry()
+    agent_ids = registry.get_agent_ids()
+
+    console.print("\n[bold]No agent detected in this directory.[/]")
+    console.print("[dim]Which agent(s) are you using?[/]\n")
+
+    for i, aid in enumerate(agent_ids, 1):
+        config = registry.get_agent_config(aid)
+        label = f"{aid.replace('-', ' ').title():20s}"
+        dir_name = config.get("dir_name", "?") if config else "?"
+        console.print(f"  [{i}] {label}  [dim]({dir_name})[/]")
+
+    console.print(f"  [c] cancel  [dim](skip agent setup)[/]")
+
+    while True:
+        choice = typer.prompt("\nEnter numbers separated by commas (e.g. 1,3,5)", default="")
+        choice = choice.strip().lower()
+
+        if choice == "c":
+            console.print()
+            return ["none"]
+
+        selected: list[str] = []
+        parts = choice.replace(",", " ").split()
+        valid = True
+        for p in parts:
+            if p.isdigit():
+                idx = int(p) - 1
+                if 0 <= idx < len(agent_ids):
+                    selected.append(agent_ids[idx])
+                else:
+                    console.print(f"[red]✗[/] Invalid number: {p}")
+                    valid = False
+                    break
+            else:
+                console.print(f"[red]✗[/] Invalid input: '{p}'. Use numbers or 'c' to cancel.")
+                valid = False
+                break
+
+        if valid:
+            console.print()
+            return selected
+
+
 # ─── Workspace ───────────────────────────────────────────────────────────────
 
 
 @app.command()
 def init(
-    agent: Optional[str] = typer.Option(
-        None, "--agent", "-a", help="Agent to configure (auto-detect if omitted)"
+    agent: Optional[list[str]] = typer.Option(
+        None, "--agent", "-a", help="Agent(s) to configure (repeatable, auto-detect if omitted)"
     ),
 ):
     """Initialize a Sklm workspace in the current directory."""
     f = get_sklm()
     if f.workspace.exists():
         if agent:
-            f.set_agent(agent)
+            for a in agent:
+                f.workspace.add_agent(a)
             console.print("[yellow]⚠[/] Workspace already exists at [bold].sklm/[/]")
-            console.print(f"   Agent updated to: [cyan]{agent}[/]")
+            console.print(f"   Agents updated: [cyan]{', '.join(agent)}[/]")
             return
         console.print("[yellow]⚠[/] Workspace already exists at [bold].sklm/[/]")
         raise typer.Exit(1)
-    detected = f.init_workspace(agent)
+    if agent:
+        agents = agent
+    else:
+        detected = f.agent_registry.detect(f.project_root)
+        if detected:
+            agents = detected
+        else:
+            agents = _prompt_agent_selection(f)
+    detected = f.init_workspace(agents)
+    label = ", ".join(detected) if detected != ["none"] else "[yellow]none[/]"
     console.print("[green]✓[/] Workspace created at [bold].sklm/[/]")
-    console.print(f"   Agent: [cyan]{detected}[/]")
+    console.print(f"   Agents: [cyan]{label}[/]")
+    if detected == ["none"]:
+        console.print("   [dim]Run 'sklm init --agent <name>' to configure an agent later.[/]")
 
 
 @app.command()
@@ -169,7 +229,8 @@ def status(
     table = Table(title="Workspace Status")
     table.add_column("Property", style="cyan")
     table.add_column("Value", style="white")
-    table.add_row("Agent", state["agent"])
+    agents_label = ", ".join(state["agents"]) if state["agents"] != ["none"] else "[yellow]none[/]"
+    table.add_row("Agents", agents_label)
     table.add_row("Skills", str(state["skills"]))
     table.add_row("Total links", str(state["total_links"]))
     table.add_row("Broken links", str(state["broken_links"]))
@@ -538,10 +599,11 @@ def sync(
         raise typer.Exit(1) from e
     if dry_run:
         console.print("[blue]DRY-RUN[/]")
-        console.print(f"   Agent: {result['agent']}")
+        console.print(f"   Agents: {', '.join(result['agents'])}")
         console.print(f"   Skills to add: {', '.join(result['skills_to_add']) or 'none'}")
     else:
-        console.print(f"[green]✓[/] Synced with {result['agent']}")
+        agents_str = ", ".join(result["agents"])
+        console.print(f"[green]✓[/] Synced {len(result['agents'])} agent(s): {agents_str}")
 
 
 @agent_app.command("list")
@@ -570,6 +632,48 @@ def list_agents(
             status,
         )
     console.print(table)
+
+
+@agent_app.command("add")
+def agent_add(
+    name: str = typer.Argument(..., help="Agent name to add (e.g. opencode, claude)"),
+):
+    """Add an agent to the workspace config and sync skills."""
+    f = get_sklm()
+    registry = AgentRegistry()
+    if not registry.get_adapter(name):
+        known = ", ".join(registry.get_agent_ids())
+        console.print(f"[red]✗[/] Unknown agent '{name}'. Known agents: {known}")
+        raise typer.Exit(1)
+    try:
+        f.workspace.add_agent(name)
+    except ValueError as e:
+        if "Unknown agent" in str(e):
+            console.print(f"[red]✗[/] {e}")
+            raise typer.Exit(1) from e
+        raise
+    try:
+        f.agent_sync()
+    except RuntimeError:
+        pass
+    console.print(f"[green]✓[/] Agent [bold]{name}[/] added and synced.")
+
+
+@agent_app.command("remove")
+def agent_remove(
+    name: str = typer.Argument(..., help="Agent name to remove (e.g. claude)"),
+):
+    """Remove an agent from the workspace config and clean its skills."""
+    f = get_sklm()
+    try:
+        f.workspace.remove_agent(name)
+    except KeyError as e:
+        console.print(f"[red]✗[/] {e}")
+        raise typer.Exit(1) from e
+    adapter = f._find_adapter_by_name(name)
+    if adapter:
+        adapter.sync(f.project_root, [])
+    console.print(f"[green]✓[/] Agent [bold]{name}[/] removed. Skills cleaned.")
 
 
 @agent_app.command()
@@ -663,6 +767,124 @@ def telemetry_ping():
         raise typer.Exit(1)
 
 
+# ─── Update ─────────────────────────────────────────────────────────────────
+
+
+@app.command()
+def update(
+    check_only: bool = typer.Option(False, "--check", help="Check without upgrading"),
+    force: bool = typer.Option(False, "--force", help="Force re-check, ignore cache"),
+):
+    """Check for or install the latest version of sklm."""
+    from sklm.core.update import UpdateChecker
+
+    checker = UpdateChecker()
+
+    if force:
+        latest = checker.get_latest()
+        if latest is None:
+            console.print("[red]✗ Could not check for updates[/]")
+            raise typer.Exit(1)
+    else:
+        latest = checker.check()
+        if latest is None:
+            console.print(f"[green]✓[/] sklm is up to date (v{__version__})")
+            return
+
+    if not checker._is_newer(latest):
+        console.print(f"[green]✓[/] sklm is up to date (v{__version__})")
+        return
+
+    if check_only:
+        console.print(
+            f"[yellow]⚠[/] sklm [bold]v{latest}[/] available "
+            f"(current: v{__version__})"
+        )
+        return
+
+    repo_root = checker.find_repo_root()
+    if repo_root is None:
+        console.print("[red]✗[/] Cannot find the sklm git repository.")
+        console.print(f"   Reinstall from [link]{checker.github_repo_url}[/]")
+        raise typer.Exit(1)
+
+    tag = f"v{latest.lstrip('v')}"
+    console.print(f"Fetching tags from origin...")
+    try:
+        result = subprocess.run(
+            ["git", "fetch", "--tags"],
+            cwd=repo_root,
+            capture_output=True,
+            timeout=30,
+        )
+        if result.returncode != 0:
+            console.print(f"[red]✗[/] git fetch failed:\n{result.stderr.decode().strip()}")
+            raise typer.Exit(1)
+    except subprocess.TimeoutExpired:
+        console.print("[red]✗[/] git fetch timed out.")
+        raise typer.Exit(1)
+    except FileNotFoundError:
+        console.print("[red]✗[/] git not found.")
+        raise typer.Exit(1)
+
+    console.print(f"Checking out {tag}...")
+    try:
+        result = subprocess.run(
+            ["git", "checkout", tag],
+            cwd=repo_root,
+            capture_output=True,
+            timeout=30,
+        )
+        if result.returncode != 0:
+            console.print(f"[red]✗[/] git checkout failed:\n{result.stderr.decode().strip()}")
+            raise typer.Exit(1)
+    except subprocess.TimeoutExpired:
+        console.print("[red]✗[/] git checkout timed out.")
+        raise typer.Exit(1)
+
+    if checker.is_editable():
+        console.print(f"[green]✓[/] Updated to sklm [bold]v{latest}[/] (editable install)")
+    else:
+        console.print("Reinstalling...")
+        try:
+            result = subprocess.run(
+                [sys.executable, "-m", "pip", "install", "-e", str(repo_root)],
+                capture_output=True,
+                timeout=60,
+            )
+            if result.returncode != 0:
+                console.print(f"[red]✗[/] pip install failed:\n{result.stderr.decode().strip()}")
+                raise typer.Exit(1)
+        except subprocess.TimeoutExpired:
+            console.print("[red]✗[/] pip install timed out.")
+            raise typer.Exit(1)
+        console.print(f"[green]✓[/] Updated to sklm [bold]v{latest}[/]")
+
+
+# ─── Update Check ──────────────────────────────────────────────────────────
+
+
+def _show_update_notice() -> None:
+    if os.environ.get("SKLM_NO_UPDATE_CHECK", "").lower() in ("1", "true", "yes", "on"):
+        return
+    if any(arg in sys.argv for arg in ("--version", "-V")):
+        return
+    try:
+        from sklm.core.update import UpdateChecker
+
+        checker = UpdateChecker()
+        latest = checker.check()
+        if latest:
+            console.print()
+            console.print(
+                f"[yellow]⚠[/] sklm [bold]v{latest}[/] is available! "
+                f"(you're on v{__version__})"
+            )
+            console.print("   Run [bold]sklm update[/] to upgrade.")
+    except Exception:
+        pass
+
+
 # ─── Entrypoint ──────────────────────────────────────────────────────────────
 
 
@@ -711,6 +933,8 @@ def run():
                 _track_error_message,
                 _track_traceback,
             )
+
+    _show_update_notice()
 
     if error is not None:
         raise error

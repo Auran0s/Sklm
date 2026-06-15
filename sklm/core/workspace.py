@@ -28,16 +28,29 @@ class Workspace:
     def exists(self) -> bool:
         return self.sklm_dir.is_dir()
 
-    def set_agent(self, agent: str) -> None:
+    def set_agents(self, agents: list[str]) -> None:
         config = self.load_config()
-        config.agent = agent
+        config.agents = agents
         self._save_config(config)
 
-    def init(self, agent: str = "none") -> WorkspaceConfig:
+    def add_agent(self, agent: str) -> None:
+        config = self.load_config()
+        if agent not in config.agents:
+            config.agents.append(agent)
+            self._save_config(config)
+
+    def remove_agent(self, agent: str) -> None:
+        config = self.load_config()
+        if agent not in config.agents:
+            raise KeyError(f"Agent '{agent}' not found in workspace config")
+        config.agents.remove(agent)
+        self._save_config(config)
+
+    def init(self, agents: list[str] | None = None) -> WorkspaceConfig:
         self.sklm_dir.mkdir(parents=True, exist_ok=True)
         self.links_dir.mkdir(parents=True, exist_ok=True)
         (self.links_dir / "skills").mkdir(exist_ok=True)
-        config = WorkspaceConfig(agent=agent)
+        config = WorkspaceConfig(agents=agents or ["none"])
         self._save_config(config)
         return config
 

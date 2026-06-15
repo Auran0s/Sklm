@@ -5,6 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
+from rich.console import Console
+
 from sklm.models import Link, ResourceKind, ResourceRef
 from sklm.store import GlobalStore
 from sklm.core.workspace import Workspace
@@ -24,6 +26,8 @@ from sklm.core.linking import (
 from sklm.agents.base import AgentAdapter
 from sklm.agents.registry import AgentRegistry
 
+console = Console()
+
 
 class Sklm:
     """Main API for Sklm operations."""
@@ -34,24 +38,23 @@ class Sklm:
         self.workspace = Workspace(self.project_root)
         self.registry_manager = RegistryManager()
         self.agent_registry = AgentRegistry()
-        self._agent: Optional[AgentAdapter] = None
+        self._agents: Optional[list[AgentAdapter]] = None
 
-    def init_workspace(self, agent: Optional[str] = None) -> str:
-        if agent:
-            detected = agent
+    def init_workspace(self, agents: Optional[list[str]] = None) -> list[str]:
+        if agents is not None:
+            detected = agents
         else:
-            detected = self._detect_agent()
-        self.workspace.init(agent=detected)
-        if agent:
-            adapter = self._find_adapter_by_name(agent)
-        else:
-            adapter = self._detect_agent_adapter()
-        if adapter:
-            adapter.sync(self.project_root, [])
+            detected = self._detect_agents()
+        self.workspace.init(agents=detected)
+        if detected and detected != ["none"]:
+            for agent_name in detected:
+                adapter = self._find_adapter_by_name(agent_name)
+                if adapter:
+                    adapter.sync(self.project_root, [])
         return detected
 
     def set_agent(self, agent: str) -> str:
-        self.workspace.set_agent(agent)
+        self.workspace.set_agents([agent])
         return agent
 
     def get_status(self) -> dict:
@@ -67,7 +70,7 @@ class Sklm:
                 if d.is_dir() and (d / "SKILL.md").exists()
             ])
         return {
-            "agent": config.agent,
+            "agents": config.agents,
             "total_resources": len(resources),
             "skills": len([r for r in resources if r.kind == ResourceKind.skill]),
             "total_links": len(links),
@@ -197,7 +200,13 @@ class Sklm:
         try:
             self.agent_sync()
         except RuntimeError:
-            pass
+            console.print(
+                "[yellow]⚠[/] Skill installed but no agent configured — "
+                "not synced to any agent directory."
+            )
+            console.print(
+                "   Run [bold]sklm init --agent <name>[/] to configure an agent."
+            )
         return ref
 
     def remove(self, kind: ResourceKind, name: str) -> ResourceRef:
@@ -205,7 +214,13 @@ class Sklm:
         try:
             self.agent_sync()
         except RuntimeError:
-            pass
+            console.print(
+                "[yellow]⚠[/] Skill removed but no agent configured — "
+                "agent directory not cleaned."
+            )
+            console.print(
+                "   Run [bold]sklm init --agent <name>[/] to configure an agent."
+            )
         return ref
 
     def list(self, kind: Optional[ResourceKind] = None) -> list[ResourceRef]:
@@ -264,23 +279,43 @@ class Sklm:
         return self.agent_registry.list_agents(self.project_root)
 
     def get_agent(self) -> Optional[AgentAdapter]:
-        if self._agent is None:
-            self._agent = self._detect_agent_adapter()
-        return self._agent
+        agents = self.get_agents()
+        return agents[0] if agents else None
+
+    def get_agents(self) -> list[AgentAdapter]:
+        if self._agents is not None:
+            return self._agents
+        resolved: list[AgentAdapter] = []
+        seen: set[str] = set()
+        for adapter in self.agent_registry.detect_all_adapters(self.project_root):
+            resolved.append(adapter)
+            seen.add(type(adapter).__name__.replace("Adapter", "").lower())
+        config = self.workspace.load_config()
+        for agent_name in config.agents:
+            if agent_name == "none" or agent_name in seen:
+                continue
+            adapter = self._find_adapter_by_name(agent_name)
+            if adapter:
+                resolved.append(adapter)
+                seen.add(agent_name)
+        self._agents = resolved
+        return self._agents
 
     def agent_sync(self, dry_run: bool = False) -> dict:
-        agent = self.get_agent()
-        if not agent:
+        self._agents = None
+        agents = self.get_agents()
+        if not agents:
             raise RuntimeError("No agent detected. Run 'sklm init' first.")
         links = self.workspace.list_links()
         linked_skills = [l for l in links if l.kind == ResourceKind.skill]
         if dry_run:
             return {
-                "agent": type(agent).__name__,
+                "agents": [type(a).__name__ for a in agents],
                 "skills_to_add": [l.name for l in linked_skills],
             }
-        agent.sync(self.project_root, linked_skills)
-        return {"agent": type(agent).__name__, "synced": True}
+        for agent in agents:
+            agent.sync(self.project_root, linked_skills)
+        return {"agents": [type(a).__name__ for a in agents], "synced": True}
 
     def agent_detect(self) -> Optional[str]:
         adapter = self._detect_agent_adapter()
@@ -290,9 +325,9 @@ class Sklm:
 
     # ── Internal ─────────────────────────────────────────────────────────
 
-    def _detect_agent(self) -> str:
+    def _detect_agents(self) -> list[str]:
         detected = self.agent_registry.detect(self.project_root)
-        return detected or "none"
+        return detected or ["none"]
 
     def _detect_agent_adapter(self) -> Optional[AgentAdapter]:
         return self.agent_registry.detect_adapter(self.project_root)

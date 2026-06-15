@@ -77,22 +77,23 @@ class RegistrySource(BaseModel):
 
 class WorkspaceConfig(BaseModel):
     version: int = Field(default=1)
-    agent: str = Field(default="none", description="Active agent name")
+    agents: list[str] = Field(default=["none"], description="Active agent names")
     resources: list[ResourceRef] = Field(default_factory=list)
     links: list[Link] = Field(default_factory=list)
 
-    @field_validator("agent")
+    @field_validator("agents")
     @classmethod
-    def agent_must_be_known(cls, v: str) -> str:
-        if v == "none":
-            return v
-        try:
-            AgentKind(v)
-        except ValueError:
-            known = ", ".join(m.value for m in AgentKind)
-            raise ValueError(
-                f"Unknown agent '{v}'. Known agents: {known}"
-            )
+    def agents_must_be_known(cls, v: list[str]) -> list[str]:
+        known = ", ".join(m.value for m in AgentKind)
+        for agent in v:
+            if agent == "none":
+                continue
+            try:
+                AgentKind(agent)
+            except ValueError:
+                raise ValueError(
+                    f"Unknown agent '{agent}'. Known agents: {known}"
+                )
         return v
 
     @classmethod
