@@ -7,6 +7,8 @@
 ![Python version](https://img.shields.io/badge/Python->=3.9-3776AB?style=flat-square&logo=python&logoColor=fff)
 [![License](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](LICENSE)
 
+[![Product Hunt](https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1172208&theme=light)](https://www.producthunt.com/products/sklm?utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-sklm)
+
 [Why Sklm?](#why-sklm) • [Quickstart](#quickstart) • [Usage](#usage) • [Updating](#updating) • [Supported Agents](#supported-agents) • [How it Works](#how-it-works) • [Development](#development)
 
 </div>
