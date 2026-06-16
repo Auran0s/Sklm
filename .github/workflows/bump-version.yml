@@ -19,7 +19,7 @@ jobs:
         id: get_version
         run: |
           # Récupère le nom de la branche mergée depuis le message du dernier commit
-          BRANCH=$(git log -1 --pretty=%B | grep -oP "release/\K[\d]+\.[\d]+\.[\d]+")
+          BRANCH=$(git log -1 --pretty=%B | grep -oP "release/\K[\d]+\.[\d]+\.[\d]+" | head -1)
           
           if [ -z "$BRANCH" ]; then
             echo "❌ Pas de branche release/* détectée, skip."
@@ -27,7 +27,7 @@ jobs:
             exit 0
           fi
           
-          echo "version=${BRANCH}" >> $GITHUB_OUTPUT   # ← ajouter les accolades
+          echo "version=${BRANCH}" >> $GITHUB_OUTPUT
           echo "✓ Version détectée : ${BRANCH}"
 
       - name: Update pyproject.toml
@@ -40,7 +40,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git remote set-url origin https://x-access-token:${{ secrets.PAT }}@github.com/${{ github.repository }}  # ← et ici
+          git remote set-url origin https://x-access-token:${{ secrets.PAT }}@github.com/${{ github.repository }}
           git add pyproject.toml
           git commit -m "chore: bump version to ${{ steps.get_version.outputs.version }}"
           git tag "v${{ steps.get_version.outputs.version }}"
