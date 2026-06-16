@@ -70,3 +70,26 @@ Sklm is a Python 3.9+ CLI (Typer + Rich) that manages skills for AI agents via a
 - Umami Analytics; disable with `SKLM_TELEMETRY=0` (or `false`/`no`/`off`/`""`).
 - Also overridable via `SKLM_UMAMI_URL`, `SKLM_WEBSITE_ID`.
 - Tracker runs in a daemon thread with 2s timeout — never raises, never blocks.
+
+## Git Workflow
+When making code changes ALWAYS follow this process:
+
+1. Ensure current branch is committed if not do not continue until the user has committed and pushed the changes.
+
+2. Create a new branch before editing:
+   git checkout -b agent/<short-task-name>
+
+3. Never commit directly to main or master.
+
+4. Use clear commit messages:
+   feat: ...
+   fix: ...
+   refactor: ...
+
+## Mandatory Rules
+
+These rules must always be followed:
+- NEVER make changes unless the current branch is committed.
+- ALWAYS create a git branch before editing code.
+- NEVER modify protected branches.
+- ALWAYS run tests before committing.
