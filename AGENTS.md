@@ -93,3 +93,5 @@ These rules must always be followed:
 - ALWAYS create a git branch before editing code.
 - NEVER modify protected branches.
 - ALWAYS run tests before committing.
+- ALWAYS check if the code is commited.
+- NEVER archive changes before committing.
