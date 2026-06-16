@@ -32,6 +32,7 @@ Sklm keeps a global library in `~/.sklm/`, then lets you pick which skills each 
 - **Auto-sync** — `sklm add` and `sklm rm` automatically update the agent's skills directory. No manual copying.
 - **Registry discovery** — index local folders or git repos as searchable skill catalogs.
 - **Git repo installation** — `sklm add --from` clones a repo and figures out where the skill lives.
+- **Per-agent skill variants** — a single skill can ship agent-specific file overrides in a `variants/` subdirectory. Each agent receives the version tuned for it.
 
 ## Installation
 
@@ -98,6 +99,34 @@ sklm info skill my-skill                       # origin, path, link status
 sklm rm skill my-skill                         # unlink + clean agent config
 ```
 
+
+### Skill variants (authoring)
+
+A skill can ship agent-specific overrides using a `variants/` subdirectory inside the skill. When synced, the base skill is copied first, then any files from `variants/<agent-id>/` are merged on top.
+
+```
+my-skill/
+  SKILL.md                 # fallback for any agent
+  references/
+    tools.md
+  variants/
+    opencode/
+      SKILL.md             # overrides root SKILL.md for OpenCode
+    claude/
+      SKILL.md             # overrides it for Claude Code
+      references/
+        claude-only.md     # additional file, only for Claude
+```
+
+- Files in the variant override same-named files from the base.
+- Files only in the variant are added.
+- Files only in the base pass through untouched.
+- `variants/` itself is never copied to the agent's config directory.
+- If no variant exists for an agent, the base skill is used as-is.
+
+Variant directory names match agent IDs (`opencode`, `claude`, `cursor`, `windsurf`, `gemini`, `cline`, `amazon-q`, `codex`, `github-copilot`, and all others listed in [Supported Agents](#supported-agents)).
+
+`sklm info skill <name>` lists available variants when present.
 
 ### Registry discovery
 
@@ -222,7 +251,7 @@ Running `sklm add skill my-skill` does four things in sequence:
 1. **Resolve** — finds the skill in the global store, a registry, or a local path
 2. **Store** — copies it into `~/.sklm/store/skills/` if it wasn't there already
 3. **Link** — creates a symlink in `./.sklm/links/skills/`
-4. **Sync** — copies the linked skill into the agent's config directory
+4. **Sync** — copies the linked skill into the agent's config directory, applying any `variants/<agent>/` overlay automatically
 
 Removal (`sklm rm`) reverses steps 3 and 4. The global store is untouched, so skills stay available for other projects.
 
