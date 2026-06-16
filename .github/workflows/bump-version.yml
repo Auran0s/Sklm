@@ -9,6 +9,9 @@ on:
 jobs:
   bump-version:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -35,14 +38,27 @@ jobs:
         run: |
           sed -i "s/^version = \".*\"/version = \"${{ steps.get_version.outputs.version }}\"/" pyproject.toml
 
-      - name: Create git tag
+      - name: Create bump PR and auto-merge
         if: steps.get_version.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.PAT }}
         run: |
+          VERSION="${{ steps.get_version.outputs.version }}"
+          BRANCH="chore/bump-version-to-${VERSION}"
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git remote set-url origin https://x-access-token:${{ secrets.PAT }}@github.com/${{ github.repository }}
+
+          git checkout -b "${BRANCH}"
           git add pyproject.toml
-          git commit -m "chore: bump version to ${{ steps.get_version.outputs.version }}"
-          git tag "v${{ steps.get_version.outputs.version }}"
-          git push
-          git push --tags
+          git commit -m "chore: bump version to ${VERSION}"
+          git tag "v${VERSION}"
+          git push origin "${BRANCH}" --tags
+
+          gh pr create \
+            --base main \
+            --head "${BRANCH}" \
+            --title "chore: bump version to ${VERSION}" \
+            --body "Version bump automatique suite au merge de la release ${VERSION}."
+
+          gh pr merge "${BRANCH}" --merge --delete-branch
