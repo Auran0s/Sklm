@@ -533,7 +533,7 @@ class TestAgentRegistry:
         from sklm.agents.registry import AgentRegistry
         registry = AgentRegistry()
         agents = registry.get_agent_ids()
-        assert len(agents) == 8
+        assert len(agents) == 30
         assert "opencode" in agents
         assert "claude" in agents
         assert "cursor" in agents
@@ -542,6 +542,10 @@ class TestAgentRegistry:
         assert "cline" in agents
         assert "amazon-q" in agents
         assert "github-copilot" in agents
+        assert "codex" in agents
+        assert "antigravity" in agents
+        assert "auggie" in agents
+        assert "continue" in agents
 
     def test_detect_returns_none_when_no_agent_dir(self, temp_dir):
         from sklm.agents.registry import AgentRegistry
@@ -690,6 +694,28 @@ class TestAgentKind:
         assert AgentKind("cline") == AgentKind.cline
         assert AgentKind("amazon-q") == AgentKind.amazon_q
         assert AgentKind("github-copilot") == AgentKind.github_copilot
+        assert AgentKind("antigravity") == AgentKind.antigravity
+        assert AgentKind("auggie") == AgentKind.auggie
+        assert AgentKind("bob") == AgentKind.bob
+        assert AgentKind("codebuddy") == AgentKind.codebuddy
+        assert AgentKind("codex") == AgentKind.codex
+        assert AgentKind("continue") == AgentKind.continue_agent
+        assert AgentKind("costrict") == AgentKind.costrict
+        assert AgentKind("crush") == AgentKind.crush
+        assert AgentKind("factory") == AgentKind.factory
+        assert AgentKind("forgecode") == AgentKind.forgecode
+        assert AgentKind("iflow") == AgentKind.iflow
+        assert AgentKind("junie") == AgentKind.junie
+        assert AgentKind("kilocode") == AgentKind.kilocode
+        assert AgentKind("kimi") == AgentKind.kimi
+        assert AgentKind("kiro") == AgentKind.kiro
+        assert AgentKind("lingma") == AgentKind.lingma
+        assert AgentKind("pi") == AgentKind.pi
+        assert AgentKind("qoder") == AgentKind.qoder
+        assert AgentKind("qwen") == AgentKind.qwen
+        assert AgentKind("roocode") == AgentKind.roocode
+        assert AgentKind("trae") == AgentKind.trae
+        assert AgentKind("vibe") == AgentKind.vibe
 
     def test_unknown_agent_raises(self):
         from sklm.models import AgentKind
@@ -1077,7 +1103,7 @@ class TestCLIIntegration:
         result = runner.invoke(app, ["agent", "list", "--json"])
         assert result.exit_code == 0
         data = json.loads(result.output)
-        assert len(data) == 8
+        assert len(data) == 30
         ids = [a["id"] for a in data]
         assert "opencode" in ids
         assert "github-copilot" in ids
