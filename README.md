@@ -169,9 +169,31 @@ Updates are fetched from [GitHub Releases](https://github.com/Auran0s/Sklm/relea
 | Gemini CLI | `.gemini/` | `.gemini/skills/` | ✅ |
 | Cline | `.cline/` | `.cline/skills/` | ✅ |
 | Amazon Q | `.amazonq/` | `.amazonq/skills/` | ✅ |
+| Bob Shell | `.bob/` | `.bob/skills/` | ✅ |
+| CodeBuddy | `.codebuddy/` | `.codebuddy/skills/` | ✅ |
+| Codex CLI | `.codex/` | `.codex/skills/` | ✅ |
+| Continue | `.continue/` | `.continue/skills/` | ✅ |
+| Crush | `.crush/` | `.crush/skills/` | ✅ |
+| Factory Droid | `.factory/` | `.factory/skills/` | ✅ |
+| iFlow | `.iflow/` | `.iflow/skills/` | ✅ |
+| Junie | `.junie/` | `.junie/skills/` | ✅ |
+| Kilo Code | `.kilocode/` | `.kilocode/skills/` | ✅ |
+| Kimi CLI | `.kimi/` | `.kimi/skills/` | ✅ |
+| Kiro | `.kiro/` | `.kiro/skills/` | ✅ |
+| Lingma | `.lingma/` | `.lingma/skills/` | ✅ |
+| Pi | `.pi/` | `.pi/skills/` | ✅ |
+| Qoder | `.qoder/` | `.qoder/skills/` | ✅ |
+| Qwen Code | `.qwen/` | `.qwen/skills/` | ✅ |
+| Trae | `.trae/` | `.trae/skills/` | ✅ |
+| Mistral Vibe | `.vibe/` | `.vibe/skills/` | ✅ |
+| Auggie | `.augment/` | `.augment/skills/` | ✅ |
+| CoStrict | `.cospec/` | `.cospec/skills/` | ✅ |
+| ForgeCode | `.forge/` | `.forge/skills/` | ✅ |
+| RooCode | `.roo/` | `.roo/skills/` | ✅ |
+| Antigravity | `.agent/` | `.agent/skills/` | — (explicit only) |
 | GitHub Copilot | `.github/` | `.github/skills/` | — (explicit only) |
 
-GitHub Copilot requires `sklm init --agent github-copilot` because `.github/` exists in nearly every project.
+Antigravity and GitHub Copilot require `sklm init --agent <name>` because `.agent/` and `.github/` exist in many projects unrelated to those tools.
 
 > [!TIP]
 > `sklm init` without `--agent` shows an interactive prompt if no agent directory is found. Use `--agent` for non-interactive setups.
