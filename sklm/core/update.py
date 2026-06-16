@@ -131,13 +131,12 @@ class UpdateChecker:
                 timeout=30,
                 check=True,
             )
-            if not self.is_editable():
-                subprocess.run(
-                    [sys.executable, "-m", "pip", "install", "-e", str(repo_root)],
-                    capture_output=True,
-                    timeout=60,
-                    check=True,
-                )
+            subprocess.run(
+                [sys.executable, "-m", "pip", "install", "-e", str(repo_root)],
+                capture_output=True,
+                timeout=60,
+                check=True,
+            )
             return True
         except Exception:
             return False

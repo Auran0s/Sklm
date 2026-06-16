@@ -6,9 +6,9 @@ pattern.  No per-agent subclass required.
 
 from __future__ import annotations
 
-import shutil
 from pathlib import Path
 
+from sklm.agents._sync import sync_skills
 from sklm.agents.base import AgentAdapter
 from sklm.models import Link
 
@@ -32,16 +32,4 @@ class GenericAdapter(AgentAdapter):
         project_root: Path,
         linked_skills: list[Link],
     ) -> None:
-        skills_path = self.get_skills_path(project_root)
-        skills_path.mkdir(parents=True, exist_ok=True)
-
-        for link in linked_skills:
-            target_dir = skills_path / link.name
-            if target_dir.exists():
-                shutil.rmtree(target_dir)
-            shutil.copytree(link.target, target_dir)
-
-        linked_names = {l.name for l in linked_skills}
-        for existing in list(skills_path.iterdir()):
-            if existing.is_dir() and existing.name not in linked_names:
-                shutil.rmtree(existing)
+        sync_skills(linked_skills, self.get_skills_path(project_root), self.agent_id)
