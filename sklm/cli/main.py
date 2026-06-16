@@ -451,6 +451,11 @@ def info(
     table.add_row("Origin", ref.origin)
     table.add_row("Linked", "[green]✓[/]" if ref.linked else "")
     table.add_row("Path", str(ref.path) if ref.path else "N/A")
+    if ref.path and ref.path.is_dir():
+        from sklm.agents._sync import get_variant_names
+        variants = get_variant_names(ref.path)
+        if variants:
+            table.add_row("Variants", ", ".join(variants))
     console.print(table)
 
 

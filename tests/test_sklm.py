@@ -676,6 +676,173 @@ class TestGitHubCopilotAdapter:
         assert adapter.get_skills_path(temp_dir) == temp_dir / ".github" / "skills"
 
 
+# ─── Skill Variants ──────────────────────────────────────────────────────────
+
+
+class TestSkillVariants:
+    """Test variant overlay during sync."""
+
+    def test_variant_overrides_base_skill_md(self, temp_dir):
+        from sklm.agents.generic import GenericAdapter
+        from sklm.agents._sync import sync_skills, get_variant_names
+        from sklm.models import Link, ResourceKind
+        skill_dir = temp_dir / "source-skill"
+        skill_dir.mkdir()
+        (skill_dir / "SKILL.md").write_text("# Base")
+        variant_dir = skill_dir / "variants" / "cursor"
+        variant_dir.mkdir(parents=True)
+        (variant_dir / "SKILL.md").write_text("# Variant")
+        link = Link(
+            name="test-skill",
+            kind=ResourceKind.skill,
+            target=skill_dir,
+            link_path=skill_dir,
+        )
+        agent_dir = temp_dir / ".cursor"
+        agent_dir.mkdir()
+        sync_skills([link], agent_dir / "skills", "cursor")
+        content = (agent_dir / "skills" / "test-skill" / "SKILL.md").read_text()
+        assert content == "# Variant"
+        # get_variant_names should find the variant
+        assert get_variant_names(skill_dir) == ["cursor"]
+
+    def test_variant_adds_new_files(self, temp_dir):
+        from sklm.agents._sync import sync_skills
+        from sklm.models import Link, ResourceKind
+        skill_dir = temp_dir / "source-skill"
+        skill_dir.mkdir()
+        (skill_dir / "SKILL.md").write_text("# Base")
+        variant_dir = skill_dir / "variants" / "cursor" / "references"
+        variant_dir.mkdir(parents=True)
+        (variant_dir / "extra.md").write_text("# Extra")
+        link = Link(
+            name="test-skill",
+            kind=ResourceKind.skill,
+            target=skill_dir,
+            link_path=skill_dir,
+        )
+        agent_dir = temp_dir / ".cursor"
+        agent_dir.mkdir()
+        sync_skills([link], agent_dir / "skills", "cursor")
+        assert (agent_dir / "skills" / "test-skill" / "SKILL.md").exists()
+        assert (agent_dir / "skills" / "test-skill" / "references" / "extra.md").exists()
+
+    def test_base_files_not_in_variant_survive(self, temp_dir):
+        from sklm.agents._sync import sync_skills
+        from sklm.models import Link, ResourceKind
+        skill_dir = temp_dir / "source-skill"
+        skill_dir.mkdir()
+        (skill_dir / "SKILL.md").write_text("# Base")
+        ref_dir = skill_dir / "references"
+        ref_dir.mkdir()
+        (ref_dir / "shared.md").write_text("# Shared")
+        variant_dir = skill_dir / "variants" / "cursor"
+        variant_dir.mkdir(parents=True)
+        (variant_dir / "SKILL.md").write_text("# Variant")
+        link = Link(
+            name="test-skill",
+            kind=ResourceKind.skill,
+            target=skill_dir,
+            link_path=skill_dir,
+        )
+        agent_dir = temp_dir / ".cursor"
+        agent_dir.mkdir()
+        sync_skills([link], agent_dir / "skills", "cursor")
+        assert (agent_dir / "skills" / "test-skill" / "references" / "shared.md").exists()
+
+    def test_no_variant_preserves_current_behavior(self, temp_dir):
+        from sklm.agents.generic import GenericAdapter
+        from sklm.models import Link, ResourceKind
+        skill_dir = temp_dir / "source-skill"
+        skill_dir.mkdir()
+        (skill_dir / "SKILL.md").write_text("# Base")
+        link = Link(
+            name="test-skill",
+            kind=ResourceKind.skill,
+            target=skill_dir,
+            link_path=skill_dir,
+        )
+        adapter = GenericAdapter("cursor", {"dir_name": ".cursor"})
+        adapter.sync(temp_dir, [link])
+        content = (temp_dir / ".cursor" / "skills" / "test-skill" / "SKILL.md").read_text()
+        assert content == "# Base"
+
+    def test_variant_for_non_matching_agent_ignored(self, temp_dir):
+        from sklm.agents._sync import sync_skills
+        from sklm.models import Link, ResourceKind
+        skill_dir = temp_dir / "source-skill"
+        skill_dir.mkdir()
+        (skill_dir / "SKILL.md").write_text("# Base")
+        variant_dir = skill_dir / "variants" / "claude"
+        variant_dir.mkdir(parents=True)
+        (variant_dir / "SKILL.md").write_text("# Claude Variant")
+        link = Link(
+            name="test-skill",
+            kind=ResourceKind.skill,
+            target=skill_dir,
+            link_path=skill_dir,
+        )
+        agent_dir = temp_dir / ".opencode"
+        agent_dir.mkdir()
+        sync_skills([link], agent_dir / "skills", "opencode")
+        content = (agent_dir / "skills" / "test-skill" / "SKILL.md").read_text()
+        assert content == "# Base"
+
+    def test_variants_directory_not_leaked(self, temp_dir):
+        from sklm.agents._sync import sync_skills
+        from sklm.models import Link, ResourceKind
+        skill_dir = temp_dir / "source-skill"
+        skill_dir.mkdir()
+        (skill_dir / "SKILL.md").write_text("# Base")
+        variant_dir = skill_dir / "variants" / "cursor"
+        variant_dir.mkdir(parents=True)
+        (variant_dir / "SKILL.md").write_text("# Variant")
+        link = Link(
+            name="test-skill",
+            kind=ResourceKind.skill,
+            target=skill_dir,
+            link_path=skill_dir,
+        )
+        agent_dir = temp_dir / ".cursor"
+        agent_dir.mkdir()
+        sync_skills([link], agent_dir / "skills", "cursor")
+        assert not (agent_dir / "skills" / "test-skill" / "variants").exists()
+
+    def test_get_variant_names(self, temp_dir):
+        from sklm.agents._sync import get_variant_names
+        skill_dir = temp_dir / "source-skill"
+        skill_dir.mkdir()
+        (skill_dir / "SKILL.md").write_text("# Base")
+        assert get_variant_names(skill_dir) == []
+        (skill_dir / "variants" / "opencode").mkdir(parents=True)
+        (skill_dir / "variants" / "claude").mkdir(parents=True)
+        names = get_variant_names(skill_dir)
+        assert "opencode" in names
+        assert "claude" in names
+
+    def test_github_copilot_adapter_with_variant(self, temp_dir):
+        from sklm.agents.github_copilot import GitHubCopilotAdapter
+        from sklm.agents._sync import get_variant_names
+        from sklm.models import Link, ResourceKind
+        skill_dir = temp_dir / "source-skill"
+        skill_dir.mkdir()
+        (skill_dir / "SKILL.md").write_text("# Base")
+        variant_dir = skill_dir / "variants" / "github-copilot"
+        variant_dir.mkdir(parents=True)
+        (variant_dir / "SKILL.md").write_text("# Copilot Variant")
+        link = Link(
+            name="test-skill",
+            kind=ResourceKind.skill,
+            target=skill_dir,
+            link_path=skill_dir,
+        )
+        adapter = GitHubCopilotAdapter()
+        skill_path = temp_dir / ".github" / "skills"
+        adapter.sync(temp_dir, [link])
+        content = (skill_path / "test-skill" / "SKILL.md").read_text()
+        assert content == "# Copilot Variant"
+
+
 # ─── Agent Kind ───────────────────────────────────────────────────────────────
 
 
