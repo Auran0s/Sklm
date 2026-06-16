@@ -27,8 +27,8 @@ jobs:
             exit 0
           fi
           
-          echo "version=$BRANCH" >> $GITHUB_OUTPUT
-          echo "✓ Version détectée : $BRANCH"
+          echo "version=${BRANCH}" >> $GITHUB_OUTPUT   # ← ajouter les accolades
+          echo "✓ Version détectée : ${BRANCH}"
 
       - name: Update pyproject.toml
         if: steps.get_version.outputs.skip != 'true'
