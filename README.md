@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="https://raw.githubusercontent.com/Auran0s/sklm/develop/docs/sklm-logo.png" alt="Sklm logo" width="120" />
+
 # Sklm
 
 *Skills manager for AI agents*
