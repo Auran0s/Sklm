@@ -16,3 +16,48 @@ agents:
   github-copilot:
     dir_name: .github
     detect: explicit
+  bob:
+    dir_name: .bob
+  codebuddy:
+    dir_name: .codebuddy
+  codex:
+    dir_name: .codex
+  continue:
+    dir_name: .continue
+  crush:
+    dir_name: .crush
+  factory:
+    dir_name: .factory
+  iflow:
+    dir_name: .iflow
+  junie:
+    dir_name: .junie
+  kilocode:
+    dir_name: .kilocode
+  kimi:
+    dir_name: .kimi
+  kiro:
+    dir_name: .kiro
+  lingma:
+    dir_name: .lingma
+  pi:
+    dir_name: .pi
+  qoder:
+    dir_name: .qoder
+  qwen:
+    dir_name: .qwen
+  trae:
+    dir_name: .trae
+  vibe:
+    dir_name: .vibe
+  auggie:
+    dir_name: .augment
+  costrict:
+    dir_name: .cospec
+  forgecode:
+    dir_name: .forge
+  roocode:
+    dir_name: .roo
+  antigravity:
+    dir_name: .agent
+    detect: explicit

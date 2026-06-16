@@ -356,7 +356,7 @@
             </span>
             <h3 class="font-display text-2xl md:text-3xl font-semibold text-white mb-3">Multi-agent support</h3>
             <p class="text-white/50 text-base md:text-lg leading-relaxed max-w-xl">
-              Recognizes 8 AI agents — OpenCode, Claude Code, Cursor, Windsurf, Gemini CLI, Cline, Amazon Q, GitHub Copilot — and syncs skills to the right place, every time.
+              Recognizes 30 AI agents — from OpenCode and Claude Code to Codex CLI and beyond — and syncs skills to the right place, every time.
             </p>
           </div>
         </div>
@@ -488,7 +488,7 @@
     </div>
 
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-      <div class="p-[1px] rounded-[var(--outer-radius)] bg-white/5 border border-white/10 agent-card reveal reveal-delay-1" style="--accent: #8B5CF6">
+      <div class="p-[1px] rounded-[var(--outer-radius)] bg-white/5 border border-white/10 agent-card reveal reveal-delay-1">
         <div class="rounded-[var(--inner-radius)] bg-[#0a0a0a] p-6 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]">
           <div class="flex items-center justify-between mb-3">
             <h3 class="font-display text-lg font-semibold text-white">OpenCode</h3>
@@ -521,7 +521,7 @@
         </div>
       </div>
 
-      <div class="p-[1px] rounded-[var(--outer-radius)] bg-white/5 border border-white/10 agent-card reveal reveal-delay-1">
+      <div class="p-[1px] rounded-[var(--outer-radius)] bg-white/5 border border-white/10 agent-card reveal reveal-delay-4">
         <div class="rounded-[var(--inner-radius)] bg-[#0a0a0a] p-6 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]">
           <div class="flex items-center justify-between mb-3">
             <h3 class="font-display text-lg font-semibold text-white">Windsurf</h3>
@@ -532,7 +532,7 @@
         </div>
       </div>
 
-      <div class="p-[1px] rounded-[var(--outer-radius)] bg-white/5 border border-white/10 agent-card reveal reveal-delay-2">
+      <div class="p-[1px] rounded-[var(--outer-radius)] bg-white/5 border border-white/10 agent-card reveal reveal-delay-1">
         <div class="rounded-[var(--inner-radius)] bg-[#0a0a0a] p-6 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]">
           <div class="flex items-center justify-between mb-3">
             <h3 class="font-display text-lg font-semibold text-white">Gemini CLI</h3>
@@ -543,7 +543,7 @@
         </div>
       </div>
 
-      <div class="p-[1px] rounded-[var(--outer-radius)] bg-white/5 border border-white/10 agent-card reveal reveal-delay-3">
+      <div class="p-[1px] rounded-[var(--outer-radius)] bg-white/5 border border-white/10 agent-card reveal reveal-delay-2">
         <div class="rounded-[var(--inner-radius)] bg-[#0a0a0a] p-6 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]">
           <div class="flex items-center justify-between mb-3">
             <h3 class="font-display text-lg font-semibold text-white">Cline</h3>
@@ -554,7 +554,7 @@
         </div>
       </div>
 
-      <div class="p-[1px] rounded-[var(--outer-radius)] bg-white/5 border border-white/10 agent-card reveal reveal-delay-4 lg:col-start-2">
+      <div class="p-[1px] rounded-[var(--outer-radius)] bg-white/5 border border-white/10 agent-card reveal reveal-delay-3">
         <div class="rounded-[var(--inner-radius)] bg-[#0a0a0a] p-6 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]">
           <div class="flex items-center justify-between mb-3">
             <h3 class="font-display text-lg font-semibold text-white">Amazon Q</h3>
@@ -565,11 +565,253 @@
         </div>
       </div>
 
-      <div class="p-[1px] rounded-[var(--outer-radius)] bg-white/5 border border-white/10 agent-card reveal reveal-delay-4 lg:col-start-3">
+      <div class="p-[1px] rounded-[var(--outer-radius)] bg-white/5 border border-white/10 agent-card reveal reveal-delay-4">
         <div class="rounded-[var(--inner-radius)] bg-[#0a0a0a] p-6 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]">
           <div class="flex items-center justify-between mb-3">
-            <h3 class="font-display text-lg font-semibold text-white">GitHub Copilot</h3>
+            <h3 class="font-display text-lg font-semibold text-white">Bob Shell</h3>
             <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500/15"><i class="ph ph-check text-emerald-400 text-xs"></i></span>
+          </div>
+          <p class="font-mono text-xs text-white/40"><span class="text-white/20">Config:</span> .bob/</p>
+          <p class="font-mono text-xs text-white/40"><span class="text-white/20">Skills:</span> .bob/skills/</p>
+        </div>
+      </div>
+
+      <div class="p-[1px] rounded-[var(--outer-radius)] bg-white/5 border border-white/10 agent-card reveal reveal-delay-1">
+        <div class="rounded-[var(--inner-radius)] bg-[#0a0a0a] p-6 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="font-display text-lg font-semibold text-white">CodeBuddy</h3>
+            <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500/15"><i class="ph ph-check text-emerald-400 text-xs"></i></span>
+          </div>
+          <p class="font-mono text-xs text-white/40"><span class="text-white/20">Config:</span> .codebuddy/</p>
+          <p class="font-mono text-xs text-white/40"><span class="text-white/20">Skills:</span> .codebuddy/skills/</p>
+        </div>
+      </div>
+
+      <div class="p-[1px] rounded-[var(--outer-radius)] bg-white/5 border border-white/10 agent-card reveal reveal-delay-2">
+        <div class="rounded-[var(--inner-radius)] bg-[#0a0a0a] p-6 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="font-display text-lg font-semibold text-white">Codex CLI</h3>
+            <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500/15"><i class="ph ph-check text-emerald-400 text-xs"></i></span>
+          </div>
+          <p class="font-mono text-xs text-white/40"><span class="text-white/20">Config:</span> .codex/</p>
+          <p class="font-mono text-xs text-white/40"><span class="text-white/20">Skills:</span> .codex/skills/</p>
+        </div>
+      </div>
+
+      <div class="p-[1px] rounded-[var(--outer-radius)] bg-white/5 border border-white/10 agent-card reveal reveal-delay-3">
+        <div class="rounded-[var(--inner-radius)] bg-[#0a0a0a] p-6 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="font-display text-lg font-semibold text-white">Continue</h3>
+            <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500/15"><i class="ph ph-check text-emerald-400 text-xs"></i></span>
+          </div>
+          <p class="font-mono text-xs text-white/40"><span class="text-white/20">Config:</span> .continue/</p>
+          <p class="font-mono text-xs text-white/40"><span class="text-white/20">Skills:</span> .continue/skills/</p>
+        </div>
+      </div>
+
+      <div class="p-[1px] rounded-[var(--outer-radius)] bg-white/5 border border-white/10 agent-card reveal reveal-delay-4">
+        <div class="rounded-[var(--inner-radius)] bg-[#0a0a0a] p-6 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="font-display text-lg font-semibold text-white">Crush</h3>
+            <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500/15"><i class="ph ph-check text-emerald-400 text-xs"></i></span>
+          </div>
+          <p class="font-mono text-xs text-white/40"><span class="text-white/20">Config:</span> .crush/</p>
+          <p class="font-mono text-xs text-white/40"><span class="text-white/20">Skills:</span> .crush/skills/</p>
+        </div>
+      </div>
+
+      <div class="p-[1px] rounded-[var(--outer-radius)] bg-white/5 border border-white/10 agent-card reveal reveal-delay-1">
+        <div class="rounded-[var(--inner-radius)] bg-[#0a0a0a] p-6 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="font-display text-lg font-semibold text-white">Factory Droid</h3>
+            <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500/15"><i class="ph ph-check text-emerald-400 text-xs"></i></span>
+          </div>
+          <p class="font-mono text-xs text-white/40"><span class="text-white/20">Config:</span> .factory/</p>
+          <p class="font-mono text-xs text-white/40"><span class="text-white/20">Skills:</span> .factory/skills/</p>
+        </div>
+      </div>
+
+      <div class="p-[1px] rounded-[var(--outer-radius)] bg-white/5 border border-white/10 agent-card reveal reveal-delay-2">
+        <div class="rounded-[var(--inner-radius)] bg-[#0a0a0a] p-6 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="font-display text-lg font-semibold text-white">iFlow</h3>
+            <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500/15"><i class="ph ph-check text-emerald-400 text-xs"></i></span>
+          </div>
+          <p class="font-mono text-xs text-white/40"><span class="text-white/20">Config:</span> .iflow/</p>
+          <p class="font-mono text-xs text-white/40"><span class="text-white/20">Skills:</span> .iflow/skills/</p>
+        </div>
+      </div>
+
+      <div class="p-[1px] rounded-[var(--outer-radius)] bg-white/5 border border-white/10 agent-card reveal reveal-delay-3">
+        <div class="rounded-[var(--inner-radius)] bg-[#0a0a0a] p-6 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="font-display text-lg font-semibold text-white">Junie</h3>
+            <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500/15"><i class="ph ph-check text-emerald-400 text-xs"></i></span>
+          </div>
+          <p class="font-mono text-xs text-white/40"><span class="text-white/20">Config:</span> .junie/</p>
+          <p class="font-mono text-xs text-white/40"><span class="text-white/20">Skills:</span> .junie/skills/</p>
+        </div>
+      </div>
+
+      <div class="p-[1px] rounded-[var(--outer-radius)] bg-white/5 border border-white/10 agent-card reveal reveal-delay-4">
+        <div class="rounded-[var(--inner-radius)] bg-[#0a0a0a] p-6 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="font-display text-lg font-semibold text-white">Kilo Code</h3>
+            <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500/15"><i class="ph ph-check text-emerald-400 text-xs"></i></span>
+          </div>
+          <p class="font-mono text-xs text-white/40"><span class="text-white/20">Config:</span> .kilocode/</p>
+          <p class="font-mono text-xs text-white/40"><span class="text-white/20">Skills:</span> .kilocode/skills/</p>
+        </div>
+      </div>
+
+      <div class="p-[1px] rounded-[var(--outer-radius)] bg-white/5 border border-white/10 agent-card reveal reveal-delay-1">
+        <div class="rounded-[var(--inner-radius)] bg-[#0a0a0a] p-6 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="font-display text-lg font-semibold text-white">Kimi CLI</h3>
+            <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500/15"><i class="ph ph-check text-emerald-400 text-xs"></i></span>
+          </div>
+          <p class="font-mono text-xs text-white/40"><span class="text-white/20">Config:</span> .kimi/</p>
+          <p class="font-mono text-xs text-white/40"><span class="text-white/20">Skills:</span> .kimi/skills/</p>
+        </div>
+      </div>
+
+      <div class="p-[1px] rounded-[var(--outer-radius)] bg-white/5 border border-white/10 agent-card reveal reveal-delay-2">
+        <div class="rounded-[var(--inner-radius)] bg-[#0a0a0a] p-6 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="font-display text-lg font-semibold text-white">Kiro</h3>
+            <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500/15"><i class="ph ph-check text-emerald-400 text-xs"></i></span>
+          </div>
+          <p class="font-mono text-xs text-white/40"><span class="text-white/20">Config:</span> .kiro/</p>
+          <p class="font-mono text-xs text-white/40"><span class="text-white/20">Skills:</span> .kiro/skills/</p>
+        </div>
+      </div>
+
+      <div class="p-[1px] rounded-[var(--outer-radius)] bg-white/5 border border-white/10 agent-card reveal reveal-delay-3">
+        <div class="rounded-[var(--inner-radius)] bg-[#0a0a0a] p-6 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="font-display text-lg font-semibold text-white">Lingma</h3>
+            <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500/15"><i class="ph ph-check text-emerald-400 text-xs"></i></span>
+          </div>
+          <p class="font-mono text-xs text-white/40"><span class="text-white/20">Config:</span> .lingma/</p>
+          <p class="font-mono text-xs text-white/40"><span class="text-white/20">Skills:</span> .lingma/skills/</p>
+        </div>
+      </div>
+
+      <div class="p-[1px] rounded-[var(--outer-radius)] bg-white/5 border border-white/10 agent-card reveal reveal-delay-4">
+        <div class="rounded-[var(--inner-radius)] bg-[#0a0a0a] p-6 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="font-display text-lg font-semibold text-white">Pi</h3>
+            <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500/15"><i class="ph ph-check text-emerald-400 text-xs"></i></span>
+          </div>
+          <p class="font-mono text-xs text-white/40"><span class="text-white/20">Config:</span> .pi/</p>
+          <p class="font-mono text-xs text-white/40"><span class="text-white/20">Skills:</span> .pi/skills/</p>
+        </div>
+      </div>
+
+      <div class="p-[1px] rounded-[var(--outer-radius)] bg-white/5 border border-white/10 agent-card reveal reveal-delay-1">
+        <div class="rounded-[var(--inner-radius)] bg-[#0a0a0a] p-6 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="font-display text-lg font-semibold text-white">Qoder</h3>
+            <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500/15"><i class="ph ph-check text-emerald-400 text-xs"></i></span>
+          </div>
+          <p class="font-mono text-xs text-white/40"><span class="text-white/20">Config:</span> .qoder/</p>
+          <p class="font-mono text-xs text-white/40"><span class="text-white/20">Skills:</span> .qoder/skills/</p>
+        </div>
+      </div>
+
+      <div class="p-[1px] rounded-[var(--outer-radius)] bg-white/5 border border-white/10 agent-card reveal reveal-delay-2">
+        <div class="rounded-[var(--inner-radius)] bg-[#0a0a0a] p-6 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="font-display text-lg font-semibold text-white">Qwen Code</h3>
+            <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500/15"><i class="ph ph-check text-emerald-400 text-xs"></i></span>
+          </div>
+          <p class="font-mono text-xs text-white/40"><span class="text-white/20">Config:</span> .qwen/</p>
+          <p class="font-mono text-xs text-white/40"><span class="text-white/20">Skills:</span> .qwen/skills/</p>
+        </div>
+      </div>
+
+      <div class="p-[1px] rounded-[var(--outer-radius)] bg-white/5 border border-white/10 agent-card reveal reveal-delay-3">
+        <div class="rounded-[var(--inner-radius)] bg-[#0a0a0a] p-6 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="font-display text-lg font-semibold text-white">Trae</h3>
+            <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500/15"><i class="ph ph-check text-emerald-400 text-xs"></i></span>
+          </div>
+          <p class="font-mono text-xs text-white/40"><span class="text-white/20">Config:</span> .trae/</p>
+          <p class="font-mono text-xs text-white/40"><span class="text-white/20">Skills:</span> .trae/skills/</p>
+        </div>
+      </div>
+
+      <div class="p-[1px] rounded-[var(--outer-radius)] bg-white/5 border border-white/10 agent-card reveal reveal-delay-4">
+        <div class="rounded-[var(--inner-radius)] bg-[#0a0a0a] p-6 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="font-display text-lg font-semibold text-white">Mistral Vibe</h3>
+            <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500/15"><i class="ph ph-check text-emerald-400 text-xs"></i></span>
+          </div>
+          <p class="font-mono text-xs text-white/40"><span class="text-white/20">Config:</span> .vibe/</p>
+          <p class="font-mono text-xs text-white/40"><span class="text-white/20">Skills:</span> .vibe/skills/</p>
+        </div>
+      </div>
+
+      <div class="p-[1px] rounded-[var(--outer-radius)] bg-white/5 border border-white/10 agent-card reveal reveal-delay-1">
+        <div class="rounded-[var(--inner-radius)] bg-[#0a0a0a] p-6 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="font-display text-lg font-semibold text-white">Auggie</h3>
+            <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500/15"><i class="ph ph-check text-emerald-400 text-xs"></i></span>
+          </div>
+          <p class="font-mono text-xs text-white/40"><span class="text-white/20">Config:</span> .augment/</p>
+          <p class="font-mono text-xs text-white/40"><span class="text-white/20">Skills:</span> .augment/skills/</p>
+        </div>
+      </div>
+
+      <div class="p-[1px] rounded-[var(--outer-radius)] bg-white/5 border border-white/10 agent-card reveal reveal-delay-2">
+        <div class="rounded-[var(--inner-radius)] bg-[#0a0a0a] p-6 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="font-display text-lg font-semibold text-white">CoStrict</h3>
+            <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500/15"><i class="ph ph-check text-emerald-400 text-xs"></i></span>
+          </div>
+          <p class="font-mono text-xs text-white/40"><span class="text-white/20">Config:</span> .cospec/</p>
+          <p class="font-mono text-xs text-white/40"><span class="text-white/20">Skills:</span> .cospec/skills/</p>
+        </div>
+      </div>
+
+      <div class="p-[1px] rounded-[var(--outer-radius)] bg-white/5 border border-white/10 agent-card reveal reveal-delay-3">
+        <div class="rounded-[var(--inner-radius)] bg-[#0a0a0a] p-6 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="font-display text-lg font-semibold text-white">ForgeCode</h3>
+            <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500/15"><i class="ph ph-check text-emerald-400 text-xs"></i></span>
+          </div>
+          <p class="font-mono text-xs text-white/40"><span class="text-white/20">Config:</span> .forge/</p>
+          <p class="font-mono text-xs text-white/40"><span class="text-white/20">Skills:</span> .forge/skills/</p>
+        </div>
+      </div>
+
+      <div class="p-[1px] rounded-[var(--outer-radius)] bg-white/5 border border-white/10 agent-card reveal reveal-delay-4">
+        <div class="rounded-[var(--inner-radius)] bg-[#0a0a0a] p-6 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="font-display text-lg font-semibold text-white">RooCode</h3>
+            <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500/15"><i class="ph ph-check text-emerald-400 text-xs"></i></span>
+          </div>
+          <p class="font-mono text-xs text-white/40"><span class="text-white/20">Config:</span> .roo/</p>
+          <p class="font-mono text-xs text-white/40"><span class="text-white/20">Skills:</span> .roo/skills/</p>
+        </div>
+      </div>
+
+      <div class="p-[1px] rounded-[var(--outer-radius)] bg-white/5 border border-white/10 agent-card reveal reveal-delay-1">
+        <div class="rounded-[var(--inner-radius)] bg-[#0a0a0a] p-6 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="font-display text-lg font-semibold text-white">Antigravity <span class="text-xs font-mono text-white/30">(explicit)</span></h3>
+            <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-amber-500/15"><i class="ph ph-gear text-amber-400 text-xs"></i></span>
+          </div>
+          <p class="font-mono text-xs text-white/40"><span class="text-white/20">Config:</span> .agent/</p>
+          <p class="font-mono text-xs text-white/40"><span class="text-white/20">Skills:</span> .agent/skills/</p>
+        </div>
+      </div>
+
+      <div class="p-[1px] rounded-[var(--outer-radius)] bg-white/5 border border-white/10 agent-card reveal reveal-delay-2">
+        <div class="rounded-[var(--inner-radius)] bg-[#0a0a0a] p-6 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="font-display text-lg font-semibold text-white">GitHub Copilot <span class="text-xs font-mono text-white/30">(explicit)</span></h3>
+            <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-amber-500/15"><i class="ph ph-gear text-amber-400 text-xs"></i></span>
           </div>
           <p class="font-mono text-xs text-white/40"><span class="text-white/20">Config:</span> .github/</p>
           <p class="font-mono text-xs text-white/40"><span class="text-white/20">Skills:</span> .github/skills/</p>
