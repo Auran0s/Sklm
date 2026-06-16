@@ -847,23 +847,20 @@ def update(
         console.print("[red]✗[/] git checkout timed out.")
         raise typer.Exit(1)
 
-    if checker.is_editable():
-        console.print(f"[green]✓[/] Updated to sklm [bold]v{latest}[/] (editable install)")
-    else:
-        console.print("Reinstalling...")
-        try:
-            result = subprocess.run(
-                [sys.executable, "-m", "pip", "install", "-e", str(repo_root)],
-                capture_output=True,
-                timeout=60,
-            )
-            if result.returncode != 0:
-                console.print(f"[red]✗[/] pip install failed:\n{result.stderr.decode().strip()}")
-                raise typer.Exit(1)
-        except subprocess.TimeoutExpired:
-            console.print("[red]✗[/] pip install timed out.")
+    console.print("Reinstalling...")
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "pip", "install", "-e", str(repo_root)],
+            capture_output=True,
+            timeout=60,
+        )
+        if result.returncode != 0:
+            console.print(f"[red]✗[/] pip install failed:\n{result.stderr.decode().strip()}")
             raise typer.Exit(1)
-        console.print(f"[green]✓[/] Updated to sklm [bold]v{latest}[/]")
+    except subprocess.TimeoutExpired:
+        console.print("[red]✗[/] pip install timed out.")
+        raise typer.Exit(1)
+    console.print(f"[green]✓[/] Updated to sklm [bold]v{latest}[/]")
 
 
 # ─── Update Check ──────────────────────────────────────────────────────────
