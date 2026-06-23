@@ -3,18 +3,48 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
 import yaml
+from rich.console import Console
 
 from sklm.models import GlobalConfig, Resource, ResourceKind, SourceMetadata, TelemetryConfig
 
 
+console = Console()
+
+
 SKLM_HOME = Path.home() / ".sklm"
 SOURCE_META_FILENAME = ".sklm-source.yaml"
+
+
+def url_to_repo_slug(url: str) -> str:
+    """Derive a filesystem-safe repo slug from a git URL.
+
+    Transforms URLs like ``https://github.com/github/awesome-copilot``
+    into a slug such as ``github_awesome-copilot``.
+
+    Handles HTTPS, SSH (``git@``), and trailing ``.git`` formats.
+
+    Args:
+        url: A git remote URL.
+
+    Returns:
+        A slug safe for use as a directory name.
+    """
+    url = url.rstrip("/")
+    if url.endswith(".git"):
+        url = url[:-4]
+    # Normalise SSH URLs (git@host:org/repo → git@host/org/repo)
+    url = url.replace(":", "/", 1) if "://" not in url and ":" in url else url
+    parts = url.split("/")[-2:]
+    slug = "_".join(parts)
+    slug = re.sub(r"[^a-zA-Z0-9_-]", "_", slug)
+    return slug.lower()
 
 
 class GlobalStore:
@@ -94,7 +124,10 @@ class GlobalStore:
         from sklm.core.registry import RegistryManager
 
         registry = RegistryManager()
-        cache_path = registry.clone_or_fetch(repo_url, name, ref=ref)
+        repo_slug = url_to_repo_slug(repo_url)
+        console.print(f"[dim]Cloning from {repo_url}...[/]")
+        cache_path = registry.clone_or_fetch(repo_url, repo_slug, ref=ref)
+        console.print("[green]✓[/] Repository cloned")
 
         resolved_subdir: Optional[str] = subdir
         if subdir:
