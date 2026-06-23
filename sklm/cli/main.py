@@ -265,7 +265,7 @@ def install(
     kind = parse_resource_type(resource_type)
     try:
         ref = f.install(kind, name, from_url=from_url, subdir=subdir)
-    except (FileNotFoundError, FileExistsError, ValueError) as e:
+    except (FileNotFoundError, FileExistsError, ValueError, OSError, subprocess.TimeoutExpired) as e:
         console.print(f"[red]✗[/] {e}")
         raise typer.Exit(1) from e
     console.print(f"[green]✓[/] Installed {kind.value} [bold]{ref.name}[/] in global store")

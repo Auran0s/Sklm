@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import subprocess
 from pathlib import Path
 from typing import Optional
@@ -62,15 +63,22 @@ class RegistryManager:
             Path to the cached repository root.
 
         Raises:
-            ValueError: If the git operation fails or the URL is not a valid git repo.
+            ValueError: If the git operation fails, the URL is not a valid git repo,
+                or the operation times out.
         """
         repo_cache = self.cache_dir / name
         if repo_cache.exists():
-            result = subprocess.run(
-                ["git", "-C", str(repo_cache), "pull", "--ff-only"],
-                capture_output=True,
-                text=True,
-            )
+            try:
+                result = subprocess.run(
+                    ["git", "-C", str(repo_cache), "pull", "--ff-only"],
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                )
+            except subprocess.TimeoutExpired:
+                raise ValueError(
+                    f"Timed out updating cached repo '{name}' from {url}"
+                )
             if result.returncode != 0:
                 raise ValueError(
                     f"Failed to update cached repo '{name}' from {url}: {result.stderr.strip()}"
@@ -86,11 +94,17 @@ class RegistryManager:
                         f"Failed to checkout ref '{ref}' in '{name}': {result.stderr.strip()}"
                     )
         else:
-            result = subprocess.run(
-                ["git", "clone", "--", url, str(repo_cache)],
-                capture_output=True,
-                text=True,
-            )
+            try:
+                result = subprocess.run(
+                    ["git", "clone", "--depth", "1", "--single-branch", "--", url, str(repo_cache)],
+                    capture_output=True,
+                    text=True,
+                    timeout=120,
+                )
+            except subprocess.TimeoutExpired:
+                raise ValueError(
+                    f"Timed out cloning '{url}'"
+                )
             if result.returncode != 0:
                 raise ValueError(
                     f"Failed to clone '{url}': {result.stderr.strip()}"
