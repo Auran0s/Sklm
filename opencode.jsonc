@@ -1,0 +1,8 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "build": {
+      "prompt": "## Git Workflow\n\nBefore editing ANY code, ALWAYS:\n1. Check `git status` — if there are uncommitted changes, ask the user first\n2. Create a feature branch: `git checkout -b agent/<short-description>`\n3. Never edit code on `main` or `master`\n4. Run `python3 -m pytest tests/` before committing\n5. Commit with a clear message (`feat:`, `fix:`, `refactor:`)\n6. Push the branch when done"
+    }
+  }
+}

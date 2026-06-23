@@ -244,6 +244,126 @@ class TestNestedSkillResolution:
         assert meta.source_subdir == "skills/seo/entity-seo"
 
 
+class TestInstallFromGit:
+    """Tests pour les améliorations install --from : shallow clone, timeout, slug, cache, progress, erreurs."""
+
+    def test_shallow_clone_args(self, isolated_store):
+        """Vérifie que git clone reçoit --depth 1 --single-branch."""
+        import subprocess
+        from sklm.core.registry import RegistryManager
+
+        with unittest.mock.patch("sklm.core.registry.REGISTRY_CACHE", isolated_store.cache_dir):
+            with unittest.mock.patch("subprocess.run") as mock_run:
+                mock_run.return_value = unittest.mock.MagicMock(returncode=0, stderr="")
+                RegistryManager().clone_or_fetch(
+                    "https://github.com/example/repo", "example_repo"
+                )
+        clone_call = None
+        for call_args in mock_run.call_args_list:
+            args = call_args[0][0]
+            if args[:2] == ["git", "clone"]:
+                clone_call = args
+                break
+        assert clone_call is not None, "git clone n'a pas été appelé"
+        assert "--depth" in clone_call
+        assert "1" in clone_call
+        assert "--single-branch" in clone_call
+        clone_call = None
+        for call_args in mock_run.call_args_list:
+            args = call_args[0][0]
+            if args[:2] == ["git", "clone"]:
+                clone_call = args
+                break
+        assert clone_call is not None, "git clone n'a pas été appelé"
+        assert "--depth" in clone_call
+        assert "1" in clone_call
+        assert "--single-branch" in clone_call
+
+    def test_clone_timeout_wraps_to_value_error(self, isolated_store):
+        """Vérifie qu'un TimeoutExpired sur git clone lève ValueError."""
+        import subprocess
+        from sklm.models import ResourceKind
+
+        repo_cache = isolated_store.cache_dir / "test_timeout_repo"
+        with unittest.mock.patch("subprocess.run") as mock_run:
+            mock_run.side_effect = subprocess.TimeoutExpired(cmd="git clone", timeout=120)
+            with pytest.raises(ValueError) as exc:
+                isolated_store.add_resource_from_git(
+                    ResourceKind.skill, "my-skill",
+                    "https://github.com/test/repo",
+                )
+        assert "Timed out" in str(exc.value)
+
+    def test_url_to_repo_slug_various_formats(self):
+        """Vérifie url_to_repo_slug sur différents formats d'URL."""
+        from sklm.store import url_to_repo_slug
+
+        cases = [
+            ("https://github.com/github/awesome-copilot", "github_awesome-copilot"),
+            ("https://github.com/github/awesome-copilot.git", "github_awesome-copilot"),
+            ("https://github.com/github/awesome-copilot/", "github_awesome-copilot"),
+            ("git@github.com:user/repo.git", "user_repo"),
+            ("https://gitlab.com/group/subgroup/project", "subgroup_project"),
+        ]
+        for url, expected in cases:
+            assert url_to_repo_slug(url) == expected, f"Échec pour {url}"
+
+    def test_cache_key_uses_repo_slug(self, isolated_store):
+        """Vérifie que clone_or_fetch reçoit un slug de repo (pas le nom du skill)."""
+        from sklm.models import ResourceKind
+        from sklm.store import url_to_repo_slug
+
+        repo_cache = isolated_store.cache_dir / url_to_repo_slug("https://github.com/example/repo")
+        repo_cache.mkdir(parents=True)
+        (repo_cache / "SKILL.md").write_text("# Repo root skill")
+        with unittest.mock.patch.object(isolated_store, "_type_dir") as mock_type_dir:
+            mock_type_dir.return_value = isolated_store.cache_dir
+            with unittest.mock.patch("sklm.core.registry.RegistryManager") as MockReg:
+                MockReg.return_value.clone_or_fetch.return_value = repo_cache
+                isolated_store.add_resource_from_git(
+                    ResourceKind.skill, "my-skill",
+                    "https://github.com/example/repo",
+                )
+        cache_name = MockReg.return_value.clone_or_fetch.call_args[0][1]
+        assert cache_name == "example_repo", f"Attendu example_repo, obtenu {cache_name}"
+        assert cache_name != "my-skill", "Le cache ne devrait PAS être nommé d'après le skill"
+
+    def test_progress_messages_during_clone(self, isolated_store):
+        """Vérifie que console.print est appelée avant et après le clone."""
+        from sklm.models import ResourceKind
+
+        repo_cache = isolated_store.cache_dir / "test_progress_repo"
+        repo_cache.mkdir(parents=True)
+        (repo_cache / "SKILL.md").write_text("# Progress test")
+        with unittest.mock.patch.object(isolated_store, "_type_dir") as mock_type_dir:
+            mock_type_dir.return_value = isolated_store.cache_dir
+            with unittest.mock.patch("sklm.store.console.print") as mock_print:
+                with unittest.mock.patch("sklm.core.registry.RegistryManager") as MockReg:
+                    MockReg.return_value.clone_or_fetch.return_value = repo_cache
+                    isolated_store.add_resource_from_git(
+                        ResourceKind.skill, "my-skill",
+                        "https://github.com/test/repo",
+                    )
+        texts = [call.args[0] for call in mock_print.call_args_list]
+        assert any("Cloning from" in t for t in texts), "Message de clone manquant"
+        assert any("Repository cloned" in t for t in texts), "Message de succès manquant"
+
+    def test_oserror_in_cli_produces_error_message(self, temp_dir):
+        """Vérifie que OSError dans install affiche un message d'erreur (pas un traceback brut)."""
+        from typer.testing import CliRunner
+        from sklm.cli.main import app
+        from sklm.models import ResourceKind
+
+        runner = CliRunner()
+        with unittest.mock.patch("sklm.cli.main.get_sklm") as mock_get:
+            f = unittest.mock.MagicMock()
+            f.install.side_effect = PermissionError("Permission denied: /tmp")
+            mock_get.return_value = f
+            result = runner.invoke(app, ["install", "skill", "test-skill", "--from", "https://test.com/repo"])
+        assert result.exit_code != 0
+        assert "Permission denied" in result.stdout
+
+
 class TestGlobalStore:
     def test_init_creates_dirs(self, isolated_store):
         assert isolated_store.root.exists()
