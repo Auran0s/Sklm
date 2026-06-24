@@ -229,6 +229,73 @@ class Sklm:
     def info(self, kind: ResourceKind, name: str) -> Optional[ResourceRef]:
         return get_resource_info(self.workspace, self.global_store, kind, name)
 
+    # ── TUI helpers ───────────────────────────────────────────────────────
+
+    def list_available_skills(self) -> list[ResourceRef]:
+        """Skills that can be added: global store + registries, deduped."""
+        seen: set[str] = set()
+        refs: list[ResourceRef] = []
+        for r in self.global_store.list_resources(ResourceKind.skill):
+            if r.name not in seen:
+                refs.append(ResourceRef(name=r.name, kind=r.kind, origin="global", path=r.path))
+                seen.add(r.name)
+        for reg_name, resource in self.registry_manager.search("", type_filter=ResourceKind.skill):
+            if resource.name not in seen:
+                refs.append(ResourceRef(
+                    name=resource.name,
+                    kind=resource.kind,
+                    origin=f"registry:{reg_name}",
+                    path=resource.path,
+                ))
+                seen.add(resource.name)
+        return sorted(refs, key=lambda r: r.name)
+
+    def list_workspace_skills(self) -> list[ResourceRef]:
+        """Skills currently linked in the workspace."""
+        return sorted(
+            (r for r in self.workspace.list_resources(ResourceKind.skill) if r.linked),
+            key=lambda r: r.name,
+        )
+
+    def add_skills(self, names: list[str]) -> list[ResourceRef]:
+        """Add and link multiple skills, then sync agents."""
+        refs: list[ResourceRef] = []
+        for name in names:
+            refs.append(self.add(ResourceKind.skill, name))
+        return refs
+
+    def remove_skills(self, names: list[str]) -> list[ResourceRef]:
+        """Unlink and remove multiple skills, then sync agents."""
+        refs: list[ResourceRef] = []
+        for name in names:
+            refs.append(self.remove(ResourceKind.skill, name))
+        return refs
+
+    def import_agent_project_skills(self, agent_id: str) -> list[ResourceRef]:
+        """Import skills found in the agent's project dir into the workspace."""
+        adapter = self._find_adapter_by_name(agent_id)
+        if not adapter:
+            return []
+        skills_path = adapter.get_skills_path(self.project_root)
+        if not skills_path.exists():
+            return []
+        imported: list[ResourceRef] = []
+        for skill_dir in sorted(skills_path.iterdir()):
+            if not skill_dir.is_dir() or not (skill_dir / "SKILL.md").exists():
+                continue
+            if self.workspace.get_link(ResourceKind.skill, skill_dir.name):
+                continue
+            if not self.global_store.get_resource(ResourceKind.skill, skill_dir.name):
+                self.global_store.add_resource(ResourceKind.skill, skill_dir)
+            ref = add_resource_to_workspace(
+                self.workspace, self.global_store, self.registry_manager, skill_dir.name
+            )
+            _link_resource(self.workspace, self.global_store, ResourceKind.skill, skill_dir.name)
+            imported.append(ref)
+        if imported:
+            self.agent_sync()
+        return imported
+
     # ── Linking (internal) ───────────────────────────────────────────────
 
     def link(self, kind: ResourceKind, name: str) -> Link:

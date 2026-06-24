@@ -11,7 +11,6 @@ import traceback as tb_mod
 from pathlib import Path
 from typing import Optional
 
-import click
 import typer
 from rich.console import Console
 from rich.table import Table
@@ -115,13 +114,13 @@ def _prompt_cleanup(
 
 @app.callback()
 def main(
+    ctx: typer.Context,
     version: bool = typer.Option(
         False, "--version", "-V", help="Show version", callback=version_callback
     ),
 ):
     global _tracker_start, _tracker_command
     _tracker_start = time.monotonic()
-    ctx = click.get_current_context()
     _tracker_command = ctx.invoked_subcommand or ""
 
 
@@ -234,6 +233,9 @@ def status(
     table.add_row("Skills", str(state["skills"]))
     table.add_row("Total links", str(state["total_links"]))
     table.add_row("Broken links", str(state["broken_links"]))
+    linked = f.list_workspace_skills()
+    if linked:
+        table.add_row("Active project skills", ", ".join(r.name for r in linked))
     console.print(table)
     if state["broken_links"] > 0:
         console.print("\n[yellow]💡 Tip:[/] Run [bold]sklm status --repair[/] to fix broken links")
@@ -364,8 +366,12 @@ def migrate(
 
 @app.command()
 def add(
-    resource_type: str = typer.Argument(..., help="Resource type: skill"),
-    name: str = typer.Argument(..., help="Resource name (optionally prefixed: registry:name)"),
+    resource_type: Optional[str] = typer.Argument(
+        None, help="Resource type: skill (omit to use interactive picker)"
+    ),
+    name: Optional[str] = typer.Argument(
+        None, help="Resource name (optionally prefixed: registry:name)"
+    ),
     from_url: Optional[str] = typer.Option(
         None, "--from", help="Git repository URL to install from"
     ),
@@ -373,11 +379,19 @@ def add(
         None, "--subdir", help="Subdirectory within the repo (default: skills/<name>)"
     ),
 ):
-    """Add and activate a resource in the project (resolves, stores, links, syncs agent)."""
+    """Add and activate a resource in the project. Launch interactive picker when no args given."""
+    if resource_type is None:
+        from sklm.tui import run_tui
+
+        result = run_tui("add")
+        if result is None:
+            raise typer.Exit(0)
+        console.print(f"[green]✓[/] Added {len(result)} skill(s)")
+        return
     f = get_sklm()
     kind = parse_resource_type(resource_type)
     try:
-        ref = f.add(kind, name, from_url=from_url, subdir=subdir)
+        ref = f.add(kind, name or "", from_url=from_url, subdir=subdir)
     except (FileNotFoundError, FileExistsError, ValueError) as e:
         console.print(f"[red]✗[/] {e}")
         raise typer.Exit(1) from e
@@ -386,18 +400,41 @@ def add(
 
 @app.command()
 def rm(
-    resource_type: str = typer.Argument(..., help="Resource type: skill"),
-    name: str = typer.Argument(..., help="Resource name to remove"),
+    resource_type: Optional[str] = typer.Argument(
+        None, help="Resource type: skill (omit to use interactive picker)"
+    ),
+    name: Optional[str] = typer.Argument(
+        None, help="Resource name to remove"
+    ),
 ):
-    """Remove a resource from the workspace (unlinks and syncs agent)."""
+    """Remove a resource from the workspace. Launch interactive picker when no args given."""
+    if resource_type is None:
+        from sklm.tui import run_tui
+
+        result = run_tui("remove")
+        if result is None:
+            raise typer.Exit(0)
+        console.print(f"[green]✓[/] Removed {len(result)} skill(s)")
+        return
     f = get_sklm()
     kind = parse_resource_type(resource_type)
     try:
-        ref = f.remove(kind, name)
+        ref = f.remove(kind, name or "")
     except (KeyError, RuntimeError) as e:
         console.print(f"[red]✗[/] {e}")
         raise typer.Exit(1) from e
     console.print(f"[green]✓[/] Removed {kind.value} [bold]{ref.name}[/]")
+
+
+@app.command()
+def skills():
+    """Open interactive skill manager."""
+    from sklm.tui import run_tui
+
+    result = run_tui("manage")
+    if result is None:
+        return
+    console.print(f"[green]✓[/] Updated {len(result)} skill(s)")
 
 
 @app.command()
