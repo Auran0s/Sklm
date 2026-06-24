@@ -11,7 +11,6 @@ import traceback as tb_mod
 from pathlib import Path
 from typing import Optional
 
-import click
 import typer
 from rich.console import Console
 from rich.table import Table
@@ -115,13 +114,13 @@ def _prompt_cleanup(
 
 @app.callback()
 def main(
+    ctx: typer.Context,
     version: bool = typer.Option(
         False, "--version", "-V", help="Show version", callback=version_callback
     ),
 ):
     global _tracker_start, _tracker_command
     _tracker_start = time.monotonic()
-    ctx = click.get_current_context()
     _tracker_command = ctx.invoked_subcommand or ""
 
 
