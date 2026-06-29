@@ -10,10 +10,10 @@ from typing import Optional
 
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
-from textual.widgets import Button, Checkbox, Header, Label
+from textual.widgets import Button, Checkbox, Footer, Header, Input, Label
 
 from sklm.api import Sklm
-from sklm.models import ResourceKind, ResourceRef
+from sklm.models import ResourceRef
 
 
 class SkillTui(App):
@@ -21,66 +21,140 @@ class SkillTui(App):
 
     CSS = """
     Screen { align: center middle; }
-    #container { width: 80; height: auto; border: solid green; padding: 1 2; }
+    #container { width: 90%; height: 90%; border: solid $primary; padding: 1 2; }
     #title { text-align: center; }
-    #list { height: auto; max-height: 20; overflow-y: scroll; }
-    .row { height: auto; padding: 0 1; }
+    .skill-row { height: auto; padding: 0 1; }
+    .skill-row:hover { background: $surface; }
+    #list { height: 1fr; overflow-y: scroll; }
+    #filter { margin-bottom: 1; }
+    #loading { color: $text-muted; text-align: center; }
+    #stats { color: $text-muted; }
     #footer { margin-top: 1; }
     """
 
-    BINDINGS = [("q", "quit", "Quit")]
+    BINDINGS = [
+        ("ctrl+a", "select_all", "Select All"),
+        ("ctrl+d", "deselect_all", "Deselect All"),
+        ("enter", "confirm", "Confirm"),
+        ("q", "quit", "Quit"),
+    ]
 
     def __init__(self, mode: str = "manage", sklm: Optional[Sklm] = None) -> None:
         super().__init__()
         self.mode = mode  # "add" | "remove" | "manage"
         self.sklm = sklm or Sklm()
         self.result: list[ResourceRef] = []
+        self._all_rows: list[tuple[ResourceRef, bool]] = []
 
     def compose(self) -> ComposeResult:
         yield Header()
         with Vertical(id="container"):
             yield Label(self._title(), id="title")
+            yield Input(placeholder="Type to filter skills...", id="filter")
             with Vertical(id="list"):
                 yield Label("Loading skills...", id="loading")
             with Horizontal(id="footer"):
+                yield Label("0 selected", id="stats")
                 if self.mode in ("add", "manage"):
                     yield Button("Add selected", id="add", variant="success")
                 if self.mode in ("remove", "manage"):
                     yield Button("Remove selected", id="remove", variant="error")
                 yield Button("Cancel", id="cancel")
+        yield Footer()
 
     def _title(self) -> str:
         if self.mode == "add":
-            return "Add skills to project"
+            return "[green]Add Skills to Project[/]"
         if self.mode == "remove":
-            return "Remove skills from project"
-        return "Manage project skills"
+            return "[red]Remove Skills from Project[/]"
+        return "[blue]Manage Project Skills[/]"
 
     def on_mount(self) -> None:
-        list_box = self.query_one("#list", Vertical)
+        self.run_worker(self._load_skills(), exclusive=True)
+
+    async def _load_skills(self) -> None:
+        """Load skills from Sklm API in a background thread."""
         loading = self.query_one("#loading", Label)
-        rows: list[Vertical] = []
         try:
             if self.mode in ("add", "manage"):
                 for ref in self.sklm.list_available_skills():
-                    rows.append(self._row(ref, False))
+                    self._all_rows.append((ref, False))
             if self.mode in ("remove", "manage"):
                 for ref in self.sklm.list_workspace_skills():
-                    rows.append(self._row(ref, True))
+                    self._all_rows.append((ref, True))
         except Exception as e:
             loading.update(f"[red]Error loading skills:[/] {e}")
             return
+        self.call_from_thread(self._render_rows)
+
+    def _render_rows(self, filter_text: str = "") -> None:
+        """Render skill rows, filtering by filter_text."""
+        list_box = self.query_one("#list", Vertical)
+        loading = self.query_one("#loading", Label)
         loading.remove()
-        if not rows:
+
+        # Remove existing skill rows
+        for row in list_box.query(".skill-row"):
+            row.remove()
+
+        rows_to_show = [
+            (ref, checked)
+            for ref, checked in self._all_rows
+            if not filter_text or filter_text.lower() in ref.name.lower()
+        ]
+
+        if not rows_to_show:
             list_box.mount(Label("[dim]No skills available.[/]"))
             return
-        for row in rows:
-            list_box.mount(row)
+
+        for ref, checked in rows_to_show:
+            list_box.mount(self._row(ref, checked))
+
+        self._update_stats()
 
     def _row(self, ref: ResourceRef, checked: bool) -> Vertical:
         cb = Checkbox(f"{ref.name}  [dim]({ref.origin})[/]", value=checked)
         cb.data = ref  # ponytail: stash ref on widget for action handler
-        return Vertical(cb, classes="row")
+        return Vertical(cb, classes="skill-row")
+
+    def _update_stats(self) -> None:
+        """Update the selected count label."""
+        count = sum(
+            1
+            for row in self.query(".skill-row")
+            for cb in row.query(Checkbox)
+            if cb.value
+        )
+        self.query_one("#stats", Label).update(f"{count} selected")
+
+    def on_checkbox_changed(self, event: Checkbox.Changed) -> None:
+        """Handle checkbox toggle to update stats."""
+        self._update_stats()
+
+    def on_input_changed(self, event: Input.Changed) -> None:
+        """Filter skill list as user types."""
+        self._render_rows(event.value)
+
+    def action_select_all(self) -> None:
+        """Select all visible skills."""
+        for row in self.query(".skill-row"):
+            for cb in row.query(Checkbox):
+                cb.value = True
+        self._update_stats()
+
+    def action_deselect_all(self) -> None:
+        """Deselect all visible skills."""
+        for row in self.query(".skill-row"):
+            for cb in row.query(Checkbox):
+                cb.value = False
+        self._update_stats()
+
+    def action_confirm(self) -> None:
+        """Press the primary action button."""
+        if self.mode in ("add", "manage"):
+            self.query_one("#add", Button).press()
+        elif self.mode == "remove":
+            self.query_one("#remove", Button).press()
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         button_id = event.button.id
@@ -90,7 +164,7 @@ class SkillTui(App):
 
         refs = [
             cb.data
-            for row in self.query(".row")
+            for row in self.query(".skill-row")
             for cb in row.query(Checkbox)
             if cb.value
         ]
