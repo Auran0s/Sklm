@@ -10,7 +10,7 @@ from typing import Optional
 
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
-from textual.widgets import Button, Checkbox, Footer, Header, Input, Label
+from textual.widgets import Button, Checkbox, Footer, Header, Input, Label, Markdown
 
 from sklm.api import Sklm
 from sklm.models import ResourceRef
@@ -25,10 +25,15 @@ class SkillTui(App):
     #title { text-align: center; }
     .skill-row { height: auto; padding: 0 1; }
     .skill-row:hover { background: $surface; }
-    #list { height: 1fr; overflow-y: scroll; }
+    #body { height: 1fr; }
+    #list-panel { width: 40%; overflow-y: auto; border-right: solid $primary; }
+    #preview-panel { width: 60%; padding: 0 1; overflow-y: auto; }
+    #preview-placeholder { color: $text-muted; text-align: center; margin-top: 2; }
+    .-hidden { display: none; }
     #filter { margin-bottom: 1; }
     #loading { color: $text-muted; text-align: center; }
     #stats { color: $text-muted; }
+    .section-header { color: $text-muted; text-style: bold; padding: 0 1; }
     #footer { margin-top: 1; }
     """
 
@@ -46,14 +51,19 @@ class SkillTui(App):
         self.result: list[ResourceRef] = []
         self._all_rows: list[tuple[ResourceRef, bool]] = []
         self._rendered = False
+        self._visible_count = 0
 
     def compose(self) -> ComposeResult:
         yield Header()
         with Vertical(id="container"):
             yield Label(self._title(), id="title")
             yield Input(placeholder="Type to filter skills...", id="filter")
-            with Vertical(id="list"):
-                yield Label("Loading skills...", id="loading")
+            with Horizontal(id="body"):
+                with Vertical(id="list-panel"):
+                    yield Label("Loading skills...", id="loading")
+                with Vertical(id="preview-panel"):
+                    yield Label("Select a skill to preview", id="preview-placeholder")
+                    yield Markdown(id="preview")
             with Horizontal(id="footer"):
                 yield Label("0 selected", id="stats")
                 if self.mode in ("add", "manage"):
@@ -97,12 +107,15 @@ class SkillTui(App):
 
     def _render_rows(self, filter_text: str = "") -> None:
         """Render skill rows, filtering by filter_text."""
-        list_box = self.query_one("#list", Vertical)
+        list_box = self.query_one("#list-panel", Vertical)
         if not self._rendered:
             self.query_one("#loading", Label).remove()
             self._rendered = True
 
-        # Remove existing skill rows
+        # Remove empty label, section headers, and existing skill rows
+        list_box.query("#empty").remove()
+        for row in list_box.query(".section-header"):
+            row.remove()
         for row in list_box.query(".skill-row"):
             row.remove()
 
@@ -112,17 +125,40 @@ class SkillTui(App):
             if not filter_text or filter_text.lower() in ref.name.lower()
         ]
 
+        # Sort by origin, then by name within each origin
+        rows_to_show.sort(key=lambda x: (x[0].origin, x[0].name))
+
+        self._visible_count = len(rows_to_show)
+
         if not rows_to_show:
-            list_box.mount(Label("[dim]No skills available.[/]"))
+            list_box.mount(Label("[dim]No skills available.[/]", id="empty"))
             return
 
+        # Group by origin with section headers
+        current_origin = None
         for ref, checked in rows_to_show:
+            if ref.origin != current_origin:
+                current_origin = ref.origin
+                list_box.mount(
+                    Label(f"── {current_origin} ──", classes="section-header")
+                )
             list_box.mount(self._row(ref, checked))
 
         self._update_stats()
 
+    @staticmethod
+    def _origin_badge(origin: str) -> str:
+        """Return a Rich-markup badge for the given origin."""
+        if origin == "global":
+            return f"[green]{origin}[/]"
+        if origin == "local":
+            return f"[yellow]{origin}[/]"
+        if origin.startswith("registry:"):
+            return f"[cyan]{origin}[/]"
+        return f"[dim]{origin}[/]"
+
     def _row(self, ref: ResourceRef, checked: bool) -> Vertical:
-        cb = Checkbox(f"{ref.name}  [dim]({ref.origin})[/]", value=checked)
+        cb = Checkbox(f"{ref.name}  {self._origin_badge(ref.origin)}", value=checked)
         cb.data = ref  # ponytail: stash ref on widget for action handler
         return Vertical(cb, classes="skill-row")
 
@@ -134,11 +170,39 @@ class SkillTui(App):
             for cb in row.query(Checkbox)
             if cb.value
         )
-        self.query_one("#stats", Label).update(f"{count} selected")
+        self.query_one("#stats", Label).update(
+            f"{count} / {self._visible_count} selected"
+        )
+
+    def _update_preview(self, ref: ResourceRef | None) -> None:
+        """Update the preview panel with the given skill's SKILL.md content."""
+        placeholder = self.query_one("#preview-placeholder", Label)
+        preview = self.query_one("#preview", Markdown)
+        if ref is None or ref.path is None:
+            placeholder.remove_class("-hidden")
+            preview.update("")
+            return
+
+        skill_md = ref.path / "SKILL.md"
+        if not skill_md.exists():
+            placeholder.remove_class("-hidden")
+            preview.update("")
+            return
+
+        try:
+            content = skill_md.read_text(encoding="utf-8")
+            placeholder.add_class("-hidden")
+            preview.update(content)
+        except Exception:
+            placeholder.remove_class("-hidden")
+            preview.update("")
+            self.notify("Failed to read SKILL.md", severity="error")
 
     def on_checkbox_changed(self, event: Checkbox.Changed) -> None:
-        """Handle checkbox toggle to update stats."""
+        """Handle checkbox toggle to update stats and preview."""
         self._update_stats()
+        ref: ResourceRef | None = event.checkbox.data
+        self._update_preview(ref)
 
     def on_input_changed(self, event: Input.Changed) -> None:
         """Filter skill list as user types."""
