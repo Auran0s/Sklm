@@ -70,11 +70,10 @@ class SkillTui(App):
         return "[blue]Manage Project Skills[/]"
 
     def on_mount(self) -> None:
-        self.run_worker(self._load_skills(), exclusive=True)
+        self.run_worker(self._load_skills, exclusive=True, thread=True)
 
-    async def _load_skills(self) -> None:
+    def _load_skills(self) -> None:
         """Load skills from Sklm API in a background thread."""
-        loading = self.query_one("#loading", Label)
         try:
             if self.mode in ("add", "manage"):
                 for ref in self.sklm.list_available_skills():
@@ -83,9 +82,14 @@ class SkillTui(App):
                 for ref in self.sklm.list_workspace_skills():
                     self._all_rows.append((ref, True))
         except Exception as e:
-            loading.update(f"[red]Error loading skills:[/] {e}")
+            self.call_from_thread(self._render_error, str(e))
             return
         self.call_from_thread(self._render_rows)
+
+    def _render_error(self, error_msg: str) -> None:
+        """Display a loading error on the UI thread."""
+        loading = self.query_one("#loading", Label)
+        loading.update(f"[red]Error loading skills:[/] {error_msg}")
 
     def _render_rows(self, filter_text: str = "") -> None:
         """Render skill rows, filtering by filter_text."""
