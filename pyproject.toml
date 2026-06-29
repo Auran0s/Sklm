@@ -29,3 +29,6 @@ sklm = "sklm.cli.main:run"
 
 [tool.setuptools.packages.find]
 include = ["sklm*"]
+
+[tool.setuptools.package-data]
+sklm = ["agents/agents.yaml"]
