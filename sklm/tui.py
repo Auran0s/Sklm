@@ -30,10 +30,10 @@ class SkillTui(App):
 
     BINDINGS = [("q", "quit", "Quit")]
 
-    def __init__(self, mode: str = "manage") -> None:
+    def __init__(self, mode: str = "manage", sklm: Optional[Sklm] = None) -> None:
         super().__init__()
         self.mode = mode  # "add" | "remove" | "manage"
-        self.sklm = Sklm()
+        self.sklm = sklm or Sklm()
         self.result: list[ResourceRef] = []
 
     def compose(self) -> ComposeResult:
@@ -121,5 +121,5 @@ def run_tui(mode: str = "manage") -> Optional[list[ResourceRef]]:
     for agent in sklm.workspace.load_config().agents:
         if agent != "none":
             sklm.import_agent_project_skills(agent)
-    app = SkillTui(mode=mode)
+    app = SkillTui(mode=mode, sklm=sklm)
     return app.run()

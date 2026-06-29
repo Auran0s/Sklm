@@ -388,10 +388,15 @@ def add(
             raise typer.Exit(0)
         console.print(f"[green]✓[/] Added {len(result)} skill(s)")
         return
+    if name is None:
+        console.print(
+            "[red]✗[/] Resource name is required. Usage: [bold]sklm add <type> <name>[/]"
+        )
+        raise typer.Exit(1)
     f = get_sklm()
     kind = parse_resource_type(resource_type)
     try:
-        ref = f.add(kind, name or "", from_url=from_url, subdir=subdir)
+        ref = f.add(kind, name, from_url=from_url, subdir=subdir)
     except (FileNotFoundError, FileExistsError, ValueError) as e:
         console.print(f"[red]✗[/] {e}")
         raise typer.Exit(1) from e
@@ -416,10 +421,15 @@ def rm(
             raise typer.Exit(0)
         console.print(f"[green]✓[/] Removed {len(result)} skill(s)")
         return
+    if name is None:
+        console.print(
+            "[red]✗[/] Resource name is required. Usage: [bold]sklm rm <type> <name>[/]"
+        )
+        raise typer.Exit(1)
     f = get_sklm()
     kind = parse_resource_type(resource_type)
     try:
-        ref = f.remove(kind, name or "")
+        ref = f.remove(kind, name)
     except (KeyError, RuntimeError) as e:
         console.print(f"[red]✗[/] {e}")
         raise typer.Exit(1) from e

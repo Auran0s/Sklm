@@ -185,6 +185,7 @@ class Sklm:
         name: str,
         from_url: Optional[str] = None,
         subdir: Optional[str] = None,
+        _sync: bool = True,
     ) -> ResourceRef:
         if from_url:
             ref = self.install(kind, name, from_url=from_url, subdir=subdir)
@@ -197,30 +198,32 @@ class Sklm:
             if not existing and ref.path:
                 self.global_store.add_resource(kind, ref.path, ref.name)
         _link_resource(self.workspace, self.global_store, kind, ref.name)
-        try:
-            self.agent_sync()
-        except RuntimeError:
-            console.print(
-                "[yellow]⚠[/] Skill installed but no agent configured — "
-                "not synced to any agent directory."
-            )
-            console.print(
-                "   Run [bold]sklm init --agent <name>[/] to configure an agent."
-            )
+        if _sync:
+            try:
+                self.agent_sync()
+            except RuntimeError:
+                console.print(
+                    "[yellow]⚠[/] Skill installed but no agent configured — "
+                    "not synced to any agent directory."
+                )
+                console.print(
+                    "   Run [bold]sklm init --agent <name>[/] to configure an agent."
+                )
         return ref
 
-    def remove(self, kind: ResourceKind, name: str) -> ResourceRef:
+    def remove(self, kind: ResourceKind, name: str, _sync: bool = True) -> ResourceRef:
         ref = remove_resource_from_workspace(self.workspace, kind, name)
-        try:
-            self.agent_sync()
-        except RuntimeError:
-            console.print(
-                "[yellow]⚠[/] Skill removed but no agent configured — "
-                "agent directory not cleaned."
-            )
-            console.print(
-                "   Run [bold]sklm init --agent <name>[/] to configure an agent."
-            )
+        if _sync:
+            try:
+                self.agent_sync()
+            except RuntimeError:
+                console.print(
+                    "[yellow]⚠[/] Skill removed but no agent configured — "
+                    "agent directory not cleaned."
+                )
+                console.print(
+                    "   Run [bold]sklm init --agent <name>[/] to configure an agent."
+                )
         return ref
 
     def list(self, kind: Optional[ResourceKind] = None) -> list[ResourceRef]:
@@ -258,17 +261,37 @@ class Sklm:
         )
 
     def add_skills(self, names: list[str]) -> list[ResourceRef]:
-        """Add and link multiple skills, then sync agents."""
+        """Add and link multiple skills, then sync agents once."""
         refs: list[ResourceRef] = []
         for name in names:
-            refs.append(self.add(ResourceKind.skill, name))
+            refs.append(self.add(ResourceKind.skill, name, _sync=False))
+        try:
+            self.agent_sync()
+        except RuntimeError:
+            console.print(
+                "[yellow]⚠[/] Skills added but no agent configured — "
+                "not synced to any agent directory."
+            )
+            console.print(
+                "   Run [bold]sklm init --agent <name>[/] to configure an agent."
+            )
         return refs
 
     def remove_skills(self, names: list[str]) -> list[ResourceRef]:
-        """Unlink and remove multiple skills, then sync agents."""
+        """Unlink and remove multiple skills, then sync agents once."""
         refs: list[ResourceRef] = []
         for name in names:
-            refs.append(self.remove(ResourceKind.skill, name))
+            refs.append(self.remove(ResourceKind.skill, name, _sync=False))
+        try:
+            self.agent_sync()
+        except RuntimeError:
+            console.print(
+                "[yellow]⚠[/] Skills removed but no agent configured — "
+                "agent directory not cleaned."
+            )
+            console.print(
+                "   Run [bold]sklm init --agent <name>[/] to configure an agent."
+            )
         return refs
 
     def import_agent_project_skills(self, agent_id: str) -> list[ResourceRef]:
@@ -280,18 +303,32 @@ class Sklm:
         if not skills_path.exists():
             return []
         imported: list[ResourceRef] = []
-        for skill_dir in sorted(skills_path.iterdir()):
-            if not skill_dir.is_dir() or not (skill_dir / "SKILL.md").exists():
+        try:
+            entries = sorted(skills_path.iterdir())
+        except (PermissionError, OSError) as e:
+            import sys
+            print(f"[warning] Could not read skills directory {skills_path}: {e}", file=sys.stderr)
+            return []
+        for skill_dir in entries:
+            try:
+                if not skill_dir.is_dir() or not (skill_dir / "SKILL.md").exists():
+                    continue
+                if self.workspace.get_link(ResourceKind.skill, skill_dir.name):
+                    continue
+                if not self.global_store.get_resource(ResourceKind.skill, skill_dir.name):
+                    self.global_store.add_resource(ResourceKind.skill, skill_dir)
+                ref = add_resource_to_workspace(
+                    self.workspace, self.global_store, self.registry_manager, skill_dir.name
+                )
+                _link_resource(self.workspace, self.global_store, ResourceKind.skill, skill_dir.name)
+                imported.append(ref)
+            except Exception as e:
+                import sys
+                print(
+                    f"[warning] Failed to import skill '{skill_dir.name}': {e}",
+                    file=sys.stderr,
+                )
                 continue
-            if self.workspace.get_link(ResourceKind.skill, skill_dir.name):
-                continue
-            if not self.global_store.get_resource(ResourceKind.skill, skill_dir.name):
-                self.global_store.add_resource(ResourceKind.skill, skill_dir)
-            ref = add_resource_to_workspace(
-                self.workspace, self.global_store, self.registry_manager, skill_dir.name
-            )
-            _link_resource(self.workspace, self.global_store, ResourceKind.skill, skill_dir.name)
-            imported.append(ref)
         if imported:
             self.agent_sync()
         return imported

@@ -1,5 +1,7 @@
 """Self-check for TUI API helpers."""
 
+from __future__ import annotations
+
 from sklm.api import Sklm
 
 
