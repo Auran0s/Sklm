@@ -45,6 +45,7 @@ class SkillTui(App):
         self.sklm = sklm or Sklm()
         self.result: list[ResourceRef] = []
         self._all_rows: list[tuple[ResourceRef, bool]] = []
+        self._rendered = False
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -88,14 +89,18 @@ class SkillTui(App):
 
     def _render_error(self, error_msg: str) -> None:
         """Display a loading error on the UI thread."""
-        loading = self.query_one("#loading", Label)
-        loading.update(f"[red]Error loading skills:[/] {error_msg}")
+        if not self._rendered:
+            self.query_one("#loading", Label).update(
+                f"[red]Error loading skills:[/] {error_msg}"
+            )
+            self._rendered = True
 
     def _render_rows(self, filter_text: str = "") -> None:
         """Render skill rows, filtering by filter_text."""
         list_box = self.query_one("#list", Vertical)
-        loading = self.query_one("#loading", Label)
-        loading.remove()
+        if not self._rendered:
+            self.query_one("#loading", Label).remove()
+            self._rendered = True
 
         # Remove existing skill rows
         for row in list_box.query(".skill-row"):
