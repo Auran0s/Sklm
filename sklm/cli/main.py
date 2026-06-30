@@ -354,12 +354,20 @@ def add(
         selected = prompt_skill_selection(f, mode="add")
         if not selected:
             return
+        linked_names = {l.name for l in f.workspace.list_links()}
+        added = 0
         for skill_name in selected:
+            if skill_name in linked_names:
+                continue  # already installed, skip
             try:
-                ref = f.add(ResourceKind.skill, skill_name)
-                console.print(f"[green]✓[/] Added {ref.kind.value} [bold]{ref.name}[/] (origin: {ref.origin})")
+                f.add(ResourceKind.skill, skill_name)
+                console.print(f"[green]✓[/] Added [bold]{skill_name}[/]")
+                added += 1
             except (FileNotFoundError, FileExistsError, ValueError) as e:
                 console.print(f"[red]✗[/] {e}")
+        if added == 0:
+            console.print("[yellow]No new skills to add (all selected are already installed).[/]")
+            return
         try:
             f.agent_sync()
         except RuntimeError:
@@ -482,80 +490,87 @@ def skills():
 
     Opens a ``questionary.select`` menu with options to add skills, remove
     skills, install from git, sync agents, and manage agent configuration.
+    The command runs the selected action then exits.
     """
     f = get_sklm()
-    while True:
-        action = prompt_main_menu(f)
-        if action is None:
-            break
+    action = prompt_main_menu(f)
+    if action is None:
+        return
 
-        if action == "add":
-            selected = prompt_skill_selection(f, mode="add")
-            if not selected:
+    if action == "add":
+        selected = prompt_skill_selection(f, mode="add")
+        if not selected:
+            return
+        linked_names = {l.name for l in f.workspace.list_links()}
+        added = 0
+        for skill_name in selected:
+            if skill_name in linked_names:
                 continue
-            for skill_name in selected:
+            try:
+                f.add(ResourceKind.skill, skill_name)
+                console.print(f"[green]✓[/] Added [bold]{skill_name}[/]")
+                added += 1
+            except (FileNotFoundError, FileExistsError, ValueError) as e:
+                console.print(f"[red]✗[/] {e}")
+        if added == 0:
+            console.print("[yellow]No new skills to add.[/]")
+        try:
+            f.agent_sync()
+        except RuntimeError:
+            pass
+
+    elif action == "remove":
+        selected = prompt_skill_selection(f, mode="remove")
+        if not selected:
+            return
+        for skill_name in selected:
+            try:
+                ref = f.remove(ResourceKind.skill, skill_name)
+                console.print(f"[green]✓[/] Removed {ref.kind.value} [bold]{ref.name}[/]")
+            except (KeyError, RuntimeError) as e:
+                console.print(f"[red]✗[/] {e}")
+        try:
+            f.agent_sync()
+        except RuntimeError:
+            pass
+
+    elif action == "install":
+        url, subdir = prompt_install_from_git()
+        if not url:
+            return
+        try:
+            ref = f.install(ResourceKind.skill, "from-git", from_url=url, subdir=subdir)
+            console.print(f"[green]✓[/] Installed from git: [bold]{ref.name}[/]")
+            f.workspace.add_resource(ref)
+            from sklm.core.linking import link_resource as _link_resource
+            _link_resource(f.workspace, f.global_store, ResourceKind.skill, ref.name)
+            f.agent_sync()
+        except (FileNotFoundError, FileExistsError, ValueError, OSError, subprocess.TimeoutExpired) as e:
+            console.print(f"[red]✗[/] {e}")
+
+    elif action == "sync":
+        try:
+            result = f.agent_sync()
+            agents_str = ", ".join(result["agents"])
+            console.print(f"[green]✓[/] Synced {len(result['agents'])} agent(s): {agents_str}")
+        except RuntimeError as e:
+            console.print(f"[red]✗[/] {e}")
+
+    elif action == "agents":
+        from sklm.agents.registry import AgentRegistry
+        registry = AgentRegistry()
+        agent_choice = prompt_agent_selection(registry)
+        if agent_choice and agent_choice != ["none"]:
+            for agent_name in agent_choice:
                 try:
-                    ref = f.add(ResourceKind.skill, skill_name)
-                    console.print(f"[green]✓[/] Added {ref.kind.value} [bold]{ref.name}[/]")
-                except (FileNotFoundError, FileExistsError, ValueError) as e:
+                    f.workspace.add_agent(agent_name)
+                    console.print(f"[green]✓[/] Agent [bold]{agent_name}[/] added.")
+                except ValueError as e:
                     console.print(f"[red]✗[/] {e}")
             try:
                 f.agent_sync()
             except RuntimeError:
                 pass
-
-        elif action == "remove":
-            selected = prompt_skill_selection(f, mode="remove")
-            if not selected:
-                continue
-            for skill_name in selected:
-                try:
-                    ref = f.remove(ResourceKind.skill, skill_name)
-                    console.print(f"[green]✓[/] Removed {ref.kind.value} [bold]{ref.name}[/]")
-                except (KeyError, RuntimeError) as e:
-                    console.print(f"[red]✗[/] {e}")
-            try:
-                f.agent_sync()
-            except RuntimeError:
-                pass
-
-        elif action == "install":
-            url, subdir = prompt_install_from_git()
-            if not url:
-                continue
-            try:
-                ref = f.install(ResourceKind.skill, "from-git", from_url=url, subdir=subdir)
-                console.print(f"[green]✓[/] Installed from git: [bold]{ref.name}[/]")
-                f.workspace.add_resource(ref)
-                from sklm.core.linking import link_resource as _link_resource
-                _link_resource(f.workspace, f.global_store, ResourceKind.skill, ref.name)
-                f.agent_sync()
-            except (FileNotFoundError, FileExistsError, ValueError, OSError) as e:
-                console.print(f"[red]✗[/] {e}")
-
-        elif action == "sync":
-            try:
-                result = f.agent_sync()
-                agents_str = ", ".join(result["agents"])
-                console.print(f"[green]✓[/] Synced {len(result['agents'])} agent(s): {agents_str}")
-            except RuntimeError as e:
-                console.print(f"[red]✗[/] {e}")
-
-        elif action == "agents":
-            from sklm.agents.registry import AgentRegistry
-            registry = AgentRegistry()
-            agent_choice = prompt_agent_selection(registry)
-            if agent_choice and agent_choice != ["none"]:
-                for agent_name in agent_choice:
-                    try:
-                        f.workspace.add_agent(agent_name)
-                        console.print(f"[green]✓[/] Agent [bold]{agent_name}[/] added.")
-                    except ValueError as e:
-                        console.print(f"[red]✗[/] {e}")
-                try:
-                    f.agent_sync()
-                except RuntimeError:
-                    pass
 
 
 # ─── Global Store ────────────────────────────────────────────────────────────

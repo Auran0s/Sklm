@@ -47,8 +47,8 @@ def _make_skill_choices(
     sklm
         A ``Sklm`` facade instance.
     mode
-        One of ``"add"`` (show unlinked global skills) or ``"remove"``
-        (show currently linked skills).
+        ``"add"`` to show all global skills (linked ones pre-checked),
+        ``"remove"`` to show only currently linked skills.
 
     Returns
     -------
@@ -66,13 +66,14 @@ def _make_skill_choices(
         # Only linked skills can be removed
         candidates = [r for r in global_skills if r.name in linked_names]
     else:
-        # Show global skills that are NOT yet linked
-        candidates = [r for r in global_skills if r.name not in linked_names]
+        # Show ALL global skills — linked ones appear pre-checked
+        candidates = list(global_skills)
 
     choices: list[questionary.Choice] = []
     for r in candidates:
         title = f"{r.name:{24}}"
-        choices.append(questionary.Choice(title=title, value=r.name))
+        checked = r.name in linked_names
+        choices.append(questionary.Choice(title=title, value=r.name, checked=checked))
     return choices
 
 
