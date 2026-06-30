@@ -474,7 +474,7 @@ class SkillManagerApp(App):
                 skill_list.mount(
                     Label("[dim]No skills available.[/]", id="empty")
                 )
-            self._update_stats()
+            self._recompute_state()
             return
 
         for ref, linked in rows_to_show:
@@ -482,7 +482,7 @@ class SkillManagerApp(App):
             row.classes = "skill-row"
             skill_list.mount(row)
 
-        self._update_stats()
+        self._recompute_state()
 
     # ── Search / Filter ──────────────────────────────────────────────────────
 
