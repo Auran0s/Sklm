@@ -24,7 +24,7 @@ from sklm.agents.registry import AgentRegistry
 app = typer.Typer(
     name="sklm",
     help="Skills manager for AI agents",
-    no_args_is_help=True,
+    no_args_is_help=False,
     rich_markup_mode="rich",
 )
 console = Console()
@@ -891,6 +891,17 @@ def _show_update_notice() -> None:
 
 def run():
     global _tracker_command
+
+    # TTY detection: launch wizard when interactive with no arguments
+    if len(sys.argv) <= 1:
+        if sys.stdin.isatty():
+            from sklm.cli.wizard import run_wizard as _run_wizard
+            _run_wizard()
+            return
+        # Non-interactive no-args: show help (preserves original behavior)
+        app(["--help"])
+        return
+
     error = None
     try:
         app()
