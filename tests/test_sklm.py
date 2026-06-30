@@ -2197,7 +2197,7 @@ class TestWizardBuildChoices:
         state = SystemState(has_store=True, has_workspace=True, store_count=2)
         choices = build_choices(state)
         assert "Install a skill" in choices
-        assert "Add installed skill to workspace" in choices
+        assert "Add skill to this workspace" in choices
         assert "List skills" in choices
         assert "Remove a skill" in choices
         assert "Initialize this workspace" not in choices

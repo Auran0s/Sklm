@@ -3,95 +3,97 @@
 ## Setup & dev commands
 
 ```bash
-pip install -e .              # editable install (required before any work)
-pip install -r requirements.txt  # includes pytest + pytest-cov
-python3 -m pytest tests/      # run all tests (single file: tests/test_sklm.py)
+pip install -e .                  # editable install (required first)
+pip install -r requirements.txt   # pytest + pytest-cov
+python3 -m pytest tests/          # run all tests (single file: tests/test_sklm.py)
 python3 -m pytest tests/ -k <pattern>  # run a subset
 ```
 
-No linting or typechecking tools are configured. No CI.
+No CI, no linting, no typechecking. Single test file, no `tests/__init__.py`.
+
+## Entrypoint
+
+- CLI: `sklm.cli.main:run` (Typer app, `no_args_is_help=True`).
+- Declared in `pyproject.toml` under `[project.scripts]`.
+- Version derived from `importlib.metadata.version("sklm")` in `sklm/__init__.py`.
 
 ## Architecture
 
-Sklm is a Python 3.9+ CLI (Typer + Rich) that manages skills for AI agents via a two-level store:
+Two-level store:
 
 ```
-~/.sklm/            # global store (user-wide library)
-  store/skills/     #   skill directories (each contains a SKILL.md)
+~/.sklm/                   # global store (~/.sklm/ or $SKLM_HOME)
+  store/skills/            #   installed skill dirs (each has SKILL.md)
+  config.yaml              #   GlobalConfig — resource catalog + telemetry
+  registries.yaml          #   RegistrySource entries
+  cache/                   #   shallow-cloned git repos for install --from
 
-./.sklm/            # per-project workspace (gitignored)
-  links/skills/     #   symlinks → global store
-  sklm.yaml         #   WorkspaceConfig per project
+./.sklm/                   # per-project workspace (gitignored)
+  links/skills/            #   symlinks → ~/.sklm/store/skills/
+  sklm.yaml                #   WorkspaceConfig (agents, resources, links)
 ```
 
-- `_type_dir(kind)` in `GlobalStore` always returns `skills_dir` — the `kind` parameter is ignored (only `skill` exists).
-- `sklm add` pipeline: resolve → store → link → sync to agent config.
-- Agent sync **copies** (not symlinks) skill content into the agent's config dir (e.g. `.opencode/skills/`).
-- Entrypoint: `sklm.cli.main:run` (Typer app, `no_args_is_help=True`).
+`sklm add` pipeline: resolve → store → link → sync (copy + variant overlay) to agent config.
 
-### Source layout
+## Source layout
 
 | Path | Role |
 |---|---|
-| `sklm/api.py` | `Sklm` facade — wires everything together |
-| `sklm/cli/main.py` | Typer CLI app — all commands |
-| `sklm/models/` | Pydantic v2 models (YAML persistence) |
-| `sklm/store/` | `GlobalStore` — `~/.sklm/` management |
+| `sklm/api.py` | `Sklm` facade — wires everything |
+| `sklm/cli/main.py` | Typer CLI — all commands |
+| `sklm/models/__init__.py` | Pydantic v2 models, YAML persistence |
+| `sklm/store/__init__.py` | `GlobalStore` — `~/.sklm/` management |
 | `sklm/core/workspace.py` | `Workspace` — `.sklm/` management |
-| `sklm/core/registry.py` | `RegistryManager` — registry discovery |
-| `sklm/core/crud.py` | CRUD operations |
+| `sklm/core/registry.py` | `RegistryManager` — clone/fetch, search |
+| `sklm/core/crud.py` | Resource CRUD (resolve → store → link) |
 | `sklm/core/linking.py` | Symlink create/remove/repair |
-| `sklm/core/update.py` | `UpdateChecker` — version check and self-update |
-| `sklm/agents/` | 8 agents in `agents.yaml`; `GenericAdapter` handles 7, `GitHubCopilotAdapter` is custom |
-| `sklm/telemetry.py` | `UmamiTracker` — telemetry |
+| `sklm/core/update.py` | `UpdateChecker` — GitHub API version check |
+| `sklm/agents/agents.yaml` | **Source of truth** — 30 agent definitions (dir_name, detect mode) |
+| `sklm/agents/_sync.py` | Shared sync logic with `variants/<agent>/` overlay |
+| `sklm/agents/generic.py` | `GenericAdapter` — handles 28 agents |
+| `sklm/agents/github_copilot.py` | `GitHubCopilotAdapter` — custom (detect: explicit) |
+| `sklm/agents/registry.py` | `AgentRegistry` — discovery + adapter lookup |
+| `sklm/telemetry.py` | `UmamiTracker` — daemon thread, 2s timeout |
 
 ## Conventions
 
 - **Every `.py` file** starts with `from __future__ import annotations`.
-- **Resource names** must be **kebab-case** (enforced by Pydantic validator).
-- **No spaces** in registry names.
-- Persistence is **YAML** everywhere (`yaml.safe_load` / `yaml.dump`).
-- All `Path` arguments are `.resolve()`d eagerly.
-- CLI output uses **Rich** (tables, `print_json`, `Console`); use `--json` for machine-readable output.
-- Only `skill` resource kind exists — the `ResourceKind` enum has a single value.
-- `link`/`unlink` are **internal API only** (not CLI commands). Use `add`/`rm`.
-- `install --from` resolves skill dirs in this order: `skills/<name>` → repo root (if `SKILL.md` present) → `<name>` subdir → recursive walk of `skills/` for `<name>/SKILL.md`.
-- `SKLM_HOME` overrides the global store root (`~/.sklm/` by default); tests patch `sklm.store.SKLM_HOME`.
+- **Resource names** must be **kebab-case** (Pydantic validator on `Resource.name`).
+- **No spaces** in registry names (Pydantic validator on `RegistrySource.name`).
+- Persistence: **YAML** everywhere (`yaml.safe_load` / `yaml.dump`).
+- All `Path` args are `.resolve()`d eagerly.
+- CLI output: **Rich** tables; `--json` flag for machine-readable output.
+- Only `skill` resource kind exists — `ResourceKind` enum has a single value.
+- `link`/`unlink` are **internal API only** (no CLI commands). Use `add`/`rm`.
+- Agent sync **copies** (not symlinks) content with variant overlay from `variants/<agent-id>/`.
+- Editable install required (`pip install -e .`) — the update mechanism runs `git fetch --tags && git checkout v<tag> && pip install -e .`.
 
-## Testing
+## Agent config (agents.yaml)
 
-- Single test file: `tests/test_sklm.py` (no `__init__.py`).
-- Uses `pytest` fixtures (`temp_dir`, `isolated_store`, `fake_skill_dir`).
-- CLI integration tests use `typer.testing.CliRunner`.
-- Global store tests patch `SKLM_HOME` via `monkeypatch`.
+30 agents defined in `sklm/agents/agents.yaml`. Each has `dir_name` (config directory). Two agents have `detect: explicit` (not auto-detected): **github-copilot** (`.github/`) and **antigravity** (`.agent/`). All others auto-detect by checking for their config directory.
+
+## Testing quirks
+
+- Fixtures: `temp_dir` (TemporaryDirectory + chdir), `isolated_store` (monkeypatches `SKLM_HOME`), `fake_skill_dir` (creates `my-skill/SKILL.md`).
+- CLI tests use `typer.testing.CliRunner` with `monkeypatch` for isolation.
+- Every CLI integration test fixture patches `sklm.store.SKLM_HOME`, `sklm.core.registry.REGISTRIES_PATH`, `sklm.core.registry.REGISTRY_CACHE`, and resets `sklm.cli.main._sklm`.
+- `monkeypatch.setattr("sklm.__version__", "0.1.0")` required in update tests.
+- `isolated_store` fixture patches `sklm.store.SKLM_HOME` via `monkeypatch.setattr`.
 
 ## Telemetry
 
-- Umami Analytics; disable with `SKLM_TELEMETRY=0` (or `false`/`no`/`off`/`""`).
-- Also overridable via `SKLM_UMAMI_URL`, `SKLM_WEBSITE_ID`.
-- Tracker runs in a daemon thread with 2s timeout — never raises, never blocks.
+- Umami Analytics. Default endpoint: `https://analytics.victorbeysseriat.fr`.
+- Disable: `SKLM_TELEMETRY=0` env var (also `false`/`no`/`off`/`""`).
+- Override URL/ID: `SKLM_UMAMI_URL`, `SKLM_WEBSITE_ID` env vars.
+- Runs in a daemon thread with 2s join timeout — never raises, never blocks.
 
-## Git Workflow
-When making code changes ALWAYS follow this process:
+## Git workflow
 
-1. Ensure current branch is committed if not do not continue until the user has committed and pushed the changes.
+This repo uses `opencode.jsonc` with a build prompt that repeats these rules. The authoritative version is below:
 
-2. Create a new branch before editing:
-   git checkout -b agent/<short-task-name>
-
-3. Never commit directly to main or master.
-
-4. Use clear commit messages:
-   feat: ...
-   fix: ...
-   refactor: ...
-
-## Mandatory Rules
-
-These rules must always be followed:
-- NEVER make changes unless the current branch is committed.
-- ALWAYS create a git branch before editing code.
-- NEVER modify protected branches.
-- ALWAYS run tests before committing.
-- ALWAYS check if the code is commited.
-- NEVER archive changes before committing.
+1. Check `git status` before any edit — if uncommitted changes exist, ask the user first.
+2. Create a feature branch: `git checkout -b agent/<short-description>`.
+3. Never edit code on `main` or `master`.
+4. Run `python3 -m pytest tests/` before committing.
+5. Commit with a clear message prefix: `feat:`, `fix:`, `refactor:`.
+6. Push the branch when done.
