@@ -12,6 +12,11 @@ from rich.console import Console
 from rich.table import Table
 
 from sklm.api import Sklm
+
+# ANSI escape sequences for choice styling
+_DIM = "\033[2m"
+_RESET = "\033[0m"
+_BACK_CHOICE = questionary.Choice(title=f"{_DIM}← Back{_RESET}", value="Back")
 from sklm.models import ResourceKind
 from sklm.agents.registry import AgentRegistry
 from sklm.core.linking import detect_broken_links, link_resource as _do_link
@@ -78,19 +83,20 @@ def detect_state(f: Sklm) -> SystemState:
 def show_header(state: SystemState) -> None:
     """Display a context banner with the current system state."""
     console.print()
-    console.print("[bold]Sklm Interactive Wizard[/]")
+    console.print("[bold]Sklm — Skills manager for AI agents[/]")
     console.print()
 
     parts: list[str] = []
     if state.has_store:
-        parts.append(f"Store: [cyan]{state.store_count}[/] skill(s)")
+        parts.append(f"Global store: [cyan]{state.store_count}[/] skill(s)")
     else:
-        parts.append("Store: [dim]empty[/]")
+        parts.append("Global store: [dim]empty[/]")
 
     if state.has_workspace:
         ws_label = f"Workspace: [green]active[/]"
         if state.agents:
             ws_label += f" ({', '.join(state.agents)})"
+        ws_label += f" — [cyan]{state.ws_count}[/] skill(s)"
         parts.append(ws_label)
     else:
         parts.append("Workspace: [dim]none[/]")
@@ -116,7 +122,7 @@ def build_choices(state: SystemState) -> list[str]:
     choices.append("Install a skill")
 
     if state.has_store and state.has_workspace:
-        choices.append("Add installed skill to workspace")
+        choices.append("Add skill to this workspace")
 
     if state.has_store or state.has_workspace:
         choices.append("List skills")
@@ -185,7 +191,7 @@ def install_flow(f: Sklm) -> None:
                 "Git URL",
                 "Search registries",
                 "Local path",
-                "Back",
+                _BACK_CHOICE,
             ],
         ).ask()
     except KeyboardInterrupt:
@@ -248,9 +254,9 @@ def install_flow(f: Sklm) -> None:
                 f"{reg_name}:{res.name}" for reg_name, res in results
             ]
             selected = questionary.select(
-                "Select a skill to install:",
-                choices=choices + ["Back"],
-            ).ask()
+                    "Select a skill to install:",
+                    choices=choices + [_BACK_CHOICE],
+                ).ask()
             if not selected or selected == "Back":
                 return
 
@@ -296,7 +302,7 @@ def install_flow(f: Sklm) -> None:
     try:
         dest = questionary.select(
             "Destination:",
-            choices=["Global store only", "Global store + workspace", "Back"],
+            choices=["Global store only", "Global store + workspace", _BACK_CHOICE],
         ).ask()
     except KeyboardInterrupt:
         return
@@ -408,7 +414,7 @@ def add_to_workspace_flow(f: Sklm) -> None:
         choices = [s.name for s in available]
         selected = questionary.select(
             "Select a skill to add to workspace:",
-            choices=choices + ["Back"],
+            choices=choices + [_BACK_CHOICE],
         ).ask()
         if not selected or selected == "Back":
             return
@@ -428,15 +434,19 @@ def list_skills_flow(f: Sklm) -> None:
     """Display skills from global store and/or workspace."""
     store_skills = f.global_ls(ResourceKind.skill)
     ws_skills = []
+    ws_names: set[str] = set()
     if f.workspace.exists():
         ws_skills = f.workspace.list_resources(ResourceKind.skill)
+        ws_names = {s.name for s in ws_skills}
 
     if store_skills:
         table = Table(title="Global Store Skills")
         table.add_column("Name", style="cyan")
         table.add_column("Source", style="green")
+        table.add_column("In workspace", style="magenta")
         for s in store_skills:
-            table.add_row(s.name, s.source)
+            in_ws = "[green]✓[/]" if s.name in ws_names else "[dim]—[/]"
+            table.add_row(s.name, s.source, in_ws)
         console.print(table)
     else:
         console.print("[yellow]No skills in global store.[/]")
@@ -462,7 +472,7 @@ def remove_skill_flow(f: Sklm) -> None:
     try:
         scope = questionary.select(
             "Remove from:",
-            choices=["Workspace", "Global store", "Back"],
+            choices=["Workspace", "Global store", _BACK_CHOICE],
         ).ask()
     except KeyboardInterrupt:
         return
@@ -484,7 +494,7 @@ def remove_skill_flow(f: Sklm) -> None:
             choices = [s.name for s in ws_skills]
             selected = questionary.select(
                 "Select skill to remove:",
-                choices=choices + ["Back"],
+                choices=choices + [_BACK_CHOICE],
             ).ask()
             if not selected or selected == "Back":
                 return
@@ -508,7 +518,7 @@ def remove_skill_flow(f: Sklm) -> None:
             choices = [s.name for s in store_skills]
             selected = questionary.select(
                 "Select skill to remove:",
-                choices=choices + ["Back"],
+                choices=choices + [_BACK_CHOICE],
             ).ask()
             if not selected or selected == "Back":
                 return
@@ -578,7 +588,7 @@ def settings_menu(f: Sklm) -> None:
                     "Toggle telemetry",
                     "Check for updates",
                     "Manage registries",
-                    "Back",
+                    _BACK_CHOICE,
                 ],
             ).ask()
         except KeyboardInterrupt:
@@ -645,7 +655,7 @@ def agents_menu(f: Sklm) -> None:
                     "Remove agent",
                     "Detect agents",
                     "Sync skills",
-                    "Back",
+                    _BACK_CHOICE,
                 ],
             ).ask()
         except KeyboardInterrupt:
@@ -692,7 +702,7 @@ def _add_agent(f: Sklm) -> None:
     try:
         selected = questionary.select(
             "Select agent to add:",
-            choices=all_ids + ["Back"],
+            choices=all_ids + [_BACK_CHOICE],
         ).ask()
         if not selected or selected == "Back":
             return
@@ -720,7 +730,7 @@ def _remove_agent(f: Sklm) -> None:
     try:
         selected = questionary.select(
             "Select agent to remove:",
-            choices=active + ["Back"],
+            choices=active + [_BACK_CHOICE],
         ).ask()
         if not selected or selected == "Back":
             return
@@ -762,7 +772,7 @@ def registries_menu(f: Sklm) -> None:
                     "List registries",
                     "Add registry",
                     "Search registries",
-                    "Back",
+                    _BACK_CHOICE,
                 ],
             ).ask()
         except KeyboardInterrupt:
@@ -877,7 +887,7 @@ def run_wizard() -> None:
         # Route to the appropriate flow
         if choice == "Install a skill":
             install_flow(f)
-        elif choice == "Add installed skill to workspace":
+        elif choice == "Add skill to this workspace":
             add_to_workspace_flow(f)
         elif choice == "List skills":
             list_skills_flow(f)
