@@ -233,6 +233,9 @@ def status(
     table.add_row("Skills", str(state["skills"]))
     table.add_row("Total links", str(state["total_links"]))
     table.add_row("Broken links", str(state["broken_links"]))
+    linked = f.list_workspace_skills()
+    if linked:
+        table.add_row("Active project skills", ", ".join(r.name for r in linked))
     console.print(table)
     if state["broken_links"] > 0:
         console.print("\n[yellow]💡 Tip:[/] Run [bold]sklm status --repair[/] to fix broken links")
@@ -363,8 +366,12 @@ def migrate(
 
 @app.command()
 def add(
-    resource_type: str = typer.Argument(..., help="Resource type: skill"),
-    name: str = typer.Argument(..., help="Resource name (optionally prefixed: registry:name)"),
+    resource_type: Optional[str] = typer.Argument(
+        None, help="Resource type: skill (omit to use interactive picker)"
+    ),
+    name: Optional[str] = typer.Argument(
+        None, help="Resource name (optionally prefixed: registry:name)"
+    ),
     from_url: Optional[str] = typer.Option(
         None, "--from", help="Git repository URL to install from"
     ),
@@ -372,7 +379,20 @@ def add(
         None, "--subdir", help="Subdirectory within the repo (default: skills/<name>)"
     ),
 ):
-    """Add and activate a resource in the project (resolves, stores, links, syncs agent)."""
+    """Add and activate a resource in the project. Launch interactive picker when no args given."""
+    if resource_type is None:
+        from sklm.tui import run_tui
+
+        result = run_tui("add")
+        if result is None:
+            raise typer.Exit(0)
+        console.print(f"[green]✓[/] Added {len(result)} skill(s)")
+        return
+    if name is None:
+        console.print(
+            "[red]✗[/] Resource name is required. Usage: [bold]sklm add <type> <name>[/]"
+        )
+        raise typer.Exit(1)
     f = get_sklm()
     kind = parse_resource_type(resource_type)
     try:
@@ -385,10 +405,27 @@ def add(
 
 @app.command()
 def rm(
-    resource_type: str = typer.Argument(..., help="Resource type: skill"),
-    name: str = typer.Argument(..., help="Resource name to remove"),
+    resource_type: Optional[str] = typer.Argument(
+        None, help="Resource type: skill (omit to use interactive picker)"
+    ),
+    name: Optional[str] = typer.Argument(
+        None, help="Resource name to remove"
+    ),
 ):
-    """Remove a resource from the workspace (unlinks and syncs agent)."""
+    """Remove a resource from the workspace. Launch interactive picker when no args given."""
+    if resource_type is None:
+        from sklm.tui import run_tui
+
+        result = run_tui("remove")
+        if result is None:
+            raise typer.Exit(0)
+        console.print(f"[green]✓[/] Removed {len(result)} skill(s)")
+        return
+    if name is None:
+        console.print(
+            "[red]✗[/] Resource name is required. Usage: [bold]sklm rm <type> <name>[/]"
+        )
+        raise typer.Exit(1)
     f = get_sklm()
     kind = parse_resource_type(resource_type)
     try:
@@ -397,6 +434,17 @@ def rm(
         console.print(f"[red]✗[/] {e}")
         raise typer.Exit(1) from e
     console.print(f"[green]✓[/] Removed {kind.value} [bold]{ref.name}[/]")
+
+
+@app.command()
+def skills():
+    """Open interactive skill manager."""
+    from sklm.tui import run_tui
+
+    result = run_tui("manage")
+    if result is None:
+        return
+    console.print(f"[green]✓[/] Updated {len(result)} skill(s)")
 
 
 @app.command()
