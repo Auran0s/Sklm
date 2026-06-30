@@ -296,21 +296,19 @@ class SkillManagerApp(App):
         margin-top: 2;
     }
 
-    /* ── Responsive ── */
+    /* ── Responsive (narrow terminal) ── */
 
-    @media (max-width: 80) {
-        #preview-panel {
-            width: 1fr;
-            height: auto;
-            max-height: 40%;
-        }
-        #left-panel {
-            width: 1fr;
-            border-right: none;
-        }
-        #body {
-            layout: vertical;
-        }
+    .narrow #preview-panel {
+        width: 1fr;
+        height: auto;
+        max-height: 40%;
+    }
+    .narrow #left-panel {
+        width: 1fr;
+        border-right: none;
+    }
+    .narrow #body {
+        layout: vertical;
     }
     """
 
@@ -365,12 +363,27 @@ class SkillManagerApp(App):
                 yield Button("Cancel", id="cancel-btn")
         yield ShortcutBar()
 
-    # ── Mount ────────────────────────────────────────────────────────────────
+    # ── Mount & Resize ───────────────────────────────────────────────────────
 
     def on_mount(self) -> None:
         self.run_worker(self._load_skills, exclusive=True, thread=True)
         try:
             self.register_provider(SklmCommands)
+        except Exception:
+            pass
+        self._apply_responsive()
+
+    def on_resize(self) -> None:
+        """Handle terminal resize for responsive layout."""
+        self._apply_responsive()
+
+    def _apply_responsive(self) -> None:
+        """Toggle narrow class based on terminal width."""
+        try:
+            if self.size.width < 80:
+                self.screen.add_class("narrow")
+            else:
+                self.screen.remove_class("narrow")
         except Exception:
             pass
 
