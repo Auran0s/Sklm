@@ -78,13 +78,18 @@ class SkillRow(Static):
         self.selected = self.linked
 
     @property
-    def checkbox(self) -> Checkbox:
-        return self.query_one(Checkbox)
+    def checkbox(self) -> Optional[Checkbox]:
+        try:
+            return self.query_one(Checkbox)
+        except NoMatches:
+            return None
 
     def on_click(self) -> None:
         """Toggle checkbox when clicking the row (accessibility)."""
-        self.checkbox.toggle()
-        self.selected = self.checkbox.value
+        cb = self.checkbox
+        if cb is not None:
+            cb.toggle()
+            self.selected = cb.value
 
 
 # ─── Command Palette Provider ────────────────────────────────────────────────
@@ -474,7 +479,7 @@ class SkillManagerApp(App):
                 skill_list.mount(
                     Label("[dim]No skills available.[/]", id="empty")
                 )
-            self._recompute_state()
+            self.call_later(self._recompute_state)
             return
 
         for ref, linked in rows_to_show:
@@ -482,7 +487,7 @@ class SkillManagerApp(App):
             row.classes = "skill-row"
             skill_list.mount(row)
 
-        self._recompute_state()
+        self.call_later(self._recompute_state)
 
     # ── Search / Filter ──────────────────────────────────────────────────────
 
@@ -554,6 +559,8 @@ class SkillManagerApp(App):
             if not isinstance(row, SkillRow):
                 continue
             cb = row.checkbox
+            if cb is None:
+                continue
             current = cb.value
             if current:
                 selected += 1
@@ -613,14 +620,18 @@ class SkillManagerApp(App):
         """Check all visible rows."""
         for row in self.query(".skill-row"):
             if isinstance(row, SkillRow):
-                row.checkbox.value = True
+                cb = row.checkbox
+                if cb is not None:
+                    cb.value = True
         self._recompute_state()
 
     def action_deselect_all(self) -> None:
         """Uncheck all visible rows."""
         for row in self.query(".skill-row"):
             if isinstance(row, SkillRow):
-                row.checkbox.value = False
+                cb = row.checkbox
+                if cb is not None:
+                    cb.value = False
         self._recompute_state()
 
     def action_toggle_focused(self) -> None:
@@ -664,6 +675,8 @@ class SkillManagerApp(App):
             if not isinstance(row, SkillRow):
                 continue
             cb = row.checkbox
+            if cb is None:
+                continue
             current = cb.value
             if current and not row.linked:
                 additions.append(row.ref.name)
@@ -684,8 +697,10 @@ class SkillManagerApp(App):
         # Build result list
         result_refs: list[ResourceRef] = []
         for row in self.query(".skill-row"):
-            if isinstance(row, SkillRow) and row.checkbox.value:
-                result_refs.append(row.ref)
+            if isinstance(row, SkillRow):
+                cb = row.checkbox
+                if cb is not None and cb.value:
+                    result_refs.append(row.ref)
 
         self.notify(
             f"Applied: {len(additions)} added, {len(removals)} removed",
