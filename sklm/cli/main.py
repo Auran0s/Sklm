@@ -18,6 +18,12 @@ from rich import print_json
 
 from sklm import __version__
 from sklm.api import Sklm
+from sklm.cli.prompts import (
+    prompt_agent_selection,
+    prompt_install_from_git,
+    prompt_main_menu,
+    prompt_skill_selection,
+)
 from sklm.models import RegistryType, ResourceKind
 from sklm.agents.registry import AgentRegistry
 
@@ -124,50 +130,10 @@ def main(
     _tracker_command = ctx.invoked_subcommand or ""
 
 
-def _prompt_agent_selection(f: Sklm) -> list[str]:
-    """Show interactive prompt for agent selection."""
+def _get_agent_selection_for_init(f: Sklm) -> list[str]:
+    """Get agent selection for ``init``, using prompt or fallback."""
     registry = AgentRegistry()
-    agent_ids = registry.get_agent_ids()
-
-    console.print("\n[bold]No agent detected in this directory.[/]")
-    console.print("[dim]Which agent(s) are you using?[/]\n")
-
-    for i, aid in enumerate(agent_ids, 1):
-        config = registry.get_agent_config(aid)
-        label = f"{aid.replace('-', ' ').title():20s}"
-        dir_name = config.get("dir_name", "?") if config else "?"
-        console.print(f"  [{i}] {label}  [dim]({dir_name})[/]")
-
-    console.print(f"  [c] cancel  [dim](skip agent setup)[/]")
-
-    while True:
-        choice = typer.prompt("\nEnter numbers separated by commas (e.g. 1,3,5)", default="")
-        choice = choice.strip().lower()
-
-        if choice == "c":
-            console.print()
-            return ["none"]
-
-        selected: list[str] = []
-        parts = choice.replace(",", " ").split()
-        valid = True
-        for p in parts:
-            if p.isdigit():
-                idx = int(p) - 1
-                if 0 <= idx < len(agent_ids):
-                    selected.append(agent_ids[idx])
-                else:
-                    console.print(f"[red]✗[/] Invalid number: {p}")
-                    valid = False
-                    break
-            else:
-                console.print(f"[red]✗[/] Invalid input: '{p}'. Use numbers or 'c' to cancel.")
-                valid = False
-                break
-
-        if valid:
-            console.print()
-            return selected
+    return prompt_agent_selection(registry)
 
 
 # ─── Workspace ───────────────────────────────────────────────────────────────
@@ -197,7 +163,7 @@ def init(
         if detected:
             agents = detected
         else:
-            agents = _prompt_agent_selection(f)
+            agents = _get_agent_selection_for_init(f)
     detected = f.init_workspace(agents)
     label = ", ".join(detected) if detected != ["none"] else "[yellow]none[/]"
     console.print("[green]✓[/] Workspace created at [bold].sklm/[/]")
@@ -363,8 +329,12 @@ def migrate(
 
 @app.command()
 def add(
-    resource_type: str = typer.Argument(..., help="Resource type: skill"),
-    name: str = typer.Argument(..., help="Resource name (optionally prefixed: registry:name)"),
+    resource_type: Optional[str] = typer.Argument(
+        None, help="Resource type: skill"
+    ),
+    name: Optional[str] = typer.Argument(
+        None, help="Resource name (optionally prefixed: registry:name)"
+    ),
     from_url: Optional[str] = typer.Option(
         None, "--from", help="Git repository URL to install from"
     ),
@@ -372,9 +342,39 @@ def add(
         None, "--subdir", help="Subdirectory within the repo (default: skills/<name>)"
     ),
 ):
-    """Add and activate a resource in the project (resolves, stores, links, syncs agent)."""
+    """Add and activate a resource in the project (resolves, stores, links, syncs agent).
+
+    When called without arguments, opens an interactive checkbox prompt to select
+    skills from the global store.
+    """
     f = get_sklm()
-    kind = parse_resource_type(resource_type)
+
+    # Interactive prompt when name is omitted
+    if not name:
+        selected = prompt_skill_selection(f, mode="add")
+        if not selected:
+            return
+        linked_names = {l.name for l in f.workspace.list_links()}
+        added = 0
+        for skill_name in selected:
+            if skill_name in linked_names:
+                continue  # already installed, skip
+            try:
+                f.add(ResourceKind.skill, skill_name)
+                console.print(f"[green]✓[/] Added [bold]{skill_name}[/]")
+                added += 1
+            except (FileNotFoundError, FileExistsError, ValueError) as e:
+                console.print(f"[red]✗[/] {e}")
+        if added == 0:
+            console.print("[yellow]No new skills to add (all selected are already installed).[/]")
+            return
+        try:
+            f.agent_sync()
+        except RuntimeError:
+            pass
+        return
+
+    kind = parse_resource_type(resource_type or "skill")
     try:
         ref = f.add(kind, name, from_url=from_url, subdir=subdir)
     except (FileNotFoundError, FileExistsError, ValueError) as e:
@@ -385,12 +385,38 @@ def add(
 
 @app.command()
 def rm(
-    resource_type: str = typer.Argument(..., help="Resource type: skill"),
-    name: str = typer.Argument(..., help="Resource name to remove"),
+    resource_type: Optional[str] = typer.Argument(
+        None, help="Resource type: skill"
+    ),
+    name: Optional[str] = typer.Argument(
+        None, help="Resource name to remove"
+    ),
 ):
-    """Remove a resource from the workspace (unlinks and syncs agent)."""
+    """Remove a resource from the workspace (unlinks and syncs agent).
+
+    When called without arguments, opens an interactive checkbox prompt to select
+    linked skills to remove.
+    """
     f = get_sklm()
-    kind = parse_resource_type(resource_type)
+
+    # Interactive prompt when name is omitted
+    if not name:
+        selected = prompt_skill_selection(f, mode="remove")
+        if not selected:
+            return
+        for skill_name in selected:
+            try:
+                ref = f.remove(ResourceKind.skill, skill_name)
+                console.print(f"[green]✓[/] Removed {ref.kind.value} [bold]{ref.name}[/]")
+            except (KeyError, RuntimeError) as e:
+                console.print(f"[red]✗[/] {e}")
+        try:
+            f.agent_sync()
+        except RuntimeError:
+            pass
+        return
+
+    kind = parse_resource_type(resource_type or "skill")
     try:
         ref = f.remove(kind, name)
     except (KeyError, RuntimeError) as e:
@@ -456,6 +482,95 @@ def info(
         if variants:
             table.add_row("Variants", ", ".join(variants))
     console.print(table)
+
+
+@app.command()
+def skills():
+    """Interactive multi-level menu for managing skills.
+
+    Opens a ``questionary.select`` menu with options to add skills, remove
+    skills, install from git, sync agents, and manage agent configuration.
+    The command runs the selected action then exits.
+    """
+    f = get_sklm()
+    action = prompt_main_menu(f)
+    if action is None:
+        return
+
+    if action == "add":
+        selected = prompt_skill_selection(f, mode="add")
+        if not selected:
+            return
+        linked_names = {l.name for l in f.workspace.list_links()}
+        added = 0
+        for skill_name in selected:
+            if skill_name in linked_names:
+                continue
+            try:
+                f.add(ResourceKind.skill, skill_name)
+                console.print(f"[green]✓[/] Added [bold]{skill_name}[/]")
+                added += 1
+            except (FileNotFoundError, FileExistsError, ValueError) as e:
+                console.print(f"[red]✗[/] {e}")
+        if added == 0:
+            console.print("[yellow]No new skills to add.[/]")
+        try:
+            f.agent_sync()
+        except RuntimeError:
+            pass
+
+    elif action == "remove":
+        selected = prompt_skill_selection(f, mode="remove")
+        if not selected:
+            return
+        for skill_name in selected:
+            try:
+                ref = f.remove(ResourceKind.skill, skill_name)
+                console.print(f"[green]✓[/] Removed {ref.kind.value} [bold]{ref.name}[/]")
+            except (KeyError, RuntimeError) as e:
+                console.print(f"[red]✗[/] {e}")
+        try:
+            f.agent_sync()
+        except RuntimeError:
+            pass
+
+    elif action == "install":
+        url, subdir = prompt_install_from_git()
+        if not url:
+            return
+        try:
+            ref = f.install(ResourceKind.skill, "from-git", from_url=url, subdir=subdir)
+            console.print(f"[green]✓[/] Installed from git: [bold]{ref.name}[/]")
+            f.workspace.add_resource(ref)
+            from sklm.core.linking import link_resource as _link_resource
+            _link_resource(f.workspace, f.global_store, ResourceKind.skill, ref.name)
+            f.agent_sync()
+        except (FileNotFoundError, FileExistsError, ValueError, OSError, subprocess.TimeoutExpired) as e:
+            console.print(f"[red]✗[/] {e}")
+
+    elif action == "sync":
+        try:
+            result = f.agent_sync()
+            agents_str = ", ".join(result["agents"])
+            console.print(f"[green]✓[/] Synced {len(result['agents'])} agent(s): {agents_str}")
+        except RuntimeError as e:
+            console.print(f"[red]✗[/] {e}")
+
+    elif action == "agents":
+        from sklm.agents.registry import AgentRegistry
+        registry = AgentRegistry()
+        agent_choice = prompt_agent_selection(registry)
+        if agent_choice and agent_choice != ["none"]:
+            for agent_name in agent_choice:
+                try:
+                    f.workspace.add_agent(agent_name)
+                    console.print(f"[green]✓[/] Agent [bold]{agent_name}[/] added.")
+                except ValueError as e:
+                    console.print(f"[red]✗[/] {e}")
+            try:
+                f.agent_sync()
+            except RuntimeError:
+                pass
 
 
 # ─── Global Store ────────────────────────────────────────────────────────────
