@@ -247,8 +247,10 @@ def install_flow(f: Sklm) -> None:
                 console.print(f"[yellow]No results for '{keyword}'.[/]")
                 return
 
+            ws_skill_names = _get_workspace_skill_names_wizard(f)
             choices = [
-                f"{reg_name}:{res.name}" for reg_name, res in results
+                f"{'[✓]' if res.name in ws_skill_names else '[ ]'} {reg_name}:{res.name}"
+                for reg_name, res in results
             ]
             selected = questionary.select(
                     "Select a skill to install:",
@@ -257,7 +259,11 @@ def install_flow(f: Sklm) -> None:
             if not selected or selected == "Back":
                 return
 
-            parts = selected.split(":", 1)
+            # Strip prefix to parse registry:name
+            raw = selected
+            if raw.startswith("[✓] ") or raw.startswith("[ ] "):
+                raw = raw[4:]
+            parts = raw.split(":", 1)
             if len(parts) == 2:
                 name = parts[1]
                 ref = f.install(kind, name)
@@ -396,28 +402,34 @@ def add_to_workspace_flow(f: Sklm) -> None:
         console.print("[yellow]No skills in global store.[/]")
         return
 
-    # Filter out already-linked skills
     ws_resources = f.workspace.list_resources(ResourceKind.skill)
     linked_names = {r.name for r in ws_resources}
 
-    available = [
-        s for s in store_skills if s.name not in linked_names
-    ]
-    if not available:
-        console.print("[yellow]All global skills are already in the workspace.[/]")
-        return
-
     try:
-        choices = [s.name for s in available]
-        selected = questionary.select(
-            "Select a skill to add to workspace:",
-            choices=choices + [_BACK_CHOICE],
-        ).ask()
-        if not selected or selected == "Back":
-            return
+        while True:
+            choices = []
+            for s in store_skills:
+                prefix = "[✓]" if s.name in linked_names else "[ ]"
+                choices.append(f"{prefix} {s.name}")
+            selected = questionary.select(
+                "Select a skill to add to workspace:",
+                choices=choices + [_BACK_CHOICE],
+            ).ask()
+            if not selected or selected == "Back":
+                return
 
-        ref = f.add(ResourceKind.skill, selected)
-        console.print(f"[green]✓[/] Added [bold]{ref.name}[/] to workspace")
+            # Strip prefix to get raw name
+            raw = selected
+            if raw.startswith("[✓] ") or raw.startswith("[ ] "):
+                raw = raw[4:]
+
+            if raw in linked_names:
+                console.print("[yellow]⚠ Already in workspace[/]")
+                continue
+
+            ref = f.add(ResourceKind.skill, raw)
+            console.print(f"[green]✓[/] Added [bold]{ref.name}[/] to workspace")
+            return
     except KeyboardInterrupt:
         return
     except Exception as e:
@@ -820,6 +832,13 @@ def _add_registry(f: Sklm) -> None:
         console.print(f"[red]✗[/] Failed to add registry: {e}")
 
 
+def _get_workspace_skill_names_wizard(f: Sklm) -> set[str]:
+    """Return set of skill names linked in the workspace, or empty set if no workspace exists."""
+    if not f.workspace.exists():
+        return set()
+    return {r.name for r in f.workspace.list_resources(ResourceKind.skill)}
+
+
 def _search_registries(f: Sklm) -> None:
     try:
         query = questionary.text(
@@ -832,13 +851,16 @@ def _search_registries(f: Sklm) -> None:
         if not results:
             console.print(f"[yellow]No results for '{query}'.[/]")
             return
+        ws_skill_names = _get_workspace_skill_names_wizard(f)
         table = Table(title=f"Search Results: '{query}'")
         table.add_column("Registry", style="cyan")
         table.add_column("Name", style="green")
         table.add_column("Type", style="magenta")
+        table.add_column("Status", style="yellow")
         table.add_column("Path", style="white")
         for reg_name, resource in results:
-            table.add_row(reg_name, resource.name, resource.kind.value, str(resource.path))
+            status = "[green]✓[/]" if resource.name in ws_skill_names else "[dim]—[/]"
+            table.add_row(reg_name, resource.name, resource.kind.value, status, str(resource.path))
         console.print(table)
     except KeyboardInterrupt:
         return

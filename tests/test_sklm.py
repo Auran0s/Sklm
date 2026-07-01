@@ -1303,6 +1303,7 @@ class TestCLIIntegration:
         result = runner.invoke(app, ["global", "ls"])
         assert result.exit_code == 0
         assert "test-skill" in result.output
+        assert "In workspace" in result.output
         result = runner.invoke(app, ["global", "rm", "skill", "test-skill"])
         assert result.exit_code == 0
 
@@ -1365,6 +1366,20 @@ class TestCLIIntegration:
         runner.invoke(app, ["registry", "add", str(fake_skill_dir.parent), "--name", "test-reg"])
         result = runner.invoke(app, ["registry", "search", "my-skill"])
         assert result.exit_code == 0
+        assert "Status" in result.output
+
+    def test_registry_search_json(self, temp_dir, fake_skill_dir):
+        """--json output includes in_workspace field."""
+        from typer.testing import CliRunner
+        from sklm.cli.main import app
+        runner = CliRunner()
+        runner.invoke(app, ["registry", "add", str(fake_skill_dir.parent), "--name", "test-reg"])
+        result = runner.invoke(app, ["registry", "search", "my-skill", "--json"])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert len(data) > 0
+        assert "in_workspace" in data[0]
+        assert data[0]["in_workspace"] is False
 
     def test_agent_detect(self, temp_dir):
         from typer.testing import CliRunner
