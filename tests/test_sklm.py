@@ -1861,10 +1861,6 @@ class TestUpdateChecker:
         cache_dir = temp_dir / ".sklm-cache"
         monkeypatch.setattr("sklm.core.update.CACHE_DIR", cache_dir)
         monkeypatch.setattr("sklm.core.update.CACHE_FILE", cache_dir / "update-check")
-        # Patch both module-level bindings since update.py uses
-        # "from sklm import __version__" which creates a local binding.
-        monkeypatch.setattr("sklm.__version__", "0.1.0")
-        monkeypatch.setattr("sklm.core.update.__version__", "0.1.0")
 
     def test_parse_version_strips_v_prefix(self):
         from sklm.core.update import UpdateChecker
@@ -1886,13 +1882,13 @@ class TestUpdateChecker:
 
     def test_is_newer_returns_true(self):
         from sklm.core.update import UpdateChecker
-        checker = UpdateChecker()
+        checker = UpdateChecker(current_version="0.1.0")
         assert checker._is_newer("v0.2.0") is True
         assert checker._is_newer("v1.0.0") is True
 
     def test_is_newer_returns_false(self):
         from sklm.core.update import UpdateChecker
-        checker = UpdateChecker()
+        checker = UpdateChecker(current_version="0.1.0")
         assert checker._is_newer("v0.1.0") is False
         assert checker._is_newer("v0.0.9") is False
 
@@ -1941,7 +1937,7 @@ class TestUpdateChecker:
             "sklm.core.update.UpdateChecker._get_latest_version_via_api",
             lambda self: "v0.2.0",
         )
-        checker = UpdateChecker()
+        checker = UpdateChecker(current_version="0.1.0")
         result = checker.check()
         assert result == "v0.2.0"
 
@@ -1951,7 +1947,7 @@ class TestUpdateChecker:
             "sklm.core.update.UpdateChecker._get_latest_version_via_api",
             lambda self: "v0.1.0",
         )
-        checker = UpdateChecker()
+        checker = UpdateChecker(current_version="0.1.0")
         assert checker.check() is None
 
     def test_get_latest_returns_version(self, temp_dir, monkeypatch):
@@ -1976,6 +1972,10 @@ class TestUpdateCLI:
         monkeypatch.setattr("sklm.core.update.CACHE_DIR", temp_dir / ".sklm-cache")
         # Patch version in both modules that import it via
         # "from sklm import __version__" (creates local bindings).
+        # Note: TestUpdateChecker tests now inject version via constructor
+        # (current_version=...), but CLI tests still need these monkeypatches
+        # because the CLI command creates UpdateChecker() internally without
+        # passing a version parameter.
         monkeypatch.setattr("sklm.core.update.__version__", "0.1.0")
         monkeypatch.setattr("sklm.cli.main.__version__", "0.1.0")
 

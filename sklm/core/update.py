@@ -16,8 +16,8 @@ CACHE_TTL = 86400  # 24 hours in seconds
 
 
 class UpdateChecker:
-    def __init__(self) -> None:
-        self.current_version = __version__
+    def __init__(self, current_version: str | None = None) -> None:
+        self.current_version = current_version if current_version is not None else __version__
         self.cache_path = CACHE_FILE
         self.github_api_url = GITHUB_API_URL
 
