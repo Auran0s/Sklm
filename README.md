@@ -29,7 +29,7 @@ Sklm keeps a global library in `~/.sklm/`, then lets you pick which skills each 
 
 ## Features
 
-- **Works with 8 AI agents** — OpenCode, Claude Code, Cursor, Windsurf, Gemini CLI, Cline, Amazon Q, and GitHub Copilot.
+- **Works with 30 AI agents** — from OpenCode and Claude Code to Codex CLI, GitHub Copilot, and beyond.
 - **Install once, scope per project** — a global store at `~/.sklm/` holds your skills; per-project symlinks activate only what you need.
 - **Auto-sync** — `sklm add` and `sklm rm` automatically update the agent's skills directory. No manual copying.
 - **Registry discovery** — index local folders or git repos as searchable skill catalogs.
@@ -39,26 +39,23 @@ Sklm keeps a global library in `~/.sklm/`, then lets you pick which skills each 
 ## Installation
 
 ```bash
-git clone https://github.com/Auran0s/sklm.git
-cd sklm
-pip install -e .
+pip install sklm
 ```
 
 > [!TIP]
-> The `-e` (editable) flag keeps your install in sync with the repo. When pulling updates, just run `git pull`.
+> For development, clone the repo and use `pip install -e .` for an editable install.
 
 ## Quickstart
 
 ```bash
-sklm --version                     # show installed version
-sklm init                          # auto-detect agent(s) and create .sklm/
-sklm add skill my-skill            # install + activate in the current project
+pip install sklm                   # install globally
+sklm                               # interactive wizard opens — detects your setup
 ```
 
-That's it. Your AI agent can now use the skill.
+That's it. The CLI's interactive wizard detects your AI agents, initializes the workspace, and guides you through adding your first skill — no flags needed.
 
 > [!TIP]
-> Run `sklm init --agent opencode` to skip auto-detection and set a specific agent. Pass `--agent` multiple times for multiple agents.
+> Run `sklm init --agent opencode` to skip the wizard and set a specific agent. Pass `--agent` multiple times for multiple agents.
 
 ## Usage
 
@@ -176,7 +173,7 @@ sklm checks for new versions automatically after every command (once per day).
 When a new release is available, a notice is shown with upgrade instructions.
 
 ```bash
-sklm update                         # fetch latest release and upgrade
+sklm update                         # upgrade to latest version via pip
 sklm update --check                 # check only, no upgrade
 sklm update --force                 # bypass 24h cache
 ```
@@ -187,7 +184,7 @@ Disable the automatic check by setting:
 export SKLM_NO_UPDATE_CHECK=1
 ```
 
-Updates are fetched from [GitHub Releases](https://github.com/Auran0s/Sklm/releases).
+Updates are installed via `pip install -U sklm`. The version check uses the [GitHub Releases](https://github.com/Auran0s/Sklm/releases) API.
 
 ### Supported Agents
 

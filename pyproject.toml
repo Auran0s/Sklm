@@ -23,6 +23,7 @@ dependencies = [
     "pydantic>=2.0.0",
     "questionary>=1.10.0",
     "umami-analytics>=0.2.0",
+    "questionary>=2.0.0",
 ]
 
 [project.scripts]

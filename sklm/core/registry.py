@@ -12,6 +12,10 @@ import yaml
 from sklm.models import RegistrySource, RegistryType, Resource, ResourceKind
 
 
+# Filesystem-safe pattern: only allow alphanumeric, hyphens, underscores
+_SAFE_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
+
+
 REGISTRIES_PATH = Path.home() / ".sklm" / "registries.yaml"
 REGISTRY_CACHE = Path.home() / ".sklm" / "cache"
 
@@ -64,8 +68,13 @@ class RegistryManager:
 
         Raises:
             ValueError: If the git operation fails, the URL is not a valid git repo,
-                or the operation times out.
+                or the operation times out, or the name contains unsafe characters.
         """
+        if not _SAFE_NAME_RE.match(name):
+            raise ValueError(
+                f"Unsafe registry name '{name}': only letters, numbers, hyphens, "
+                "and underscores are allowed."
+            )
         repo_cache = self.cache_dir / name
         if repo_cache.exists():
             try:
@@ -125,19 +134,24 @@ class RegistryManager:
         resources: list[Resource] = []
         if not path.is_dir():
             return resources
-        for entry in sorted(path.iterdir()):
-            if not entry.is_dir():
-                continue
-            skill_file = entry / "SKILL.md"
-            if skill_file.exists():
-                resources.append(
-                    Resource(
-                        name=entry.name,
-                        kind=ResourceKind.skill,
-                        source=str(entry),
-                        path=entry.resolve(),
+
+        def _collect(dir_path: Path) -> None:
+            for entry in sorted(dir_path.iterdir()):
+                if entry.is_dir() and (entry / "SKILL.md").exists():
+                    resources.append(
+                        Resource(
+                            name=entry.name,
+                            kind=ResourceKind.skill,
+                            source=str(entry),
+                            path=entry.resolve(),
+                        )
                     )
-                )
+
+        _collect(path)
+        skills_subdir = path / "skills"
+        if skills_subdir.is_dir():
+            _collect(skills_subdir)
+
         return resources
 
     def search(

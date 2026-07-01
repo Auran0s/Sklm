@@ -1,11 +1,7 @@
 from __future__ import annotations
 
 import json
-import os
-import subprocess
-import sys
 import time
-import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Optional
@@ -16,7 +12,6 @@ from sklm import __version__
 CACHE_DIR = Path.home() / ".sklm" / "cache"
 CACHE_FILE = CACHE_DIR / "update-check"
 GITHUB_API_URL = "https://api.github.com/repos/Auran0s/Sklm/releases/latest"
-GITHUB_REPO_URL = "https://github.com/Auran0s/sklm"
 CACHE_TTL = 86400  # 24 hours in seconds
 
 
@@ -25,7 +20,6 @@ class UpdateChecker:
         self.current_version = __version__
         self.cache_path = CACHE_FILE
         self.github_api_url = GITHUB_API_URL
-        self.github_repo_url = GITHUB_REPO_URL
 
     def _should_check(self) -> bool:
         try:
@@ -84,59 +78,4 @@ class UpdateChecker:
         except Exception:
             return None
 
-    @staticmethod
-    def find_repo_root() -> Optional[Path]:
-        try:
-            import sklm as _sklm_mod
 
-            current = Path(_sklm_mod.__file__).resolve().parent
-            for parent in [current] + list(current.parents):
-                if (parent / ".git").is_dir():
-                    return parent
-            return None
-        except Exception:
-            return None
-
-    @staticmethod
-    def is_editable() -> bool:
-        try:
-            from importlib.metadata import distribution
-
-            dist = distribution("sklm")
-            direct_url = dist.read_text("direct_url.json")
-            if direct_url:
-                info = json.loads(direct_url)
-                return info.get("dir_info", {}).get("editable", False)
-            return False
-        except Exception:
-            return False
-
-    def perform_update(self, latest: str) -> bool:
-        repo_root = self.find_repo_root()
-        if repo_root is None:
-            return False
-        tag = f"v{latest.lstrip('v')}"
-        try:
-            subprocess.run(
-                ["git", "fetch", "--tags"],
-                cwd=repo_root,
-                capture_output=True,
-                timeout=30,
-                check=True,
-            )
-            subprocess.run(
-                ["git", "checkout", tag],
-                cwd=repo_root,
-                capture_output=True,
-                timeout=30,
-                check=True,
-            )
-            subprocess.run(
-                [sys.executable, "-m", "pip", "install", "-e", str(repo_root)],
-                capture_output=True,
-                timeout=60,
-                check=True,
-            )
-            return True
-        except Exception:
-            return False

@@ -409,8 +409,8 @@ class TestTelemetryConfig:
     def test_defaults(self):
         cfg = TelemetryConfig()
         assert cfg.enabled is True
-        assert cfg.umami_url == "https://analytics.victorbeysseriat.fr"
-        assert cfg.website_id == "1cc92fce-83fc-4792-9b02-e28a04810426"
+        assert cfg.umami_url == ""
+        assert cfg.website_id == ""
 
     def test_custom_values(self):
         cfg = TelemetryConfig(
@@ -427,8 +427,9 @@ class TestGlobalStoreTelemetry:
     def test_get_default_config(self, isolated_store):
         cfg = isolated_store.get_telemetry_config()
         assert cfg.enabled is True
-        assert cfg.umami_url == "https://analytics.victorbeysseriat.fr"
-        assert cfg.website_id == "1cc92fce-83fc-4792-9b02-e28a04810426"
+        # Defaults are empty; env vars can override via SKLM_UMAMI_URL / SKLM_WEBSITE_ID
+        assert cfg.umami_url == ""
+        assert cfg.website_id == ""
 
     def test_set_and_get_config(self, isolated_store):
         original = TelemetryConfig(
@@ -1255,6 +1256,7 @@ class TestCLIIntegration:
         monkeypatch.setattr("sklm.core.registry.REGISTRIES_PATH", temp_dir / ".sklm-home" / "registries.yaml")
         monkeypatch.setattr("sklm.core.registry.REGISTRY_CACHE", temp_dir / ".sklm-home" / "cache")
         monkeypatch.setattr("sklm.cli.main._sklm", None)
+        monkeypatch.setattr("sklm.cli.main._tracker", None)
 
     def test_help(self):
         from typer.testing import CliRunner
@@ -1303,6 +1305,7 @@ class TestCLIIntegration:
         result = runner.invoke(app, ["global", "ls"])
         assert result.exit_code == 0
         assert "test-skill" in result.output
+        assert "In workspace" in result.output
         result = runner.invoke(app, ["global", "rm", "skill", "test-skill"])
         assert result.exit_code == 0
 
@@ -1365,6 +1368,20 @@ class TestCLIIntegration:
         runner.invoke(app, ["registry", "add", str(fake_skill_dir.parent), "--name", "test-reg"])
         result = runner.invoke(app, ["registry", "search", "my-skill"])
         assert result.exit_code == 0
+        assert "Status" in result.output
+
+    def test_registry_search_json(self, temp_dir, fake_skill_dir):
+        """--json output includes in_workspace field."""
+        from typer.testing import CliRunner
+        from sklm.cli.main import app
+        runner = CliRunner()
+        runner.invoke(app, ["registry", "add", str(fake_skill_dir.parent), "--name", "test-reg"])
+        result = runner.invoke(app, ["registry", "search", "my-skill", "--json"])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert len(data) > 0
+        assert "in_workspace" in data[0]
+        assert data[0]["in_workspace"] is False
 
     def test_agent_detect(self, temp_dir):
         from typer.testing import CliRunner
@@ -1405,14 +1422,14 @@ class TestCLIIntegration:
         assert "ACTIVE" in result.output
         assert "cursor" in result.output
 
-    def test_telemetry_status_active_by_default(self, temp_dir):
+    def test_telemetry_status_inactive_by_default(self, temp_dir):
+        """Telemetry is inactive without env vars (no hardcoded defaults)."""
         from typer.testing import CliRunner
         from sklm.cli.main import app
         runner = CliRunner()
         result = runner.invoke(app, ["telemetry", "status"])
-        assert result.exit_code == 0
-        assert "active" in result.output.lower()
-        assert "analytics.victorbeysseriat.fr" in result.output
+        assert result.exit_code != 0
+        assert "inactive" in result.output.lower() or "disabled" in result.output.lower()
 
     def test_telemetry_on_off_lifecycle(self, temp_dir, monkeypatch):
         from typer.testing import CliRunner
@@ -1932,21 +1949,14 @@ class TestUpdateChecker:
         checker = UpdateChecker()
         assert checker.check() is None
 
-    def test_find_repo_root_returns_none_when_no_git(self, temp_dir, monkeypatch):
+    def test_get_latest_returns_version(self, temp_dir, monkeypatch):
         from sklm.core.update import UpdateChecker
-        monkeypatch.setattr("sklm.__file__", str(temp_dir / "sklm" / "__init__.py"))
+        monkeypatch.setattr(
+            "sklm.core.update.UpdateChecker._get_latest_version_via_api",
+            lambda self: "v0.2.0",
+        )
         checker = UpdateChecker()
-        assert checker.find_repo_root() is None
-
-    def test_find_repo_root_finds_parent_git(self, temp_dir, monkeypatch):
-        from sklm.core.update import UpdateChecker
-        git_dir = temp_dir / ".git"
-        git_dir.mkdir()
-        pkg_dir = temp_dir / "src" / "sklm"
-        pkg_dir.mkdir(parents=True)
-        monkeypatch.setattr("sklm.__file__", str(pkg_dir / "__init__.py"))
-        checker = UpdateChecker()
-        assert checker.find_repo_root() == temp_dir.resolve()
+        assert checker.get_latest() == "v0.2.0"
 
 
 class TestUpdateCLI:
@@ -1986,40 +1996,13 @@ class TestUpdateCLI:
         assert result.exit_code == 0
         assert "v0.2.0" in result.output
 
-    def test_update_no_repo(self, temp_dir, monkeypatch):
-        monkeypatch.setattr("sklm.__version__", "0.1.0")
-        monkeypatch.setattr(
-            "sklm.core.update.UpdateChecker._get_latest_version_via_api",
-            lambda self: "v0.2.0",
-        )
-        monkeypatch.setattr(
-            "sklm.core.update.UpdateChecker.find_repo_root",
-            lambda self: None,
-        )
-        from typer.testing import CliRunner
-        from sklm.cli.main import app
-        runner = CliRunner()
-        result = runner.invoke(app, ["update", "--force"])
-        assert result.exit_code == 1
-        assert "Cannot find" in result.output
-
     def test_update_success(self, temp_dir, monkeypatch):
+        import sys
         from unittest.mock import Mock
         monkeypatch.setattr("sklm.__version__", "0.1.0")
         monkeypatch.setattr(
             "sklm.core.update.UpdateChecker._get_latest_version_via_api",
             lambda self: "v0.2.0",
-        )
-        repo_dir = temp_dir / "repo"
-        repo_dir.mkdir()
-        (repo_dir / ".git").mkdir()
-        monkeypatch.setattr(
-            "sklm.core.update.UpdateChecker.find_repo_root",
-            lambda self: repo_dir,
-        )
-        monkeypatch.setattr(
-            "sklm.core.update.UpdateChecker.is_editable",
-            lambda self: True,
         )
         mock_run = Mock(return_value=Mock(returncode=0))
         monkeypatch.setattr("sklm.cli.main.subprocess.run", mock_run)
@@ -2029,20 +2012,18 @@ class TestUpdateCLI:
         result = runner.invoke(app, ["update", "--force"])
         assert result.exit_code == 0, f"Failed: {result.output}"
         assert "Updated" in result.output
+        # Verify pip install -U sklm was called
+        mock_run.assert_called_once_with(
+            [sys.executable, "-m", "pip", "install", "-U", "sklm"],
+            capture_output=True, timeout=60,
+        )
 
-    def test_update_git_fetch_fails(self, temp_dir, monkeypatch):
+    def test_update_fails(self, temp_dir, monkeypatch):
         from unittest.mock import Mock
         monkeypatch.setattr("sklm.__version__", "0.1.0")
         monkeypatch.setattr(
             "sklm.core.update.UpdateChecker._get_latest_version_via_api",
             lambda self: "v0.2.0",
-        )
-        repo_dir = temp_dir / "repo"
-        repo_dir.mkdir()
-        (repo_dir / ".git").mkdir()
-        monkeypatch.setattr(
-            "sklm.core.update.UpdateChecker.find_repo_root",
-            lambda self: repo_dir,
         )
         mock_run = Mock(return_value=Mock(returncode=1, stderr=b"error"))
         monkeypatch.setattr("sklm.cli.main.subprocess.run", mock_run)
@@ -2051,8 +2032,413 @@ class TestUpdateCLI:
         runner = CliRunner()
         result = runner.invoke(app, ["update", "--force"])
         assert result.exit_code == 1
+        assert "Update failed" in result.output
 
     def test_sklm_no_update_check_env(self, temp_dir, monkeypatch):
         monkeypatch.setenv("SKLM_NO_UPDATE_CHECK", "1")
         from sklm.cli.main import _show_update_notice
         _show_update_notice()
+
+
+# ─── Wizard Tests ─────────────────────────────────────────────────────────────
+
+
+class TestWizardDetectState:
+    """Tests for wizard state detection (10.1)."""
+
+    def test_no_store_no_workspace(self, temp_dir, monkeypatch):
+        """State A: no store, no workspace."""
+        monkeypatch.setattr("sklm.store.SKLM_HOME", temp_dir / ".sklm-empty")
+        monkeypatch.setattr("sklm.cli.wizard.SKLM_HOME", temp_dir / ".sklm-empty")
+        from sklm.cli.wizard import SystemState, detect_state
+        from sklm.api import Sklm
+        f = Sklm()
+        state = detect_state(f)
+        assert isinstance(state, SystemState)
+        assert state.has_store is False
+        assert state.has_workspace is False
+        assert state.has_migration is False
+        assert state.store_count == 0
+        assert state.broken_links == 0
+
+    def test_store_only(self, temp_dir, monkeypatch):
+        """State B: store exists with skills, no workspace."""
+        sklm_home = temp_dir / ".sklm-home"
+        skills_dir = sklm_home / "store" / "skills"
+        skills_dir.mkdir(parents=True)
+        (skills_dir / "skill-a").mkdir()
+        (skills_dir / "skill-b").mkdir()
+        monkeypatch.setattr("sklm.store.SKLM_HOME", sklm_home)
+        monkeypatch.setattr("sklm.cli.wizard.SKLM_HOME", sklm_home)
+        from sklm.cli.wizard import detect_state
+        from sklm.api import Sklm
+        f = Sklm()
+        state = detect_state(f)
+        assert state.has_store is True
+        assert state.has_workspace is False
+        assert state.store_count == 2
+
+    def test_store_and_workspace(self, temp_dir, monkeypatch):
+        """State C: both store and workspace exist."""
+        sklm_home = temp_dir / ".sklm-home"
+        skills_dir = sklm_home / "store" / "skills"
+        skills_dir.mkdir(parents=True)
+        (skills_dir / "skill-a").mkdir()
+        monkeypatch.setattr("sklm.store.SKLM_HOME", sklm_home)
+        monkeypatch.setattr("sklm.cli.wizard.SKLM_HOME", sklm_home)
+        from sklm.api import Sklm
+        f = Sklm()
+        # Create workspace
+        f.init_workspace(["opencode"])
+        from sklm.cli.wizard import detect_state
+        state = detect_state(f)
+        assert state.has_store is True
+        assert state.has_workspace is True
+        assert state.store_count == 1
+
+    def test_migration_source(self, temp_dir, monkeypatch):
+        """Detect migration source ~/.agents/skills/."""
+        agent_dir = temp_dir / ".agents" / "skills"
+        agent_dir.mkdir(parents=True)
+        (agent_dir / "old-skill").mkdir()
+        (agent_dir / "old-skill" / "SKILL.md").write_text("# Old")
+        monkeypatch.setattr("sklm.store.SKLM_HOME", temp_dir / ".sklm-home")
+        monkeypatch.setattr("sklm.cli.wizard.SKLM_HOME", temp_dir / ".sklm-home")
+        # Patch Path.home() to return temp_dir so ~/.agents resolves to temp_dir/.agents
+        monkeypatch.setattr("pathlib.Path.home", lambda: temp_dir)
+        from sklm.cli.wizard import detect_state
+        from sklm.api import Sklm
+        f = Sklm()
+        state = detect_state(f)
+        assert state.has_migration is True
+
+    def test_broken_links(self, temp_dir, monkeypatch):
+        """Detect broken symlinks in workspace."""
+        sklm_home = temp_dir / ".sklm-home"
+        skills_dir = sklm_home / "store" / "skills"
+        skills_dir.mkdir(parents=True)
+        (skills_dir / "my-skill").mkdir()
+        monkeypatch.setattr("sklm.store.SKLM_HOME", sklm_home)
+        monkeypatch.setattr("sklm.cli.wizard.SKLM_HOME", sklm_home)
+        from sklm.api import Sklm
+        f = Sklm()
+        f.init_workspace(["opencode"])
+        # Add a link pointing to a non-existent target
+        from sklm.models import Link, ResourceKind
+        broken_link = Link(
+            name="ghost",
+            kind=ResourceKind.skill,
+            target=temp_dir / "nonexistent",
+            link_path=temp_dir / "nonexistent-link",
+        )
+        f.workspace.add_link(broken_link)
+        from sklm.cli.wizard import detect_state
+        state = detect_state(f)
+        assert state.broken_links == 1
+
+
+class TestWizardBuildChoices:
+    """Tests for contextual menu construction (10.2)."""
+
+    def test_state_a_no_migration(self):
+        """State A (no store, no workspace) without migration source."""
+        from sklm.cli.wizard import SystemState, build_choices
+        state = SystemState()
+        choices = build_choices(state)
+        assert "Install a skill" in choices
+        assert "Initialize this workspace" not in choices
+        assert "List skills" not in choices
+        assert "Remove a skill" not in choices
+        assert "Migrate skills" not in choices
+        assert "Settings" in choices
+        assert "Exit" in choices
+
+    def test_state_a_with_migration(self):
+        """State A with migration source available."""
+        from sklm.cli.wizard import SystemState, build_choices
+        state = SystemState(has_migration=True)
+        choices = build_choices(state)
+        assert "Migrate skills" in choices
+        assert "Install a skill" in choices
+
+    def test_state_b(self):
+        """State B (store exists, no workspace)."""
+        from sklm.cli.wizard import SystemState, build_choices
+        state = SystemState(has_store=True, store_count=2)
+        choices = build_choices(state)
+        assert "Install a skill" in choices
+        assert "Initialize this workspace" in choices
+        assert "List skills" in choices
+        assert "Remove a skill" in choices
+        assert "Settings" in choices
+        assert "Exit" in choices
+
+    def test_state_c(self):
+        """State C (store and workspace exist)."""
+        from sklm.cli.wizard import SystemState, build_choices
+        state = SystemState(has_store=True, has_workspace=True, store_count=2)
+        choices = build_choices(state)
+        assert "Install a skill" in choices
+        assert "Add skill to this workspace" in choices
+        assert "List skills" in choices
+        assert "Remove a skill" in choices
+        assert "Initialize this workspace" not in choices
+        assert "Settings" in choices
+        assert "Exit" in choices
+
+    def test_state_c_with_migration(self):
+        """State C with migration source."""
+        from sklm.cli.wizard import SystemState, build_choices
+        state = SystemState(
+            has_store=True, has_workspace=True,
+            store_count=2, has_migration=True,
+        )
+        choices = build_choices(state)
+        assert "Migrate skills" in choices
+
+
+class TestWizardCheckAndRepair:
+    """Tests for auto-repair prompt (10.3)."""
+
+    def test_no_broken_links_skips_repair(self, temp_dir, monkeypatch):
+        """When no links are broken, repair is not prompted."""
+        sklm_home = temp_dir / ".sklm-home"
+        skills_dir = sklm_home / "store" / "skills"
+        skills_dir.mkdir(parents=True)
+        (skills_dir / "my-skill").mkdir()
+        monkeypatch.setattr("sklm.store.SKLM_HOME", sklm_home)
+        monkeypatch.setattr("sklm.cli.wizard.SKLM_HOME", sklm_home)
+        from sklm.api import Sklm
+        f = Sklm()
+        f.init_workspace(["opencode"])
+        from sklm.cli.wizard import check_and_repair_links
+        # No broken links -> should return silently without calling questionary
+        mock_confirm = unittest.mock.MagicMock()
+        monkeypatch.setattr("sklm.cli.wizard.questionary.confirm", mock_confirm)
+        check_and_repair_links(f)
+        mock_confirm.assert_not_called()
+
+    def test_repair_declined(self, temp_dir, monkeypatch):
+        """When user declines repair, links remain broken."""
+        sklm_home = temp_dir / ".sklm-home"
+        skills_dir = sklm_home / "store" / "skills"
+        skills_dir.mkdir(parents=True)
+        (skills_dir / "my-skill").mkdir()
+        monkeypatch.setattr("sklm.store.SKLM_HOME", sklm_home)
+        monkeypatch.setattr("sklm.cli.wizard.SKLM_HOME", sklm_home)
+        from sklm.api import Sklm
+        f = Sklm()
+        f.init_workspace(["opencode"])
+        # Add a broken link
+        from sklm.models import Link, ResourceKind
+        broken_link = Link(
+            name="ghost",
+            kind=ResourceKind.skill,
+            target=temp_dir / "nonexistent",
+            link_path=temp_dir / "nonexistent-link",
+        )
+        f.workspace.add_link(broken_link)
+        from sklm.cli.wizard import check_and_repair_links
+
+        # Mock questionary.confirm to return a mock with .ask() returning False
+        class MockConfirm:
+            def ask(self):
+                return False
+        monkeypatch.setattr("sklm.cli.wizard.questionary.confirm", lambda *a, **kw: MockConfirm())
+
+        check_and_repair_links(f)
+        # Link should still be broken
+        from sklm.core.linking import detect_broken_links
+        broken = detect_broken_links(f.workspace)
+        assert len(broken) == 1
+
+
+class TestWizardTTYDetection:
+    """Tests for TTY detection in main.py (10.4)."""
+
+    def test_wizard_launched_when_tty_and_no_args(self, monkeypatch):
+        """When TTY and no args, run_wizard should be called."""
+        import sys
+        monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+        monkeypatch.setattr("sys.argv", ["sklm"])
+        calls = []
+
+        class MockWizardModule:
+            run_wizard = staticmethod(lambda: calls.append("called"))
+
+        monkeypatch.setitem(sys.modules, "sklm.cli.wizard", MockWizardModule())
+        from sklm.cli.main import run
+        run()
+        assert len(calls) == 1
+
+    def test_help_shown_when_not_tty_and_no_args(self, monkeypatch):
+        """When not TTY and no args, help should be shown."""
+        monkeypatch.setattr("sys.stdin.isatty", lambda: False)
+        monkeypatch.setattr("sys.argv", ["sklm"])
+        help_calls = []
+
+        def mock_app(args):
+            if args == ["--help"]:
+                help_calls.append("called")
+
+        monkeypatch.setattr("sklm.cli.main.app", mock_app)
+        from sklm.cli.main import run
+        run()
+        assert len(help_calls) == 1
+
+    def test_typer_runs_when_args_present(self, monkeypatch):
+        """When args are present, Typer app should run regardless of TTY."""
+        monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+        monkeypatch.setattr("sys.argv", ["sklm", "--version"])
+        app_calls = []
+
+        def mock_app():
+            app_calls.append("called")
+
+        monkeypatch.setattr("sklm.cli.main.app", mock_app)
+        from sklm.cli.main import run
+        run()
+        assert len(app_calls) == 1
+
+    def test_typer_runs_when_not_tty_with_args(self, monkeypatch):
+        """When not TTY with args, Typer app should run."""
+        monkeypatch.setattr("sys.stdin.isatty", lambda: False)
+        monkeypatch.setattr("sys.argv", ["sklm", "init"])
+        app_calls = []
+
+        def mock_app():
+            app_calls.append("called")
+
+        monkeypatch.setattr("sklm.cli.main.app", mock_app)
+        from sklm.cli.main import run
+        run()
+        assert len(app_calls) == 1
+
+
+class TestWizardInstallFlow:
+    """Tests for install flow (10.5)."""
+
+    def test_install_flow_back_at_source_selection(self, monkeypatch):
+        """Selecting 'Back' at source selection returns without action."""
+        class MockQ:
+            def ask(self):
+                return "Back"
+        monkeypatch.setattr("sklm.cli.wizard.questionary.select", lambda *a, **kw: MockQ())
+        from sklm.cli.wizard import install_flow
+        from sklm.api import Sklm
+        f = Sklm()
+        # Should not raise
+        install_flow(f)
+
+    def test_install_flow_local_path_validates_skilm(self, temp_dir, monkeypatch):
+        """Local path installation validates SKILL.md exists."""
+        skill_dir = temp_dir / "my-test-skill"
+        skill_dir.mkdir()
+        (skill_dir / "SKILL.md").write_text("# Test")
+        responses = iter([
+            "Local path",
+            str(skill_dir),
+            "Global store only",
+        ])
+
+        class MockQ:
+            def __init__(self, responses):
+                self.responses = responses
+            def ask(self):
+                return next(self.responses)
+
+        mock = MockQ(responses)
+
+        monkeypatch.setattr(
+            "sklm.cli.wizard.questionary.select",
+            lambda *a, **kw: MockQ(responses),
+        )
+        monkeypatch.setattr(
+            "sklm.cli.wizard.questionary.path",
+            lambda *a, **kw: MockQ(iter([str(skill_dir)])),
+        )
+        from sklm.cli.wizard import install_flow
+        from sklm.api import Sklm
+        f = Sklm()
+        install_flow(f)
+        # Skill should be in global store
+        from sklm.models import ResourceKind
+        resources = f.global_ls(ResourceKind.skill)
+        names = [r.name for r in resources]
+        assert "my-test-skill" in names
+
+
+class TestWizardInitWorkspace:
+    """Tests for init workspace flow (10.6)."""
+
+    def test_init_workspace_with_detected_agents(self, temp_dir, monkeypatch):
+        """When agents are detected, they should be pre-checked."""
+        # Create an agent directory to trigger detection
+        (temp_dir / ".opencode").mkdir()
+        monkeypatch.setattr("sklm.store.SKLM_HOME", temp_dir / ".sklm-home")
+        monkeypatch.setattr("sklm.cli.wizard.SKLM_HOME", temp_dir / ".sklm-home")
+        monkeypatch.setattr("sklm.cli.wizard.AgentRegistry.detect", lambda self, root: ["opencode"])
+
+        class MockCheckbox:
+            def ask(self):
+                return ["opencode"]
+        class MockConfirm:
+            def ask(self):
+                return False
+
+        monkeypatch.setattr(
+            "sklm.cli.wizard.questionary.checkbox",
+            lambda *a, **kw: MockCheckbox(),
+        )
+        monkeypatch.setattr(
+            "sklm.cli.wizard.questionary.confirm",
+            lambda *a, **kw: MockConfirm(),
+        )
+
+        from sklm.cli.wizard import init_workspace_flow
+        from sklm.api import Sklm
+        f = Sklm()
+        init_workspace_flow(f)
+
+        assert f.workspace.exists()
+        config = f.workspace.load_config()
+        assert "opencode" in config.agents
+
+    def test_init_workspace_no_agents_detected(self, temp_dir, monkeypatch):
+        """When no agents are detected, show full list."""
+        monkeypatch.setattr("sklm.store.SKLM_HOME", temp_dir / ".sklm-home")
+        monkeypatch.setattr("sklm.cli.wizard.SKLM_HOME", temp_dir / ".sklm-home")
+        # No agent dirs exist -> detection returns empty
+        monkeypatch.setattr(
+            "sklm.cli.wizard.AgentRegistry.detect",
+            lambda self, root: [],
+        )
+        monkeypatch.setattr(
+            "sklm.cli.wizard.AgentRegistry.get_agent_ids",
+            lambda self: ["opencode", "claude", "cursor"],
+        )
+
+        class MockCheckbox:
+            def ask(self):
+                return ["opencode"]
+        class MockConfirm:
+            def ask(self):
+                return False
+
+        monkeypatch.setattr(
+            "sklm.cli.wizard.questionary.checkbox",
+            lambda *a, **kw: MockCheckbox(),
+        )
+        monkeypatch.setattr(
+            "sklm.cli.wizard.questionary.confirm",
+            lambda *a, **kw: MockConfirm(),
+        )
+
+        from sklm.cli.wizard import init_workspace_flow
+        from sklm.api import Sklm
+        f = Sklm()
+        init_workspace_flow(f)
+
+        assert f.workspace.exists()
+        config = f.workspace.load_config()
+        assert "opencode" in config.agents

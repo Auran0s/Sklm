@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 from typing import Optional
+
+from rich.console import Console
 
 from sklm.models import ResourceKind, ResourceRef
 from sklm.core.workspace import Workspace
 from sklm.core.registry import RegistryManager
 from sklm.store import GlobalStore
+
+
+console = Console()
 
 
 def add_resource_to_workspace(
@@ -107,11 +111,9 @@ def _resolve_resource(
     if path.exists():
         resolved = path.resolve()
         if not str(resolved).startswith(str(Path.cwd())):
-            logging.warning(
-                "Path '%s' is outside the current project directory (%s). "
-                "Ensure this is intentional.",
-                resolved,
-                Path.cwd(),
+            console.print(
+                f"[yellow]⚠[/] Path '{resolved}' is outside the current "
+                f"project directory ({Path.cwd()}). Ensure this is intentional."
             )
         return ResourceRef(
             name=path.name,

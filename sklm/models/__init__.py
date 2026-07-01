@@ -94,6 +94,8 @@ class RegistrySource(BaseModel):
     def name_no_spaces(cls, v: str) -> str:
         if " " in v:
             raise ValueError("registry name must not contain spaces")
+        if not v.replace("-", "").replace("_", "").isalnum():
+            raise ValueError("registry name must be kebab-case (letters, numbers, hyphens, underscores only)")
         return v
 
 
@@ -141,12 +143,12 @@ class SourceMetadata(BaseModel):
 class TelemetryConfig(BaseModel):
     enabled: bool = Field(default=True, description="Enable telemetry")
     umami_url: str = Field(
-        default="https://analytics.victorbeysseriat.fr",
-        description="Umami instance URL",
+        default="",
+        description="Umami instance URL (set via SKLM_UMAMI_URL env var)",
     )
     website_id: str = Field(
-        default="1cc92fce-83fc-4792-9b02-e28a04810426",
-        description="Umami website UUID",
+        default="",
+        description="Umami website UUID (set via SKLM_WEBSITE_ID env var)",
     )
 
 
