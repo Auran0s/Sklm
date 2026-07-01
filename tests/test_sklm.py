@@ -1932,21 +1932,14 @@ class TestUpdateChecker:
         checker = UpdateChecker()
         assert checker.check() is None
 
-    def test_find_repo_root_returns_none_when_no_git(self, temp_dir, monkeypatch):
+    def test_get_latest_returns_version(self, temp_dir, monkeypatch):
         from sklm.core.update import UpdateChecker
-        monkeypatch.setattr("sklm.__file__", str(temp_dir / "sklm" / "__init__.py"))
+        monkeypatch.setattr(
+            "sklm.core.update.UpdateChecker._get_latest_version_via_api",
+            lambda self: "v0.2.0",
+        )
         checker = UpdateChecker()
-        assert checker.find_repo_root() is None
-
-    def test_find_repo_root_finds_parent_git(self, temp_dir, monkeypatch):
-        from sklm.core.update import UpdateChecker
-        git_dir = temp_dir / ".git"
-        git_dir.mkdir()
-        pkg_dir = temp_dir / "src" / "sklm"
-        pkg_dir.mkdir(parents=True)
-        monkeypatch.setattr("sklm.__file__", str(pkg_dir / "__init__.py"))
-        checker = UpdateChecker()
-        assert checker.find_repo_root() == temp_dir.resolve()
+        assert checker.get_latest() == "v0.2.0"
 
 
 class TestUpdateCLI:
@@ -1986,40 +1979,13 @@ class TestUpdateCLI:
         assert result.exit_code == 0
         assert "v0.2.0" in result.output
 
-    def test_update_no_repo(self, temp_dir, monkeypatch):
-        monkeypatch.setattr("sklm.__version__", "0.1.0")
-        monkeypatch.setattr(
-            "sklm.core.update.UpdateChecker._get_latest_version_via_api",
-            lambda self: "v0.2.0",
-        )
-        monkeypatch.setattr(
-            "sklm.core.update.UpdateChecker.find_repo_root",
-            lambda self: None,
-        )
-        from typer.testing import CliRunner
-        from sklm.cli.main import app
-        runner = CliRunner()
-        result = runner.invoke(app, ["update", "--force"])
-        assert result.exit_code == 1
-        assert "Cannot find" in result.output
-
     def test_update_success(self, temp_dir, monkeypatch):
+        import sys
         from unittest.mock import Mock
         monkeypatch.setattr("sklm.__version__", "0.1.0")
         monkeypatch.setattr(
             "sklm.core.update.UpdateChecker._get_latest_version_via_api",
             lambda self: "v0.2.0",
-        )
-        repo_dir = temp_dir / "repo"
-        repo_dir.mkdir()
-        (repo_dir / ".git").mkdir()
-        monkeypatch.setattr(
-            "sklm.core.update.UpdateChecker.find_repo_root",
-            lambda self: repo_dir,
-        )
-        monkeypatch.setattr(
-            "sklm.core.update.UpdateChecker.is_editable",
-            lambda self: True,
         )
         mock_run = Mock(return_value=Mock(returncode=0))
         monkeypatch.setattr("sklm.cli.main.subprocess.run", mock_run)
@@ -2029,20 +1995,18 @@ class TestUpdateCLI:
         result = runner.invoke(app, ["update", "--force"])
         assert result.exit_code == 0, f"Failed: {result.output}"
         assert "Updated" in result.output
+        # Verify pip install -U sklm was called
+        mock_run.assert_called_once_with(
+            [sys.executable, "-m", "pip", "install", "-U", "sklm"],
+            capture_output=True, timeout=60,
+        )
 
-    def test_update_git_fetch_fails(self, temp_dir, monkeypatch):
+    def test_update_fails(self, temp_dir, monkeypatch):
         from unittest.mock import Mock
         monkeypatch.setattr("sklm.__version__", "0.1.0")
         monkeypatch.setattr(
             "sklm.core.update.UpdateChecker._get_latest_version_via_api",
             lambda self: "v0.2.0",
-        )
-        repo_dir = temp_dir / "repo"
-        repo_dir.mkdir()
-        (repo_dir / ".git").mkdir()
-        monkeypatch.setattr(
-            "sklm.core.update.UpdateChecker.find_repo_root",
-            lambda self: repo_dir,
         )
         mock_run = Mock(return_value=Mock(returncode=1, stderr=b"error"))
         monkeypatch.setattr("sklm.cli.main.subprocess.run", mock_run)
@@ -2051,6 +2015,7 @@ class TestUpdateCLI:
         runner = CliRunner()
         result = runner.invoke(app, ["update", "--force"])
         assert result.exit_code == 1
+        assert "Update failed" in result.output
 
     def test_sklm_no_update_check_env(self, temp_dir, monkeypatch):
         monkeypatch.setenv("SKLM_NO_UPDATE_CHECK", "1")

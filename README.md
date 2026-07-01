@@ -39,13 +39,11 @@ Sklm keeps a global library in `~/.sklm/`, then lets you pick which skills each 
 ## Installation
 
 ```bash
-git clone https://github.com/Auran0s/sklm.git
-cd sklm
-pip install -e .
+pip install sklm
 ```
 
 > [!TIP]
-> The `-e` (editable) flag keeps your install in sync with the repo. When pulling updates, just run `git pull`.
+> For development, clone the repo and use `pip install -e .` for an editable install.
 
 ## Quickstart
 
@@ -176,7 +174,7 @@ sklm checks for new versions automatically after every command (once per day).
 When a new release is available, a notice is shown with upgrade instructions.
 
 ```bash
-sklm update                         # fetch latest release and upgrade
+sklm update                         # upgrade to latest version via pip
 sklm update --check                 # check only, no upgrade
 sklm update --force                 # bypass 24h cache
 ```
@@ -187,7 +185,7 @@ Disable the automatic check by setting:
 export SKLM_NO_UPDATE_CHECK=1
 ```
 
-Updates are fetched from [GitHub Releases](https://github.com/Auran0s/Sklm/releases).
+Updates are installed via `pip install -U sklm`. The version check uses the [GitHub Releases](https://github.com/Auran0s/Sklm/releases) API.
 
 ### Supported Agents
 

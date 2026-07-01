@@ -806,58 +806,18 @@ def update(
         )
         return
 
-    repo_root = checker.find_repo_root()
-    if repo_root is None:
-        console.print("[red]✗[/] Cannot find the sklm git repository.")
-        console.print(f"   Reinstall from [link]{checker.github_repo_url}[/]")
-        raise typer.Exit(1)
-
-    tag = f"v{latest.lstrip('v')}"
-    console.print(f"Fetching tags from origin...")
+    console.print("Updating sklm...")
     try:
         result = subprocess.run(
-            ["git", "fetch", "--tags"],
-            cwd=repo_root,
-            capture_output=True,
-            timeout=30,
-        )
-        if result.returncode != 0:
-            console.print(f"[red]✗[/] git fetch failed:\n{result.stderr.decode().strip()}")
-            raise typer.Exit(1)
-    except subprocess.TimeoutExpired:
-        console.print("[red]✗[/] git fetch timed out.")
-        raise typer.Exit(1)
-    except FileNotFoundError:
-        console.print("[red]✗[/] git not found.")
-        raise typer.Exit(1)
-
-    console.print(f"Checking out {tag}...")
-    try:
-        result = subprocess.run(
-            ["git", "checkout", tag],
-            cwd=repo_root,
-            capture_output=True,
-            timeout=30,
-        )
-        if result.returncode != 0:
-            console.print(f"[red]✗[/] git checkout failed:\n{result.stderr.decode().strip()}")
-            raise typer.Exit(1)
-    except subprocess.TimeoutExpired:
-        console.print("[red]✗[/] git checkout timed out.")
-        raise typer.Exit(1)
-
-    console.print("Reinstalling...")
-    try:
-        result = subprocess.run(
-            [sys.executable, "-m", "pip", "install", "-e", str(repo_root)],
+            [sys.executable, "-m", "pip", "install", "-U", "sklm"],
             capture_output=True,
             timeout=60,
         )
         if result.returncode != 0:
-            console.print(f"[red]✗[/] pip install failed:\n{result.stderr.decode().strip()}")
+            console.print(f"[red]✗[/] Update failed:\n{result.stderr.decode().strip()}")
             raise typer.Exit(1)
     except subprocess.TimeoutExpired:
-        console.print("[red]✗[/] pip install timed out.")
+        console.print("[red]✗[/] Update timed out.")
         raise typer.Exit(1)
     console.print(f"[green]✓[/] Updated to sklm [bold]v{latest}[/]")
 
