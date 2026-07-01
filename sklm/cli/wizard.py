@@ -392,7 +392,7 @@ def init_workspace_flow(f: Sklm) -> None:
 
 
 def add_to_workspace_flow(f: Sklm) -> None:
-    """Select a globally installed skill and add it to the workspace."""
+    """Select globally installed skills via checkbox and add them to the workspace."""
     if not f.workspace.exists():
         console.print("[yellow]⚠ No workspace found. Initialize one first.[/]")
         return
@@ -406,30 +406,39 @@ def add_to_workspace_flow(f: Sklm) -> None:
     linked_names = {r.name for r in ws_resources}
 
     try:
-        while True:
-            choices = []
-            for s in store_skills:
-                prefix = "[✓]" if s.name in linked_names else "[ ]"
-                choices.append(f"{prefix} {s.name}")
-            selected = questionary.select(
-                "Select a skill to add to workspace:",
-                choices=choices + [_BACK_CHOICE],
-            ).ask()
-            if not selected or selected == "Back":
-                return
+        choices = []
+        for s in store_skills:
+            prefix = "[✓]" if s.name in linked_names else "[ ]"
+            choices.append(f"{prefix} {s.name}")
 
+        selected = questionary.checkbox(
+            "Select skills to add to workspace (SPACE to toggle, Enter to confirm):",
+            choices=choices,
+        ).ask()
+
+        # Cancelled (Ctrl+C / Escape)
+        if selected is None:
+            return
+
+        # Empty selection — nothing checked
+        if not selected:
+            return
+
+        for item in selected:
             # Strip prefix to get raw name
-            raw = selected
+            raw = item
             if raw.startswith("[✓] ") or raw.startswith("[ ] "):
                 raw = raw[4:]
 
             if raw in linked_names:
-                console.print("[yellow]⚠ Already in workspace[/]")
+                console.print(f"[yellow]⚠[/] [bold]{raw}[/] already in workspace")
                 continue
 
-            ref = f.add(ResourceKind.skill, raw)
-            console.print(f"[green]✓[/] Added [bold]{ref.name}[/] to workspace")
-            return
+            try:
+                ref = f.add(ResourceKind.skill, raw)
+                console.print(f"[green]✓[/] Added [bold]{ref.name}[/] to workspace")
+            except Exception as e:
+                console.print(f"[red]✗[/] Failed to add [bold]{raw}[/]: {e}")
     except KeyboardInterrupt:
         return
     except Exception as e:

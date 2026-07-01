@@ -192,6 +192,12 @@ def init(
         if agent:
             for a in agent:
                 f.workspace.add_agent(a)
+            # Sync agent config directories immediately so the user doesn't
+            # need a separate `sklm agent sync` step.
+            try:
+                f.agent_sync()
+            except RuntimeError as e:
+                console.print(f"[yellow]⚠[/] Agent sync failed: {e}")
             console.print("[yellow]⚠[/] Workspace already exists at [bold].sklm/[/]")
             console.print(f"   Agents updated: [cyan]{', '.join(agent)}[/]")
             return
