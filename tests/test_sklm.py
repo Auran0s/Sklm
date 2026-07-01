@@ -1861,7 +1861,10 @@ class TestUpdateChecker:
         cache_dir = temp_dir / ".sklm-cache"
         monkeypatch.setattr("sklm.core.update.CACHE_DIR", cache_dir)
         monkeypatch.setattr("sklm.core.update.CACHE_FILE", cache_dir / "update-check")
+        # Patch both module-level bindings since update.py uses
+        # "from sklm import __version__" which creates a local binding.
         monkeypatch.setattr("sklm.__version__", "0.1.0")
+        monkeypatch.setattr("sklm.core.update.__version__", "0.1.0")
 
     def test_parse_version_strips_v_prefix(self):
         from sklm.core.update import UpdateChecker
@@ -1971,6 +1974,10 @@ class TestUpdateCLI:
         monkeypatch.setattr("sklm.core.registry.REGISTRY_CACHE", temp_dir / ".sklm-home" / "cache")
         monkeypatch.setattr("sklm.cli.main._sklm", None)
         monkeypatch.setattr("sklm.core.update.CACHE_DIR", temp_dir / ".sklm-cache")
+        # Patch version in both modules that import it via
+        # "from sklm import __version__" (creates local bindings).
+        monkeypatch.setattr("sklm.core.update.__version__", "0.1.0")
+        monkeypatch.setattr("sklm.cli.main.__version__", "0.1.0")
 
     def test_update_check_no_update(self, temp_dir, monkeypatch):
         monkeypatch.setattr("sklm.__version__", "0.1.0")
