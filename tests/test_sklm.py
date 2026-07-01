@@ -1585,7 +1585,9 @@ class TestCLIIntegration:
         runner = CliRunner()
         result = runner.invoke(app, ["add", "--help"])
         assert result.exit_code == 0
-        assert "--from" in result.output
+        # Check for the help description text instead of the raw flag syntax,
+        # which can vary across Typer/Rich versions (e.g. ANSI wrapping).
+        assert "Git repository URL to install from" in result.output
 
     def test_uninstall_command(self, temp_dir, fake_skill_dir):
         """sklm uninstall doit supprimer un skill du store."""
