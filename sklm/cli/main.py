@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -916,7 +917,12 @@ def run():
             tb_frames = tb_mod.extract_tb(cause.__traceback__)
             if tb_frames:
                 tail = tb_frames[-3:]
-                _track_traceback = "".join(tb_mod.format_list(tail)).replace(str(Path.home()), "~").rstrip()
+                raw = "".join(tb_mod.format_list(tail))
+                # Sanitize: replace all absolute file paths with just the filename
+                sanitized = re.sub(r'File "([^"]+)", line (\d+)',
+                                   lambda m: f'File "{Path(m.group(1)).name}", line {m.group(2)}',
+                                   raw)
+                _track_traceback = sanitized.rstrip()
         else:
             _track_success = error.code in (None, 0)
             _track_error = None if _track_success else "error"

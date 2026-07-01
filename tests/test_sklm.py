@@ -409,8 +409,8 @@ class TestTelemetryConfig:
     def test_defaults(self):
         cfg = TelemetryConfig()
         assert cfg.enabled is True
-        assert cfg.umami_url == "https://analytics.victorbeysseriat.fr"
-        assert cfg.website_id == "1cc92fce-83fc-4792-9b02-e28a04810426"
+        assert cfg.umami_url == ""
+        assert cfg.website_id == ""
 
     def test_custom_values(self):
         cfg = TelemetryConfig(
@@ -427,8 +427,9 @@ class TestGlobalStoreTelemetry:
     def test_get_default_config(self, isolated_store):
         cfg = isolated_store.get_telemetry_config()
         assert cfg.enabled is True
-        assert cfg.umami_url == "https://analytics.victorbeysseriat.fr"
-        assert cfg.website_id == "1cc92fce-83fc-4792-9b02-e28a04810426"
+        # Defaults are empty; env vars can override via SKLM_UMAMI_URL / SKLM_WEBSITE_ID
+        assert cfg.umami_url == ""
+        assert cfg.website_id == ""
 
     def test_set_and_get_config(self, isolated_store):
         original = TelemetryConfig(
@@ -1255,6 +1256,7 @@ class TestCLIIntegration:
         monkeypatch.setattr("sklm.core.registry.REGISTRIES_PATH", temp_dir / ".sklm-home" / "registries.yaml")
         monkeypatch.setattr("sklm.core.registry.REGISTRY_CACHE", temp_dir / ".sklm-home" / "cache")
         monkeypatch.setattr("sklm.cli.main._sklm", None)
+        monkeypatch.setattr("sklm.cli.main._tracker", None)
 
     def test_help(self):
         from typer.testing import CliRunner
@@ -1420,14 +1422,14 @@ class TestCLIIntegration:
         assert "ACTIVE" in result.output
         assert "cursor" in result.output
 
-    def test_telemetry_status_active_by_default(self, temp_dir):
+    def test_telemetry_status_inactive_by_default(self, temp_dir):
+        """Telemetry is inactive without env vars (no hardcoded defaults)."""
         from typer.testing import CliRunner
         from sklm.cli.main import app
         runner = CliRunner()
         result = runner.invoke(app, ["telemetry", "status"])
-        assert result.exit_code == 0
-        assert "active" in result.output.lower()
-        assert "analytics.victorbeysseriat.fr" in result.output
+        assert result.exit_code != 0
+        assert "inactive" in result.output.lower() or "disabled" in result.output.lower()
 
     def test_telemetry_on_off_lifecycle(self, temp_dir, monkeypatch):
         from typer.testing import CliRunner

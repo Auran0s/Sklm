@@ -12,6 +12,10 @@ import yaml
 from sklm.models import RegistrySource, RegistryType, Resource, ResourceKind
 
 
+# Filesystem-safe pattern: only allow alphanumeric, hyphens, underscores
+_SAFE_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
+
+
 REGISTRIES_PATH = Path.home() / ".sklm" / "registries.yaml"
 REGISTRY_CACHE = Path.home() / ".sklm" / "cache"
 
@@ -64,8 +68,13 @@ class RegistryManager:
 
         Raises:
             ValueError: If the git operation fails, the URL is not a valid git repo,
-                or the operation times out.
+                or the operation times out, or the name contains unsafe characters.
         """
+        if not _SAFE_NAME_RE.match(name):
+            raise ValueError(
+                f"Unsafe registry name '{name}': only letters, numbers, hyphens, "
+                "and underscores are allowed."
+            )
         repo_cache = self.cache_dir / name
         if repo_cache.exists():
             try:
