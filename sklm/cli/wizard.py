@@ -13,10 +13,7 @@ from rich.table import Table
 
 from sklm.api import Sklm
 
-# ANSI escape sequences for choice styling
-_DIM = "\033[2m"
-_RESET = "\033[0m"
-_BACK_CHOICE = questionary.Choice(title=f"{_DIM}← Back{_RESET}", value="Back")
+_BACK_CHOICE = questionary.Choice(title="← Back", value="Back")
 from sklm.models import ResourceKind
 from sklm.agents.registry import AgentRegistry
 from sklm.core.linking import detect_broken_links, link_resource as _do_link
