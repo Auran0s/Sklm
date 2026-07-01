@@ -112,6 +112,13 @@ def _prompt_cleanup(
         console.print("[dim]Source files preserved.[/]")
 
 
+def _get_workspace_skill_names(f: Sklm) -> set[str]:
+    """Return set of skill names linked in the workspace, or empty set if no workspace exists."""
+    if not f.workspace.exists():
+        return set()
+    return {r.name for r in f.workspace.list_resources(ResourceKind.skill)}
+
+
 @app.callback()
 def main(
     ctx: typer.Context,
@@ -495,13 +502,16 @@ def global_ls(
     if not resources:
         console.print("[yellow]No resources in global store.[/]")
         return
+    ws_skill_names = _get_workspace_skill_names(f)
     table = Table(title="Global Store")
     table.add_column("Name", style="cyan")
     table.add_column("Type", style="magenta")
     table.add_column("Source", style="green")
+    table.add_column("In workspace", style="yellow")
     table.add_column("Path", style="white")
     for r in resources:
-        table.add_row(r.name, r.kind.value, r.source, str(r.path))
+        in_ws = "[green]✓[/]" if r.name in ws_skill_names else "[dim]—[/]"
+        table.add_row(r.name, r.kind.value, r.source, in_ws, str(r.path))
     console.print(table)
 
 
@@ -565,6 +575,7 @@ def registry_search(
     query: str = typer.Argument(..., help="Search keyword"),
     registry: Optional[str] = typer.Option(None, "--registry", "-r", help="Filter by registry"),
     resource_type: Optional[str] = typer.Option(None, "--type", "-t", help="Filter by type"),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ):
     """Search for resources across registries."""
     f = get_sklm()
@@ -573,13 +584,28 @@ def registry_search(
     if not results:
         console.print(f"[yellow]No results for '{query}'.[/]")
         return
+
+    ws_skill_names = _get_workspace_skill_names(f)
+
+    if json_output:
+        data = []
+        for reg_name, resource in results:
+            item = resource.model_dump(mode="json")
+            item["registry"] = reg_name
+            item["in_workspace"] = resource.name in ws_skill_names
+            data.append(item)
+        print_json(data=data)
+        return
+
     table = Table(title=f"Search Results: '{query}'")
     table.add_column("Registry", style="cyan")
     table.add_column("Name", style="green")
     table.add_column("Type", style="magenta")
+    table.add_column("Status", style="yellow")
     table.add_column("Path", style="white")
     for reg_name, resource in results:
-        table.add_row(reg_name, resource.name, resource.kind.value, str(resource.path))
+        status = "[green]✓[/]" if resource.name in ws_skill_names else "[dim]—[/]"
+        table.add_row(reg_name, resource.name, resource.kind.value, status, str(resource.path))
     console.print(table)
 
 
