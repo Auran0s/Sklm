@@ -3,7 +3,8 @@
 ## Setup & dev commands
 
 ```bash
-pip install -e .                  # editable install (required first)
+pip install sklm                  # install from PyPI
+pip install -e .                  # editable install (development)
 pip install -r requirements.txt   # pytest + pytest-cov
 python3 -m pytest tests/          # run all tests (single file: tests/test_sklm.py)
 python3 -m pytest tests/ -k <pattern>  # run a subset
@@ -66,7 +67,7 @@ Two-level store:
 - Only `skill` resource kind exists — `ResourceKind` enum has a single value.
 - `link`/`unlink` are **internal API only** (no CLI commands). Use `add`/`rm`.
 - Agent sync **copies** (not symlinks) content with variant overlay from `variants/<agent-id>/`.
-- Editable install required (`pip install -e .`) — the update mechanism runs `git fetch --tags && git checkout v<tag> && pip install -e .`.
+- Editable install optional (`pip install -e .`) — the update mechanism runs `pip install -U sklm`.
 
 ## Agent config (agents.yaml)
 
