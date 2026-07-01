@@ -23,7 +23,7 @@ from sklm.agents.registry import AgentRegistry
 
 app = typer.Typer(
     name="sklm",
-    help="Skills manager for AI agents",
+    help="Skills manager for AI agents — run without arguments for interactive mode",
     no_args_is_help=False,
     rich_markup_mode="rich",
 )
@@ -186,7 +186,7 @@ def init(
         None, "--agent", "-a", help="Agent(s) to configure (repeatable, auto-detect if omitted)"
     ),
 ):
-    """Initialize a Sklm workspace in the current directory."""
+    """Initialize a Sklm workspace in the current directory. Use --agent to add agents (re-run to update an existing workspace)."""
     f = get_sklm()
     if f.workspace.exists():
         if agent:
