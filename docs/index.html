@@ -278,7 +278,7 @@
     </h1>
 
     <p class="mt-6 text-white/50 text-lg md:text-xl max-w-2xl mx-auto leading-relaxed reveal reveal-delay-2 text-balance">
-      Centralize, scope, and sync skills for every AI agent — one CLI command at a time.
+      Skills manager for AI agents
     </p>
 
     <div class="mt-10 reveal reveal-delay-3">
@@ -357,7 +357,7 @@
             </span>
             <h3 class="font-display text-2xl md:text-3xl font-semibold text-white mb-3">Multi-agent support</h3>
             <p class="text-white/50 text-base md:text-lg leading-relaxed max-w-xl">
-              Recognizes 30 AI agents — from OpenCode and Claude Code to Codex CLI and beyond — and syncs skills to the right place, every time.
+              Recognizes 30+ AI agents — from OpenCode and Claude Code to Codex CLI and beyond — and syncs skills to the right place, every time.
             </p>
           </div>
         </div>
@@ -418,6 +418,36 @@
             <h3 class="font-display text-xl font-semibold text-white mb-2">Auto-sync</h3>
             <p class="text-white/50 text-sm leading-relaxed">
               <code class="font-mono text-white/70 bg-white/5 px-1 rounded text-xs">sklm add</code> and <code class="font-mono text-white/70 bg-white/5 px-1 rounded text-xs">sklm rm</code> automatically sync your agent's config directory — no manual copying.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Install from Git -->
+      <div class="col-span-1 md:col-span-1 reveal reveal-delay-1">
+        <div class="p-[1.5px] rounded-[var(--outer-radius)] bg-white/5 border border-white/10 h-full glass-card">
+          <div class="rounded-[var(--inner-radius)] bg-[#0a0a0a] p-8 h-full shadow-[inset_0_1px_1px_rgba(255,255,255,0.12)] flex flex-col justify-center">
+            <span class="inline-flex w-10 h-10 rounded-full bg-rose-500/10 items-center justify-center mb-4 ring-1 ring-rose-500/20">
+              <i class="ph ph-git-branch text-rose-400 text-lg"></i>
+            </span>
+            <h3 class="font-display text-xl font-semibold text-white mb-2">Install from Git</h3>
+            <p class="text-white/50 text-sm leading-relaxed">
+              Pull skills from any public GitHub repo. <code class="font-mono text-white/70 bg-white/5 px-1 rounded text-xs">sklm add skill my-skill --from https://github.com/user/skills</code> clones, resolves, and links — no manual setup.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Per-agent variants -->
+      <div class="col-span-1 md:col-span-1 reveal reveal-delay-2">
+        <div class="p-[1.5px] rounded-[var(--outer-radius)] bg-white/5 border border-white/10 h-full glass-card">
+          <div class="rounded-[var(--inner-radius)] bg-[#0a0a0a] p-8 h-full shadow-[inset_0_1px_1px_rgba(255,255,255,0.12)] flex flex-col justify-center">
+            <span class="inline-flex w-10 h-10 rounded-full bg-orange-500/10 items-center justify-center mb-4 ring-1 ring-orange-500/20">
+              <i class="ph ph-stack text-orange-400 text-lg"></i>
+            </span>
+            <h3 class="font-display text-xl font-semibold text-white mb-2">Per-agent variants</h3>
+            <p class="text-white/50 text-sm leading-relaxed">
+              Ship one skill with agent-specific overrides in a <code class="font-mono text-white/70 bg-white/5 px-1 rounded text-xs">variants/</code> subdirectory. Each agent receives the version tuned for it — automatically.
             </p>
           </div>
         </div>
@@ -965,12 +995,10 @@
     // === TYPEWRITER TERMINAL ===
     (function() {
       var lines = [
-        '$ git clone https://github.com/Auran0s/sklm.git',
-        '$ cd sklm && pip install -e .',
-        '$ sklm init',
-        '$ sklm add skill my-skill --from https://github.com/user/skills',
+        '$ pip install sklm',
+        '$ sklm',
         '',
-        '# Skills synced. Ready to work.'
+        '# Interactive wizard opens \u2014 Sklm detects your setup'
       ];
 
       var terminalContent = document.getElementById('terminalContent');

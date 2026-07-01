@@ -29,7 +29,7 @@ Sklm keeps a global library in `~/.sklm/`, then lets you pick which skills each 
 
 ## Features
 
-- **Works with 8 AI agents** — OpenCode, Claude Code, Cursor, Windsurf, Gemini CLI, Cline, Amazon Q, and GitHub Copilot.
+- **Works with 30 AI agents** — from OpenCode and Claude Code to Codex CLI, GitHub Copilot, and beyond.
 - **Install once, scope per project** — a global store at `~/.sklm/` holds your skills; per-project symlinks activate only what you need.
 - **Auto-sync** — `sklm add` and `sklm rm` automatically update the agent's skills directory. No manual copying.
 - **Registry discovery** — index local folders or git repos as searchable skill catalogs.
@@ -48,15 +48,14 @@ pip install sklm
 ## Quickstart
 
 ```bash
-sklm --version                     # show installed version
-sklm init                          # auto-detect agent(s) and create .sklm/
-sklm add skill my-skill            # install + activate in the current project
+pip install sklm                   # install globally
+sklm                               # interactive wizard opens — detects your setup
 ```
 
-That's it. Your AI agent can now use the skill.
+That's it. The CLI's interactive wizard detects your AI agents, initializes the workspace, and guides you through adding your first skill — no flags needed.
 
 > [!TIP]
-> Run `sklm init --agent opencode` to skip auto-detection and set a specific agent. Pass `--agent` multiple times for multiple agents.
+> Run `sklm init --agent opencode` to skip the wizard and set a specific agent. Pass `--agent` multiple times for multiple agents.
 
 ## Usage
 
