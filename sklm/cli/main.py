@@ -113,13 +113,6 @@ def _prompt_cleanup(
         console.print("[dim]Source files preserved.[/]")
 
 
-def _get_workspace_skill_names(f: Sklm) -> set[str]:
-    """Return set of skill names linked in the workspace, or empty set if no workspace exists."""
-    if not f.workspace.exists():
-        return set()
-    return {r.name for r in f.workspace.list_resources(ResourceKind.skill)}
-
-
 @app.callback()
 def main(
     ctx: typer.Context,
@@ -509,7 +502,7 @@ def global_ls(
     if not resources:
         console.print("[yellow]No resources in global store.[/]")
         return
-    ws_skill_names = _get_workspace_skill_names(f)
+    ws_skill_names = f._workspace_skill_names()
     table = Table(title="Global Store")
     table.add_column("Name", style="cyan")
     table.add_column("Type", style="magenta")
@@ -592,7 +585,7 @@ def registry_search(
         console.print(f"[yellow]No results for '{query}'.[/]")
         return
 
-    ws_skill_names = _get_workspace_skill_names(f)
+    ws_skill_names = f._workspace_skill_names()
 
     if json_output:
         data = []

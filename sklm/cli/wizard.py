@@ -247,7 +247,7 @@ def install_flow(f: Sklm) -> None:
                 console.print(f"[yellow]No results for '{keyword}'.[/]")
                 return
 
-            ws_skill_names = _get_workspace_skill_names_wizard(f)
+            ws_skill_names = f._workspace_skill_names()
             choices = [
                 f"{'[✓]' if res.name in ws_skill_names else '[ ]'} {reg_name}:{res.name}"
                 for reg_name, res in results
@@ -290,7 +290,14 @@ def install_flow(f: Sklm) -> None:
             if not path_str:
                 return
             source_path = str(Path(path_str).expanduser().resolve())
-            name = Path(source_path).name
+            raw_name = Path(source_path).name
+            import re
+            name = re.sub(r'[^a-z0-9]+', '-', raw_name.lower()).strip('-')
+            if not name:
+                console.print("[red]✗[/] Could not derive a valid kebab-case name from the path.")
+                return
+            if name != raw_name:
+                console.print(f"[dim]Skill name auto-converted: [bold]{raw_name}[/] → [bold]{name}[/][/]")
         except KeyboardInterrupt:
             return
 
@@ -841,13 +848,6 @@ def _add_registry(f: Sklm) -> None:
         console.print(f"[red]✗[/] Failed to add registry: {e}")
 
 
-def _get_workspace_skill_names_wizard(f: Sklm) -> set[str]:
-    """Return set of skill names linked in the workspace, or empty set if no workspace exists."""
-    if not f.workspace.exists():
-        return set()
-    return {r.name for r in f.workspace.list_resources(ResourceKind.skill)}
-
-
 def _search_registries(f: Sklm) -> None:
     try:
         query = questionary.text(
@@ -860,7 +860,7 @@ def _search_registries(f: Sklm) -> None:
         if not results:
             console.print(f"[yellow]No results for '{query}'.[/]")
             return
-        ws_skill_names = _get_workspace_skill_names_wizard(f)
+        ws_skill_names = f._workspace_skill_names()
         table = Table(title=f"Search Results: '{query}'")
         table.add_column("Registry", style="cyan")
         table.add_column("Name", style="green")
