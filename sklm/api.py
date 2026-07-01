@@ -248,6 +248,12 @@ class Sklm:
     def global_rm(self, kind: ResourceKind, name: str):
         return self.global_store.remove_resource(kind, name)
 
+    def _workspace_skill_names(self) -> set[str]:
+        """Return set of skill names linked in the workspace, or empty set if no workspace exists."""
+        if not self.workspace.exists():
+            return set()
+        return {r.name for r in self.workspace.list_resources(ResourceKind.skill)}
+
     # ── Registry ─────────────────────────────────────────────────────────
 
     def registry_add(self, url_or_path: str, name: Optional[str] = None) -> RegistrySource:
@@ -310,12 +316,12 @@ class Sklm:
         linked_skills = [l for l in links if l.kind == ResourceKind.skill]
         if dry_run:
             return {
-                "agents": [type(a).__name__ for a in agents],
+                "agents": [a.agent_id for a in agents],
                 "skills_to_add": [l.name for l in linked_skills],
             }
         for agent in agents:
             agent.sync(self.project_root, linked_skills)
-        return {"agents": [type(a).__name__ for a in agents], "synced": True}
+        return {"agents": [a.agent_id for a in agents], "synced": True}
 
     def agent_detect(self) -> Optional[str]:
         adapter = self._detect_agent_adapter()

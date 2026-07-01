@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -29,8 +30,8 @@ from sklm.agents.registry import AgentRegistry
 
 app = typer.Typer(
     name="sklm",
-    help="Skills manager for AI agents",
-    no_args_is_help=True,
+    help="Skills manager for AI agents — run without arguments for interactive mode",
+    no_args_is_help=False,
     rich_markup_mode="rich",
 )
 console = Console()
@@ -145,12 +146,18 @@ def init(
         None, "--agent", "-a", help="Agent(s) to configure (repeatable, auto-detect if omitted)"
     ),
 ):
-    """Initialize a Sklm workspace in the current directory."""
+    """Initialize a Sklm workspace in the current directory. Use --agent to add agents (re-run to update an existing workspace)."""
     f = get_sklm()
     if f.workspace.exists():
         if agent:
             for a in agent:
                 f.workspace.add_agent(a)
+            # Sync agent config directories immediately so the user doesn't
+            # need a separate `sklm agent sync` step.
+            try:
+                f.agent_sync()
+            except RuntimeError as e:
+                console.print(f"[yellow]⚠[/] Agent sync failed: {e}")
             console.print("[yellow]⚠[/] Workspace already exists at [bold].sklm/[/]")
             console.print(f"   Agents updated: [cyan]{', '.join(agent)}[/]")
             return
@@ -610,13 +617,16 @@ def global_ls(
     if not resources:
         console.print("[yellow]No resources in global store.[/]")
         return
+    ws_skill_names = f._workspace_skill_names()
     table = Table(title="Global Store")
     table.add_column("Name", style="cyan")
     table.add_column("Type", style="magenta")
     table.add_column("Source", style="green")
+    table.add_column("In workspace", style="yellow")
     table.add_column("Path", style="white")
     for r in resources:
-        table.add_row(r.name, r.kind.value, r.source, str(r.path))
+        in_ws = "[green]✓[/]" if r.name in ws_skill_names else "[dim]—[/]"
+        table.add_row(r.name, r.kind.value, r.source, in_ws, str(r.path))
     console.print(table)
 
 
@@ -680,6 +690,7 @@ def registry_search(
     query: str = typer.Argument(..., help="Search keyword"),
     registry: Optional[str] = typer.Option(None, "--registry", "-r", help="Filter by registry"),
     resource_type: Optional[str] = typer.Option(None, "--type", "-t", help="Filter by type"),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ):
     """Search for resources across registries."""
     f = get_sklm()
@@ -688,13 +699,28 @@ def registry_search(
     if not results:
         console.print(f"[yellow]No results for '{query}'.[/]")
         return
+
+    ws_skill_names = f._workspace_skill_names()
+
+    if json_output:
+        data = []
+        for reg_name, resource in results:
+            item = resource.model_dump(mode="json")
+            item["registry"] = reg_name
+            item["in_workspace"] = resource.name in ws_skill_names
+            data.append(item)
+        print_json(data=data)
+        return
+
     table = Table(title=f"Search Results: '{query}'")
     table.add_column("Registry", style="cyan")
     table.add_column("Name", style="green")
     table.add_column("Type", style="magenta")
+    table.add_column("Status", style="yellow")
     table.add_column("Path", style="white")
     for reg_name, resource in results:
-        table.add_row(reg_name, resource.name, resource.kind.value, str(resource.path))
+        status = "[green]✓[/]" if resource.name in ws_skill_names else "[dim]—[/]"
+        table.add_row(reg_name, resource.name, resource.kind.value, status, str(resource.path))
     console.print(table)
 
 
@@ -921,58 +947,18 @@ def update(
         )
         return
 
-    repo_root = checker.find_repo_root()
-    if repo_root is None:
-        console.print("[red]✗[/] Cannot find the sklm git repository.")
-        console.print(f"   Reinstall from [link]{checker.github_repo_url}[/]")
-        raise typer.Exit(1)
-
-    tag = f"v{latest.lstrip('v')}"
-    console.print(f"Fetching tags from origin...")
+    console.print("Updating sklm...")
     try:
         result = subprocess.run(
-            ["git", "fetch", "--tags"],
-            cwd=repo_root,
-            capture_output=True,
-            timeout=30,
-        )
-        if result.returncode != 0:
-            console.print(f"[red]✗[/] git fetch failed:\n{result.stderr.decode().strip()}")
-            raise typer.Exit(1)
-    except subprocess.TimeoutExpired:
-        console.print("[red]✗[/] git fetch timed out.")
-        raise typer.Exit(1)
-    except FileNotFoundError:
-        console.print("[red]✗[/] git not found.")
-        raise typer.Exit(1)
-
-    console.print(f"Checking out {tag}...")
-    try:
-        result = subprocess.run(
-            ["git", "checkout", tag],
-            cwd=repo_root,
-            capture_output=True,
-            timeout=30,
-        )
-        if result.returncode != 0:
-            console.print(f"[red]✗[/] git checkout failed:\n{result.stderr.decode().strip()}")
-            raise typer.Exit(1)
-    except subprocess.TimeoutExpired:
-        console.print("[red]✗[/] git checkout timed out.")
-        raise typer.Exit(1)
-
-    console.print("Reinstalling...")
-    try:
-        result = subprocess.run(
-            [sys.executable, "-m", "pip", "install", "-e", str(repo_root)],
+            [sys.executable, "-m", "pip", "install", "-U", "sklm"],
             capture_output=True,
             timeout=60,
         )
         if result.returncode != 0:
-            console.print(f"[red]✗[/] pip install failed:\n{result.stderr.decode().strip()}")
+            console.print(f"[red]✗[/] Update failed:\n{result.stderr.decode().strip()}")
             raise typer.Exit(1)
     except subprocess.TimeoutExpired:
-        console.print("[red]✗[/] pip install timed out.")
+        console.print("[red]✗[/] Update timed out.")
         raise typer.Exit(1)
     console.print(f"[green]✓[/] Updated to sklm [bold]v{latest}[/]")
 
@@ -1006,6 +992,17 @@ def _show_update_notice() -> None:
 
 def run():
     global _tracker_command
+
+    # TTY detection: launch wizard when interactive with no arguments
+    if len(sys.argv) <= 1:
+        if sys.stdin.isatty():
+            from sklm.cli.wizard import run_wizard as _run_wizard
+            _run_wizard()
+            return
+        # Non-interactive no-args: show help (preserves original behavior)
+        app(["--help"])
+        return
+
     error = None
     try:
         app()
@@ -1028,7 +1025,12 @@ def run():
             tb_frames = tb_mod.extract_tb(cause.__traceback__)
             if tb_frames:
                 tail = tb_frames[-3:]
-                _track_traceback = "".join(tb_mod.format_list(tail)).replace(str(Path.home()), "~").rstrip()
+                raw = "".join(tb_mod.format_list(tail))
+                # Sanitize: replace all absolute file paths with just the filename
+                sanitized = re.sub(r'File "([^"]+)", line (\d+)',
+                                   lambda m: f'File "{Path(m.group(1)).name}", line {m.group(2)}',
+                                   raw)
+                _track_traceback = sanitized.rstrip()
         else:
             _track_success = error.code in (None, 0)
             _track_error = None if _track_success else "error"
