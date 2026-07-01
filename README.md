@@ -39,7 +39,7 @@ Sklm keeps a global library in `~/.sklm/`, then lets you pick which skills each 
 ## Installation
 
 ```bash
-pip install sklm
+pip install sklm-cli
 ```
 
 > [!TIP]
@@ -48,7 +48,7 @@ pip install sklm
 ## Quickstart
 
 ```bash
-pip install sklm                   # install globally
+pip install sklm-cli                   # install globally
 sklm                               # interactive wizard opens — detects your setup
 ```
 
@@ -184,7 +184,7 @@ Disable the automatic check by setting:
 export SKLM_NO_UPDATE_CHECK=1
 ```
 
-Updates are installed via `pip install -U sklm`. The version check uses the [GitHub Releases](https://github.com/Auran0s/Sklm/releases) API.
+Updates are installed via `pip install -U sklm-cli`. The version check uses the [GitHub Releases](https://github.com/Auran0s/Sklm/releases) API.
 
 ### Supported Agents
 
