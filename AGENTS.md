@@ -36,12 +36,15 @@ Two-level store:
 
 `sklm add` pipeline: resolve → store → link → sync (copy + variant overlay) to agent config.
 
+Note: `.sklm/` is in `.gitignore` — the per-project workspace is intentionally never committed.
+
 ## Source layout
 
 | Path | Role |
 |---|---|
 | `sklm/api.py` | `Sklm` facade — wires everything |
 | `sklm/cli/main.py` | Typer CLI — all commands |
+| `sklm/cli/wizard.py` | Interactive prompt and state detection |
 | `sklm/models/__init__.py` | Pydantic v2 models, YAML persistence |
 | `sklm/store/__init__.py` | `GlobalStore` — `~/.sklm/` management |
 | `sklm/core/workspace.py` | `Workspace` — `.sklm/` management |
@@ -50,8 +53,9 @@ Two-level store:
 | `sklm/core/linking.py` | Symlink create/remove/repair |
 | `sklm/core/update.py` | `UpdateChecker` — GitHub API version check |
 | `sklm/agents/agents.yaml` | **Source of truth** — 30 agent definitions (dir_name, detect mode) |
+| `sklm/agents/base.py` | Abstract `AgentAdapter` — base class for all adapters |
 | `sklm/agents/_sync.py` | Shared sync logic with `variants/<agent>/` overlay |
-| `sklm/agents/generic.py` | `GenericAdapter` — handles 28 agents |
+| `sklm/agents/generic.py` | `GenericAdapter` — handles 28 auto-detect agents |
 | `sklm/agents/github_copilot.py` | `GitHubCopilotAdapter` — custom (detect: explicit) |
 | `sklm/agents/registry.py` | `AgentRegistry` — discovery + adapter lookup |
 | `sklm/telemetry.py` | `UmamiTracker` — daemon thread, 2s timeout |
