@@ -950,7 +950,7 @@ def update(
     console.print("Updating sklm...")
     try:
         result = subprocess.run(
-            [sys.executable, "-m", "pip", "install", "-U", "sklm"],
+            [sys.executable, "-m", "pip", "install", "-U", "sklm-cli"],
             capture_output=True,
             timeout=60,
         )

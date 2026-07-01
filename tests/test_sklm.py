@@ -2021,9 +2021,9 @@ class TestUpdateCLI:
         result = runner.invoke(app, ["update", "--force"])
         assert result.exit_code == 0, f"Failed: {result.output}"
         assert "Updated" in result.output
-        # Verify pip install -U sklm was called
+        # Verify pip install -U sklm-cli was called
         mock_run.assert_called_once_with(
-            [sys.executable, "-m", "pip", "install", "-U", "sklm"],
+            [sys.executable, "-m", "pip", "install", "-U", "sklm-cli"],
             capture_output=True, timeout=60,
         )
 

@@ -3,7 +3,7 @@ requires = ["setuptools>=64", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "sklm"
+name = "sklm-cli"
 version = "0.2.0"
 description = "Skills manager for AI agents"
 readme = "README.md"
