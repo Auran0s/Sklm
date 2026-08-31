@@ -8,9 +8,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sklm.agents._sync import sync_skills
-from sklm.agents.base import AgentAdapter
-from sklm.models import Link
+from skim.agents._sync import sync_skills
+from skim.agents.base import AgentAdapter
+from skim.models import Link
 
 
 class GenericAdapter(AgentAdapter):

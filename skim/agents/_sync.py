@@ -9,7 +9,7 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from sklm.models import Link
+from skim.models import Link
 
 
 def sync_skills(

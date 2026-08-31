@@ -1,4 +1,4 @@
-"""Sklm API — main facade for all operations."""
+"""Skim API — main facade for all operations."""
 
 from __future__ import annotations
 
@@ -7,30 +7,30 @@ from typing import Optional
 
 from rich.console import Console
 
-from sklm.models import Link, ResourceKind, ResourceRef
-from sklm.store import GlobalStore
-from sklm.core.workspace import Workspace
-from sklm.core.registry import RegistryManager, RegistrySource
-from sklm.core.crud import (
+from skim.models import Link, ResourceKind, ResourceRef
+from skim.store import GlobalStore
+from skim.core.workspace import Workspace
+from skim.core.registry import RegistryManager, RegistrySource
+from skim.core.crud import (
     add_resource_to_workspace,
     remove_resource_from_workspace,
     list_workspace_resources,
     get_resource_info,
 )
-from sklm.core.linking import (
+from skim.core.linking import (
     link_resource as _link_resource,
     unlink_resource as _unlink_resource,
     detect_broken_links,
     repair_links,
 )
-from sklm.agents.base import AgentAdapter
-from sklm.agents.registry import AgentRegistry
+from skim.agents.base import AgentAdapter
+from skim.agents.registry import AgentRegistry
 
 console = Console()
 
 
-class Sklm:
-    """Main API for Sklm operations."""
+class Skim:
+    """Main API for Skim operations."""
 
     def __init__(self, project_root: Optional[Path] = None) -> None:
         self.project_root = (project_root or Path.cwd()).resolve()
@@ -205,7 +205,7 @@ class Sklm:
                 "not synced to any agent directory."
             )
             console.print(
-                "   Run [bold]sklm init --agent <name>[/] to configure an agent."
+                "   Run [bold]skim init --agent <name>[/] to configure an agent."
             )
         return ref
 
@@ -219,7 +219,7 @@ class Sklm:
                 "agent directory not cleaned."
             )
             console.print(
-                "   Run [bold]sklm init --agent <name>[/] to configure an agent."
+                "   Run [bold]skim init --agent <name>[/] to configure an agent."
             )
         return ref
 
@@ -311,7 +311,7 @@ class Sklm:
         self._agents = None
         agents = self.get_agents()
         if not agents:
-            raise RuntimeError("No agent detected. Run 'sklm init' first.")
+            raise RuntimeError("No agent detected. Run 'skim init' first.")
         links = self.workspace.list_links()
         linked_skills = [l for l in links if l.kind == ResourceKind.skill]
         if dry_run:

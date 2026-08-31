@@ -1,6 +1,6 @@
-"""Interactive prompt functions for the Sklm CLI.
+"""Interactive prompt functions for the Skim CLI.
 
-Replaces the former TUI (``sklm/tui.py``) with inline keyboard-driven prompts
+Replaces the former TUI (``skim/tui.py``) with inline keyboard-driven prompts
 using ``questionary`` (↑↓ navigate, Space toggle, Enter confirm).
 """
 
@@ -14,8 +14,8 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from sklm.agents.registry import AgentRegistry
-from sklm.models import ResourceKind
+from skim.agents.registry import AgentRegistry
+from skim.models import ResourceKind
 
 console = Console()
 
@@ -31,21 +31,21 @@ def _ensure_tty() -> None:
         msg = (
             "Interactive prompts require a terminal (TTY). "
             "Use command-line arguments instead, e.g. "
-            "'sklm add skill <name>' or 'sklm rm skill <name>'."
+            "'skim add skill <name>' or 'skim rm skill <name>'."
         )
         raise RuntimeError(msg)
 
 
 def _make_skill_choices(
-    sklm: object,
+    skim: object,
     mode: str = "add",
 ) -> list[questionary.Choice]:
     """Build a list of ``questionary.Choice`` items for skill selection.
 
     Parameters
     ----------
-    sklm
-        A ``Sklm`` facade instance.
+    skim
+        A ``Skim`` facade instance.
     mode
         ``"add"`` to show all global skills (linked ones pre-checked),
         ``"remove"`` to show only currently linked skills.
@@ -56,11 +56,11 @@ def _make_skill_choices(
         Choice objects each with a Rich-formatted title and the skill
         name as the value.
     """
-    from sklm.api import Sklm
+    from skim.api import Skim
 
-    sklm_obj = sklm  # type: Sklm
-    global_skills = sklm_obj.global_store.list_resources(ResourceKind.skill)
-    linked_names = {l.name for l in sklm_obj.workspace.list_links()}
+    skim_obj = skim  # type: Skim
+    global_skills = skim_obj.global_store.list_resources(ResourceKind.skill)
+    linked_names = {l.name for l in skim_obj.workspace.list_links()}
 
     if mode == "remove":
         # Only linked skills can be removed
@@ -93,7 +93,7 @@ def _print_skill_header(choices: list[questionary.Choice], title: str) -> None:
 
 
 def prompt_skill_selection(
-    sklm: object,
+    skim: object,
     mode: str = "add",
     title: str = "Select skills",
 ) -> list[str]:
@@ -101,8 +101,8 @@ def prompt_skill_selection(
 
     Parameters
     ----------
-    sklm
-        A ``Sklm`` facade instance.
+    skim
+        A ``Skim`` facade instance.
     mode
         ``"add"`` to select from unlinked global skills, ``"remove"`` to
         select from currently linked skills.
@@ -115,14 +115,14 @@ def prompt_skill_selection(
         The names of the skill(s) the user selected.
     """
     _ensure_tty()
-    choices = _make_skill_choices(sklm, mode)
+    choices = _make_skill_choices(skim, mode)
     if not choices:
         if mode == "remove":
             console.print("[yellow]No linked skills to remove.[/]")
         else:
             console.print(
                 "[yellow]No unlinked skills available in the global store.[/]"
-                "\n   Use [bold]sklm install skill <name>[/] to add skills first."
+                "\n   Use [bold]skim install skill <name>[/] to add skills first."
             )
         return []
 
@@ -248,13 +248,13 @@ def prompt_agent_selection(registry: AgentRegistry) -> list[str]:
             return selected
 
 
-def prompt_main_menu(sklm: object) -> str | None:
-    """Display the top-level multi-choice menu for ``sklm skills``.
+def prompt_main_menu(skim: object) -> str | None:
+    """Display the top-level multi-choice menu for ``skim skills``.
 
     Parameters
     ----------
-    sklm
-        A ``Sklm`` facade instance.
+    skim
+        A ``Skim`` facade instance.
 
     Returns
     -------

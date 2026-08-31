@@ -3,7 +3,7 @@ requires = ["setuptools>=64", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "sklm-cli"
+name = "skim"
 version = "0.2.0"
 description = "Skills manager for AI agents"
 readme = "README.md"
@@ -21,13 +21,20 @@ dependencies = [
     "rich>=13.0.0",
     "pyyaml>=6.0",
     "pydantic>=2.0.0",
-    "questionary>=1.10.0",
-    "umami-analytics>=0.2.0",
     "questionary>=2.0.0",
 ]
 
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-cov>=5.0.0",
+]
+
 [project.scripts]
-sklm = "sklm.cli.main:run"
+skim = "skim.cli.main:run"
 
 [tool.setuptools.packages.find]
-include = ["sklm*"]
+include = ["skim*"]
+
+[tool.setuptools.package-data]
+skim = ["agents/agents.yaml"]

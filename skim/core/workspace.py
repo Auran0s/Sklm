@@ -1,11 +1,11 @@
-"""Workspace — manages .sklm/ in the current project."""
+"""Workspace — manages .skim/ in the current project."""
 
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Optional
 
-from sklm.models import (
+from skim.models import (
     Link,
     ResourceKind,
     ResourceRef,
@@ -13,20 +13,20 @@ from sklm.models import (
 )
 
 
-SKLM_DIR_NAME = ".sklm"
+SKIM_DIR_NAME = ".skim"
 
 
 class Workspace:
-    """Manages a project-level Sklm workspace."""
+    """Manages a project-level Skim workspace."""
 
     def __init__(self, root: Optional[Path] = None) -> None:
         self.root = (root or Path.cwd()).resolve()
-        self.sklm_dir = self.root / SKLM_DIR_NAME
-        self.config_path = self.sklm_dir / "sklm.yaml"
-        self.links_dir = self.sklm_dir / "links"
+        self.skim_dir = self.root / SKIM_DIR_NAME
+        self.config_path = self.skim_dir / "skim.yaml"
+        self.links_dir = self.skim_dir / "links"
 
     def exists(self) -> bool:
-        return self.sklm_dir.is_dir()
+        return self.skim_dir.is_dir()
 
     def set_agents(self, agents: list[str]) -> None:
         config = self.load_config()
@@ -51,7 +51,7 @@ class Workspace:
         self._save_config(config)
 
     def init(self, agents: list[str] | None = None) -> WorkspaceConfig:
-        self.sklm_dir.mkdir(parents=True, exist_ok=True)
+        self.skim_dir.mkdir(parents=True, exist_ok=True)
         self.links_dir.mkdir(parents=True, exist_ok=True)
         (self.links_dir / "skills").mkdir(exist_ok=True)
         config = WorkspaceConfig(agents=agents or ["none"])

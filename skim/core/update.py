@@ -6,12 +6,12 @@ import urllib.request
 from pathlib import Path
 from typing import Optional
 
-from sklm import __version__
+from skim import __version__
 
 
-CACHE_DIR = Path.home() / ".sklm" / "cache"
+CACHE_DIR = Path.home() / ".skim" / "cache"
 CACHE_FILE = CACHE_DIR / "update-check"
-GITHUB_API_URL = "https://api.github.com/repos/Auran0s/Sklm/releases/latest"
+GITHUB_API_URL = "https://api.github.com/repos/gojoGS/skim/releases/latest"
 CACHE_TTL = 86400  # 24 hours in seconds
 
 
@@ -55,7 +55,7 @@ class UpdateChecker:
         try:
             req = urllib.request.Request(
                 self.github_api_url,
-                headers={"User-Agent": "sklm-cli", "Accept": "application/vnd.github+json"},
+                headers={"User-Agent": "skim", "Accept": "application/vnd.github+json"},
             )
             with urllib.request.urlopen(req, timeout=5) as resp:
                 data = json.loads(resp.read().decode())

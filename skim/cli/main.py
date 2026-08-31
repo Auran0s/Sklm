@@ -1,14 +1,11 @@
-"""Sklm CLI — main entrypoint with real backend."""
+"""Skim CLI — main entrypoint with real backend."""
 
 from __future__ import annotations
 
 import os
-import re
 import shutil
 import subprocess
 import sys
-import time
-import traceback as tb_mod
 from pathlib import Path
 from typing import Optional
 
@@ -17,57 +14,38 @@ from rich.console import Console
 from rich.table import Table
 from rich import print_json
 
-from sklm import __version__
-from sklm.api import Sklm
-from sklm.cli.prompts import (
+from skim import __version__
+from skim.api import Skim
+from skim.cli.prompts import (
     prompt_agent_selection,
     prompt_install_from_git,
     prompt_main_menu,
     prompt_skill_selection,
 )
-from sklm.models import RegistryType, ResourceKind
-from sklm.agents.registry import AgentRegistry
+from skim.models import RegistryType, ResourceKind
+from skim.agents.registry import AgentRegistry
 
 app = typer.Typer(
-    name="sklm",
+    name="skim",
     help="Skills manager for AI agents — run without arguments for interactive mode",
     no_args_is_help=False,
     rich_markup_mode="rich",
 )
 console = Console()
 
-_sklm: Optional[Sklm] = None
-_tracker_start: float = 0.0
-_tracker_command: str = ""
-_tracker: Optional["UmamiTracker"] = None  # type: ignore[name-defined]
+_skim: Optional[Skim] = None
 
 
-def get_tracker() -> Optional["UmamiTracker"]:
-    global _tracker
-    if _tracker is None:
-        from sklm.store import GlobalStore
-        from sklm.telemetry import UmamiTracker
-
-        store = GlobalStore()
-        cfg = store.get_telemetry_config()
-        _tracker = UmamiTracker(
-            umami_url=cfg.umami_url,
-            website_id=cfg.website_id,
-            enabled=cfg.enabled,
-        )
-    return _tracker
-
-
-def get_sklm() -> Sklm:
-    global _sklm
-    if _sklm is None:
-        _sklm = Sklm()
-    return _sklm
+def get_skim() -> Skim:
+    global _skim
+    if _skim is None:
+        _skim = Skim()
+    return _skim
 
 
 def version_callback(value: bool):
     if value:
-        console.print(f"sklm v{__version__}")
+        console.print(f"skim v{__version__}")
         raise typer.Exit()
 
 
@@ -89,7 +67,7 @@ def _prompt_cleanup(
         console.print("[dim]Source files preserved (--no-cleanup).[/]")
         return
 
-    is_interactive = sys.stdout.isatty() and os.environ.get("SKLM_NO_INTERACTIVE", "").lower() not in ("1", "true", "yes", "on")
+    is_interactive = sys.stdout.isatty() and os.environ.get("SKIM_NO_INTERACTIVE", "").lower() not in ("1", "true", "yes", "on")
 
     if force_cleanup:
         for _, src in refs_src:
@@ -126,12 +104,10 @@ def main(
         False, "--version", "-V", help="Show version", callback=version_callback
     ),
 ):
-    global _tracker_start, _tracker_command
-    _tracker_start = time.monotonic()
-    _tracker_command = ctx.invoked_subcommand or ""
+    pass
 
 
-def _get_agent_selection_for_init(f: Sklm) -> list[str]:
+def _get_agent_selection_for_init(f: Skim) -> list[str]:
     """Get agent selection for ``init``, using prompt or fallback."""
     registry = AgentRegistry()
     return prompt_agent_selection(registry)
@@ -146,22 +122,22 @@ def init(
         None, "--agent", "-a", help="Agent(s) to configure (repeatable, auto-detect if omitted)"
     ),
 ):
-    """Initialize a Sklm workspace in the current directory. Use --agent to add agents (re-run to update an existing workspace)."""
-    f = get_sklm()
+    """Initialize a Skim workspace in the current directory. Use --agent to add agents (re-run to update an existing workspace)."""
+    f = get_skim()
     if f.workspace.exists():
         if agent:
             for a in agent:
                 f.workspace.add_agent(a)
             # Sync agent config directories immediately so the user doesn't
-            # need a separate `sklm agent sync` step.
+            # need a separate `skim agent sync` step.
             try:
                 f.agent_sync()
             except RuntimeError as e:
                 console.print(f"[yellow]⚠[/] Agent sync failed: {e}")
-            console.print("[yellow]⚠[/] Workspace already exists at [bold].sklm/[/]")
+            console.print("[yellow]⚠[/] Workspace already exists at [bold].skim/[/]")
             console.print(f"   Agents updated: [cyan]{', '.join(agent)}[/]")
             return
-        console.print("[yellow]⚠[/] Workspace already exists at [bold].sklm/[/]")
+        console.print("[yellow]⚠[/] Workspace already exists at [bold].skim/[/]")
         raise typer.Exit(1)
     if agent:
         agents = agent
@@ -173,10 +149,10 @@ def init(
             agents = _get_agent_selection_for_init(f)
     detected = f.init_workspace(agents)
     label = ", ".join(detected) if detected != ["none"] else "[yellow]none[/]"
-    console.print("[green]✓[/] Workspace created at [bold].sklm/[/]")
+    console.print("[green]✓[/] Workspace created at [bold].skim/[/]")
     console.print(f"   Agents: [cyan]{label}[/]")
     if detected == ["none"]:
-        console.print("   [dim]Run 'sklm init --agent <name>' to configure an agent later.[/]")
+        console.print("   [dim]Run 'skim init --agent <name>' to configure an agent later.[/]")
 
 
 @app.command()
@@ -184,9 +160,9 @@ def status(
     repair: bool = typer.Option(False, "--repair", help="Attempt to repair broken links"),
 ):
     """Show workspace status."""
-    f = get_sklm()
+    f = get_skim()
     if not f.workspace.exists():
-        console.print("[red]✗[/] No Sklm workspace found. Run [bold]sklm init[/] first.")
+        console.print("[red]✗[/] No Skim workspace found. Run [bold]skim init[/] first.")
         raise typer.Exit(1)
     if repair:
         result = f.repair_broken_links()
@@ -208,13 +184,13 @@ def status(
     table.add_row("Broken links", str(state["broken_links"]))
     console.print(table)
     if state["broken_links"] > 0:
-        console.print("\n[yellow]💡 Tip:[/] Run [bold]sklm status --repair[/] to fix broken links")
+        console.print("\n[yellow]💡 Tip:[/] Run [bold]skim status --repair[/] to fix broken links")
     external_count = state.get("external_skills_count", 0)
     if external_count > 0:
         console.print(
-            f"\n[yellow]⚠ {external_count} skills found outside Sklm's store[/]"
+            f"\n[yellow]⚠ {external_count} skills found outside Skim's store[/]"
             "\n   These may be globally visible to your AI agent in every project."
-            "\n   Use [bold]sklm migrate[/] to import them into the Sklm store."
+            "\n   Use [bold]skim migrate[/] to import them into the Skim store."
         )
 
 
@@ -233,7 +209,7 @@ def install(
     ),
 ):
     """Install a resource into the global store without activating it."""
-    f = get_sklm()
+    f = get_skim()
     kind = parse_resource_type(resource_type)
     try:
         ref = f.install(kind, name, from_url=from_url, subdir=subdir)
@@ -252,7 +228,7 @@ def uninstall(
     force: bool = typer.Option(False, "--force", help="Skip confirmation"),
 ):
     """Remove a resource from the global store permanently."""
-    f = get_sklm()
+    f = get_skim()
     kind = parse_resource_type(resource_type)
     linked_projects = []
     try:
@@ -292,8 +268,8 @@ def migrate(
         False, "--no-cleanup", help="Preserve source files without prompting"
     ),
 ):
-    """Import resources from ~/.agents/ or a local registry into the Sklm global store."""
-    f = get_sklm()
+    """Import resources from ~/.agents/ or a local registry into the Skim global store."""
+    f = get_skim()
     kind = parse_resource_type(resource_type)
 
     source_path: Optional[Path] = None
@@ -326,9 +302,9 @@ def migrate(
     _prompt_cleanup(refs_src, force_cleanup, no_cleanup)
 
     if name:
-        console.print("Tip: Run [bold]sklm add {kind.value} {name}[/] to activate it in this project.")
+        console.print("Tip: Run [bold]skim add {kind.value} {name}[/] to activate it in this project.")
     else:
-        console.print("Tip: Run [bold]sklm ls[/] to see available resources, then [bold]sklm add[/] to activate.")
+        console.print("Tip: Run [bold]skim ls[/] to see available resources, then [bold]skim add[/] to activate.")
 
 
 # ─── Resource Management ─────────────────────────────────────────────────────
@@ -354,7 +330,7 @@ def add(
     When called without arguments, opens an interactive checkbox prompt to select
     skills from the global store.
     """
-    f = get_sklm()
+    f = get_skim()
 
     # Interactive prompt when name is omitted
     if not name:
@@ -404,7 +380,7 @@ def rm(
     When called without arguments, opens an interactive checkbox prompt to select
     linked skills to remove.
     """
-    f = get_sklm()
+    f = get_skim()
 
     # Interactive prompt when name is omitted
     if not name:
@@ -440,12 +416,12 @@ def ls(
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ):
     """List resources in the workspace."""
-    f = get_sklm()
+    f = get_skim()
     kind = parse_resource_type(resource_type) if resource_type else None
     try:
         resources = f.list(kind)
     except FileNotFoundError as e:
-        console.print("[red]✗[/] No Sklm workspace found.")
+        console.print("[red]✗[/] No Skim workspace found.")
         raise typer.Exit(1) from e
     if json_output:
         data = [r.model_dump(mode="json") for r in resources]
@@ -469,7 +445,7 @@ def info(
     name: str = typer.Argument(..., help="Resource name"),
 ):
     """Show detailed information about a resource."""
-    f = get_sklm()
+    f = get_skim()
     kind = parse_resource_type(resource_type)
     ref = f.info(kind, name)
     if not ref:
@@ -484,7 +460,7 @@ def info(
     table.add_row("Linked", "[green]✓[/]" if ref.linked else "")
     table.add_row("Path", str(ref.path) if ref.path else "N/A")
     if ref.path and ref.path.is_dir():
-        from sklm.agents._sync import get_variant_names
+        from skim.agents._sync import get_variant_names
         variants = get_variant_names(ref.path)
         if variants:
             table.add_row("Variants", ", ".join(variants))
@@ -499,7 +475,7 @@ def skills():
     skills, install from git, sync agents, and manage agent configuration.
     The command runs the selected action then exits.
     """
-    f = get_sklm()
+    f = get_skim()
     action = prompt_main_menu(f)
     if action is None:
         return
@@ -549,7 +525,7 @@ def skills():
             ref = f.install(ResourceKind.skill, "from-git", from_url=url, subdir=subdir)
             console.print(f"[green]✓[/] Installed from git: [bold]{ref.name}[/]")
             f.workspace.add_resource(ref)
-            from sklm.core.linking import link_resource as _link_resource
+            from skim.core.linking import link_resource as _link_resource
             _link_resource(f.workspace, f.global_store, ResourceKind.skill, ref.name)
             f.agent_sync()
         except (FileNotFoundError, FileExistsError, ValueError, OSError, subprocess.TimeoutExpired) as e:
@@ -564,7 +540,7 @@ def skills():
             console.print(f"[red]✗[/] {e}")
 
     elif action == "agents":
-        from sklm.agents.registry import AgentRegistry
+        from skim.agents.registry import AgentRegistry
         registry = AgentRegistry()
         agent_choice = prompt_agent_selection(registry)
         if agent_choice and agent_choice != ["none"]:
@@ -583,7 +559,7 @@ def skills():
 # ─── Global Store ────────────────────────────────────────────────────────────
 
 
-global_app = typer.Typer(help="Manage the global Sklm store")
+global_app = typer.Typer(help="Manage the global Skim store")
 app.add_typer(global_app, name="global")
 
 
@@ -594,7 +570,7 @@ def global_add(
     name: Optional[str] = typer.Option(None, "--name", "-n", help="Custom name for the resource"),
 ):
     """Add a resource to the global store."""
-    f = get_sklm()
+    f = get_skim()
     kind = parse_resource_type(resource_type)
     try:
         resource = f.global_add(kind, path, name)
@@ -611,7 +587,7 @@ def global_ls(
     ),
 ):
     """List resources in the global store."""
-    f = get_sklm()
+    f = get_skim()
     kind = parse_resource_type(resource_type) if resource_type else None
     resources = f.global_ls(kind)
     if not resources:
@@ -636,7 +612,7 @@ def global_rm(
     name: str = typer.Argument(..., help="Resource name to remove from store"),
 ):
     """Remove a resource from the global store."""
-    f = get_sklm()
+    f = get_skim()
     kind = parse_resource_type(resource_type)
     try:
         f.global_rm(kind, name)
@@ -649,7 +625,7 @@ def global_rm(
 # ─── Registry ────────────────────────────────────────────────────────────────
 
 
-registry_app = typer.Typer(help="Manage Sklm registries")
+registry_app = typer.Typer(help="Manage Skim registries")
 app.add_typer(registry_app, name="registry")
 
 
@@ -659,7 +635,7 @@ def registry_add(
     name: Optional[str] = typer.Option(None, "--name", "-n", help="Custom name for the registry"),
 ):
     """Add a registry source."""
-    f = get_sklm()
+    f = get_skim()
     try:
         src = f.registry_add(source, name)
     except FileExistsError as e:
@@ -671,7 +647,7 @@ def registry_add(
 @registry_app.command("ls")
 def registry_ls():
     """List registered registry sources."""
-    f = get_sklm()
+    f = get_skim()
     sources = f.registry_ls()
     if not sources:
         console.print("[yellow]No registries configured.[/]")
@@ -693,7 +669,7 @@ def registry_search(
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ):
     """Search for resources across registries."""
-    f = get_sklm()
+    f = get_skim()
     kind = parse_resource_type(resource_type) if resource_type else None
     results = f.registry_search(query, registry, kind)
     if not results:
@@ -736,7 +712,7 @@ def sync(
     dry_run: bool = typer.Option(False, "--dry-run", help="Preview changes without applying"),
 ):
     """Synchronize workspace resources with the active agent config."""
-    f = get_sklm()
+    f = get_skim()
     try:
         result = f.agent_sync(dry_run)
     except RuntimeError as e:
@@ -756,7 +732,7 @@ def list_agents(
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ):
     """List all supported AI agents and their detection status."""
-    f = get_sklm()
+    f = get_skim()
     agents = f.list_agents()
     if json_output:
         print_json(data=agents)
@@ -784,7 +760,7 @@ def agent_add(
     name: str = typer.Argument(..., help="Agent name to add (e.g. opencode, claude)"),
 ):
     """Add an agent to the workspace config and sync skills."""
-    f = get_sklm()
+    f = get_skim()
     registry = AgentRegistry()
     if not registry.get_adapter(name):
         known = ", ".join(registry.get_agent_ids())
@@ -809,7 +785,7 @@ def agent_remove(
     name: str = typer.Argument(..., help="Agent name to remove (e.g. claude)"),
 ):
     """Remove an agent from the workspace config and clean its skills."""
-    f = get_sklm()
+    f = get_skim()
     try:
         f.workspace.remove_agent(name)
     except KeyError as e:
@@ -824,92 +800,12 @@ def agent_remove(
 @agent_app.command()
 def detect():
     """Detect the active AI agent in the current project."""
-    f = get_sklm()
+    f = get_skim()
     detected = f.agent_detect()
     if detected:
         console.print(f"[green]✓[/] Detected: [bold]{detected}[/]")
     else:
         console.print("[yellow]No supported agent detected.[/]")
-
-
-# ─── Telemetry ────────────────────────────────────────────────────────────────
-
-
-telemetry_app = typer.Typer(help="Manage telemetry settings")
-app.add_typer(telemetry_app, name="telemetry")
-
-
-@telemetry_app.command("on")
-def telemetry_on():
-    """Enable telemetry."""
-    from sklm.store import GlobalStore
-
-    store = GlobalStore()
-    cfg = store.get_telemetry_config()
-    cfg.enabled = True
-    store.set_telemetry_config(cfg)
-    console.print("[green]✓[/] Telemetry enabled")
-
-
-@telemetry_app.command("off")
-def telemetry_off():
-    """Disable telemetry."""
-    from sklm.store import GlobalStore
-
-    store = GlobalStore()
-    cfg = store.get_telemetry_config()
-    cfg.enabled = False
-    store.set_telemetry_config(cfg)
-    console.print("[yellow]⚠[/] Telemetry disabled")
-
-
-@telemetry_app.command("status")
-def telemetry_status():
-    """Show telemetry status."""
-    from sklm.store import GlobalStore
-
-    store = GlobalStore()
-    cfg = store.get_telemetry_config()
-    tracker = get_tracker()
-
-    if not tracker:
-        console.print("[yellow]⚠ Telemetry not initialized[/]")
-        raise typer.Exit(1)
-
-    if not cfg.umami_url or not cfg.website_id:
-        console.print("[yellow]⚠ Telemetry inactive[/]")
-        console.print("   Configure SKLM_UMAMI_URL and SKLM_WEBSITE_ID")
-        console.print("   or run: [bold]sklm telemetry on[/]")
-        raise typer.Exit(1)
-
-    if tracker.active:
-        console.print(f"[green]Active[/] → {cfg.umami_url}")
-    else:
-        console.print("[yellow]⚠ Telemetry disabled[/]")
-        console.print("   Run [bold]sklm telemetry on[/] to enable")
-
-
-@telemetry_app.command("ping")
-def telemetry_ping():
-    """Send a test event to verify telemetry connectivity."""
-    tracker = get_tracker()
-
-    if not tracker:
-        console.print("[red]✗ Telemetry not initialized[/]")
-        raise typer.Exit(1)
-
-    if not tracker.active:
-        console.print("[yellow]⚠ Telemetry disabled or not configured[/]")
-        console.print("   Run [bold]sklm telemetry on[/] to enable")
-        raise typer.Exit(1)
-
-    console.print("[dim]Sending test event...[/]")
-    ok, status, dur = tracker.ping()
-    if ok:
-        console.print(f"[green]✓ Ping succeeded[/] ({status}, {dur:.0f}ms)")
-    else:
-        console.print(f"[red]✗ Ping failed[/] ({status})")
-        raise typer.Exit(1)
 
 
 # ─── Update ─────────────────────────────────────────────────────────────────
@@ -920,8 +816,8 @@ def update(
     check_only: bool = typer.Option(False, "--check", help="Check without upgrading"),
     force: bool = typer.Option(False, "--force", help="Force re-check, ignore cache"),
 ):
-    """Check for or install the latest version of sklm."""
-    from sklm.core.update import UpdateChecker
+    """Check for or install the latest version of skim."""
+    from skim.core.update import UpdateChecker
 
     checker = UpdateChecker()
 
@@ -933,24 +829,24 @@ def update(
     else:
         latest = checker.check()
         if latest is None:
-            console.print(f"[green]✓[/] sklm is up to date (v{__version__})")
+            console.print(f"[green]✓[/] skim is up to date (v{__version__})")
             return
 
     if not checker._is_newer(latest):
-        console.print(f"[green]✓[/] sklm is up to date (v{__version__})")
+        console.print(f"[green]✓[/] skim is up to date (v{__version__})")
         return
 
     if check_only:
         console.print(
-            f"[yellow]⚠[/] sklm [bold]v{latest}[/] available "
+            f"[yellow]⚠[/] skim [bold]v{latest}[/] available "
             f"(current: v{__version__})"
         )
         return
 
-    console.print("Updating sklm...")
+    console.print("Updating skim...")
     try:
         result = subprocess.run(
-            [sys.executable, "-m", "pip", "install", "-U", "sklm-cli"],
+            [sys.executable, "-m", "pip", "install", "-U", "skim"],
             capture_output=True,
             timeout=60,
         )
@@ -960,29 +856,29 @@ def update(
     except subprocess.TimeoutExpired:
         console.print("[red]✗[/] Update timed out.")
         raise typer.Exit(1)
-    console.print(f"[green]✓[/] Updated to sklm [bold]v{latest}[/]")
+    console.print(f"[green]✓[/] Updated to skim [bold]v{latest}[/]")
 
 
 # ─── Update Check ──────────────────────────────────────────────────────────
 
 
 def _show_update_notice() -> None:
-    if os.environ.get("SKLM_NO_UPDATE_CHECK", "").lower() in ("1", "true", "yes", "on"):
+    if os.environ.get("SKIM_NO_UPDATE_CHECK", "").lower() in ("1", "true", "yes", "on"):
         return
     if any(arg in sys.argv for arg in ("--version", "-V")):
         return
     try:
-        from sklm.core.update import UpdateChecker
+        from skim.core.update import UpdateChecker
 
         checker = UpdateChecker()
         latest = checker.check()
         if latest:
             console.print()
             console.print(
-                f"[yellow]⚠[/] sklm [bold]v{latest}[/] is available! "
+                f"[yellow]⚠[/] skim [bold]v{latest}[/] is available! "
                 f"(you're on v{__version__})"
             )
-            console.print("   Run [bold]sklm update[/] to upgrade.")
+            console.print("   Run [bold]skim update[/] to upgrade.")
     except Exception:
         pass
 
@@ -991,12 +887,10 @@ def _show_update_notice() -> None:
 
 
 def run():
-    global _tracker_command
-
     # TTY detection: launch wizard when interactive with no arguments
     if len(sys.argv) <= 1:
         if sys.stdin.isatty():
-            from sklm.cli.wizard import run_wizard as _run_wizard
+            from skim.cli.wizard import run_wizard as _run_wizard
             _run_wizard()
             return
         # Non-interactive no-args: show help (preserves original behavior)
@@ -1010,47 +904,6 @@ def run():
         error = e
     except BaseException as e:
         error = e
-
-    _track_success = True
-    _track_error = None
-    _track_error_message = None
-    _track_traceback = None
-
-    if isinstance(error, SystemExit):
-        cause = getattr(error, "__cause__", None)
-        if cause:
-            _track_success = False
-            _track_error = type(cause).__name__
-            _track_error_message = (str(cause).replace(str(Path.home()), "~")) or None
-            tb_frames = tb_mod.extract_tb(cause.__traceback__)
-            if tb_frames:
-                tail = tb_frames[-3:]
-                raw = "".join(tb_mod.format_list(tail))
-                # Sanitize: replace all absolute file paths with just the filename
-                sanitized = re.sub(r'File "([^"]+)", line (\d+)',
-                                   lambda m: f'File "{Path(m.group(1)).name}", line {m.group(2)}',
-                                   raw)
-                _track_traceback = sanitized.rstrip()
-        else:
-            _track_success = error.code in (None, 0)
-            _track_error = None if _track_success else "error"
-    elif error is not None:
-        _track_success = False
-        _track_error = type(error).__name__
-        _track_error_message = (str(error).replace(str(Path.home()), "~")) or None
-
-    if _tracker_start > 0:
-        duration = (time.monotonic() - _tracker_start) * 1000
-        tracker = get_tracker()
-        if tracker:
-            tracker.track_command(
-                _tracker_command,
-                _track_success,
-                duration,
-                _track_error,
-                _track_error_message,
-                _track_traceback,
-            )
 
     _show_update_notice()
 

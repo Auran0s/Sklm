@@ -1,4 +1,4 @@
-"""Tests for Sklm models, store, core, and CLI."""
+"""Tests for Skim models, store, core, and CLI."""
 from __future__ import annotations
 
 import json
@@ -11,7 +11,7 @@ from unittest.mock import MagicMock
 import pytest
 import yaml
 
-from sklm.models import (
+from skim.models import (
     GlobalConfig,
     Link,
     RegistrySource,
@@ -19,11 +19,10 @@ from sklm.models import (
     Resource,
     ResourceKind,
     ResourceRef,
-    TelemetryConfig,
     WorkspaceConfig,
 )
-from sklm.store import GlobalStore, SKLM_HOME
-from sklm.core.workspace import Workspace
+from skim.store import GlobalStore, SKIM_HOME
+from skim.core.workspace import Workspace
 
 
 # ─── Fixtures ────────────────────────────────────────────────────────────────
@@ -40,7 +39,7 @@ def temp_dir():
 
 @pytest.fixture
 def isolated_store(monkeypatch, temp_dir):
-    monkeypatch.setattr("sklm.store.SKLM_HOME", temp_dir / ".sklm-home")
+    monkeypatch.setattr("skim.store.SKIM_HOME", temp_dir / ".skim-home")
     return GlobalStore()
 
 
@@ -98,7 +97,7 @@ class TestWorkspaceConfig:
         config.resources.append(
             ResourceRef(name="s1", kind=ResourceKind.skill, origin="global")
         )
-        path = temp_dir / "sklm.yaml"
+        path = temp_dir / "skim.yaml"
         config.to_yaml(path)
         loaded = WorkspaceConfig.from_yaml(path)
         assert loaded.agents == ["opencode"]
@@ -156,13 +155,13 @@ class TestNestedSkillResolution:
 
     def test_finds_nested_skill_two_levels(self, isolated_store, temp_dir):
         """skills/<category>/<name>/SKILL.md doit être trouvé."""
-        from sklm.models import ResourceKind
+        from skim.models import ResourceKind
 
         cache_dir = isolated_store.cache_dir / "test-nested-2"
         self._make_repo(cache_dir, {
             "skills/seo/entity-seo": "# Entity SEO",
         })
-        with unittest.mock.patch("sklm.core.registry.RegistryManager") as MockReg:
+        with unittest.mock.patch("skim.core.registry.RegistryManager") as MockReg:
             MockReg.return_value.clone_or_fetch.return_value = cache_dir
             resource = isolated_store.add_resource_from_git(
                 ResourceKind.skill, "entity-seo", "https://github.com/test/repo"
@@ -173,13 +172,13 @@ class TestNestedSkillResolution:
 
     def test_finds_nested_skill_three_levels(self, isolated_store, temp_dir):
         """skills/<cat>/<sub>/<name>/SKILL.md doit être trouvé."""
-        from sklm.models import ResourceKind
+        from skim.models import ResourceKind
 
         cache_dir = isolated_store.cache_dir / "test-nested-3"
         self._make_repo(cache_dir, {
             "skills/paid-ads/platforms/reddit-ads": "# Reddit Ads",
         })
-        with unittest.mock.patch("sklm.core.registry.RegistryManager") as MockReg:
+        with unittest.mock.patch("skim.core.registry.RegistryManager") as MockReg:
             MockReg.return_value.clone_or_fetch.return_value = cache_dir
             resource = isolated_store.add_resource_from_git(
                 ResourceKind.skill, "reddit-ads", "https://github.com/test/repo"
@@ -190,14 +189,14 @@ class TestNestedSkillResolution:
 
     def test_flat_structure_still_takes_priority(self, isolated_store, temp_dir):
         """skills/<name>/ (flat) doit être prioritaire sur skills/<cat>/<name>/."""
-        from sklm.models import ResourceKind
+        from skim.models import ResourceKind
 
         cache_dir = isolated_store.cache_dir / "test-priority"
         self._make_repo(cache_dir, {
             "skills/my-skill": "# Flat Skill",
             "skills/category/my-skill": "# Nested Skill",
         })
-        with unittest.mock.patch("sklm.core.registry.RegistryManager") as MockReg:
+        with unittest.mock.patch("skim.core.registry.RegistryManager") as MockReg:
             MockReg.return_value.clone_or_fetch.return_value = cache_dir
             resource = isolated_store.add_resource_from_git(
                 ResourceKind.skill, "my-skill", "https://github.com/test/repo"
@@ -206,7 +205,7 @@ class TestNestedSkillResolution:
 
     def test_not_found_error_lists_available(self, isolated_store, temp_dir):
         """Quand aucun skill n'est trouvé, le message doit lister les disponibles."""
-        from sklm.models import ResourceKind
+        from skim.models import ResourceKind
 
         cache_dir = isolated_store.cache_dir / "test-not-found"
         self._make_repo(cache_dir, {
@@ -214,7 +213,7 @@ class TestNestedSkillResolution:
             "skills/seo/on-page": "# On Page SEO",
             "skills/channels/email/email-marketing": "# Email Marketing",
         })
-        with unittest.mock.patch("sklm.core.registry.RegistryManager") as MockReg:
+        with unittest.mock.patch("skim.core.registry.RegistryManager") as MockReg:
             MockReg.return_value.clone_or_fetch.return_value = cache_dir
             with pytest.raises(FileNotFoundError) as exc:
                 isolated_store.add_resource_from_git(
@@ -228,13 +227,13 @@ class TestNestedSkillResolution:
 
     def test_source_subdir_reflects_nested_path(self, isolated_store, temp_dir):
         """source_subdir dans les métadonnées doit refléter le chemin réel."""
-        from sklm.models import ResourceKind
+        from skim.models import ResourceKind
 
         cache_dir = isolated_store.cache_dir / "test-subdir-meta"
         self._make_repo(cache_dir, {
             "skills/seo/entity-seo": "# Entity SEO",
         })
-        with unittest.mock.patch("sklm.core.registry.RegistryManager") as MockReg:
+        with unittest.mock.patch("skim.core.registry.RegistryManager") as MockReg:
             MockReg.return_value.clone_or_fetch.return_value = cache_dir
             isolated_store.add_resource_from_git(
                 ResourceKind.skill, "entity-seo", "https://github.com/test/repo"
@@ -250,9 +249,9 @@ class TestInstallFromGit:
     def test_shallow_clone_args(self, isolated_store):
         """Vérifie que git clone reçoit --depth 1 --single-branch."""
         import subprocess
-        from sklm.core.registry import RegistryManager
+        from skim.core.registry import RegistryManager
 
-        with unittest.mock.patch("sklm.core.registry.REGISTRY_CACHE", isolated_store.cache_dir):
+        with unittest.mock.patch("skim.core.registry.REGISTRY_CACHE", isolated_store.cache_dir):
             with unittest.mock.patch("subprocess.run") as mock_run:
                 mock_run.return_value = unittest.mock.MagicMock(returncode=0, stderr="")
                 RegistryManager().clone_or_fetch(
@@ -282,7 +281,7 @@ class TestInstallFromGit:
     def test_clone_timeout_wraps_to_value_error(self, isolated_store):
         """Vérifie qu'un TimeoutExpired sur git clone lève ValueError."""
         import subprocess
-        from sklm.models import ResourceKind
+        from skim.models import ResourceKind
 
         repo_cache = isolated_store.cache_dir / "test_timeout_repo"
         with unittest.mock.patch("subprocess.run") as mock_run:
@@ -296,7 +295,7 @@ class TestInstallFromGit:
 
     def test_url_to_repo_slug_various_formats(self):
         """Vérifie url_to_repo_slug sur différents formats d'URL."""
-        from sklm.store import url_to_repo_slug
+        from skim.store import url_to_repo_slug
 
         cases = [
             ("https://github.com/github/awesome-copilot", "github_awesome-copilot"),
@@ -310,15 +309,15 @@ class TestInstallFromGit:
 
     def test_cache_key_uses_repo_slug(self, isolated_store):
         """Vérifie que clone_or_fetch reçoit un slug de repo (pas le nom du skill)."""
-        from sklm.models import ResourceKind
-        from sklm.store import url_to_repo_slug
+        from skim.models import ResourceKind
+        from skim.store import url_to_repo_slug
 
         repo_cache = isolated_store.cache_dir / url_to_repo_slug("https://github.com/example/repo")
         repo_cache.mkdir(parents=True)
         (repo_cache / "SKILL.md").write_text("# Repo root skill")
         with unittest.mock.patch.object(isolated_store, "_type_dir") as mock_type_dir:
             mock_type_dir.return_value = isolated_store.cache_dir
-            with unittest.mock.patch("sklm.core.registry.RegistryManager") as MockReg:
+            with unittest.mock.patch("skim.core.registry.RegistryManager") as MockReg:
                 MockReg.return_value.clone_or_fetch.return_value = repo_cache
                 isolated_store.add_resource_from_git(
                     ResourceKind.skill, "my-skill",
@@ -330,15 +329,15 @@ class TestInstallFromGit:
 
     def test_progress_messages_during_clone(self, isolated_store):
         """Vérifie que console.print est appelée avant et après le clone."""
-        from sklm.models import ResourceKind
+        from skim.models import ResourceKind
 
         repo_cache = isolated_store.cache_dir / "test_progress_repo"
         repo_cache.mkdir(parents=True)
         (repo_cache / "SKILL.md").write_text("# Progress test")
         with unittest.mock.patch.object(isolated_store, "_type_dir") as mock_type_dir:
             mock_type_dir.return_value = isolated_store.cache_dir
-            with unittest.mock.patch("sklm.store.console.print") as mock_print:
-                with unittest.mock.patch("sklm.core.registry.RegistryManager") as MockReg:
+            with unittest.mock.patch("skim.store.console.print") as mock_print:
+                with unittest.mock.patch("skim.core.registry.RegistryManager") as MockReg:
                     MockReg.return_value.clone_or_fetch.return_value = repo_cache
                     isolated_store.add_resource_from_git(
                         ResourceKind.skill, "my-skill",
@@ -351,11 +350,11 @@ class TestInstallFromGit:
     def test_oserror_in_cli_produces_error_message(self, temp_dir):
         """Vérifie que OSError dans install affiche un message d'erreur (pas un traceback brut)."""
         from typer.testing import CliRunner
-        from sklm.cli.main import app
-        from sklm.models import ResourceKind
+        from skim.cli.main import app
+        from skim.models import ResourceKind
 
         runner = CliRunner()
-        with unittest.mock.patch("sklm.cli.main.get_sklm") as mock_get:
+        with unittest.mock.patch("skim.cli.main.get_skim") as mock_get:
             f = unittest.mock.MagicMock()
             f.install.side_effect = PermissionError("Permission denied: /tmp")
             mock_get.return_value = f
@@ -402,187 +401,6 @@ class TestGlobalStore:
             isolated_store.remove_resource(ResourceKind.skill, "nope")
 
 
-# ─── Telemetry ────────────────────────────────────────────────────────────────
-
-
-class TestTelemetryConfig:
-    def test_defaults(self):
-        cfg = TelemetryConfig()
-        assert cfg.enabled is True
-        assert cfg.umami_url == ""
-        assert cfg.website_id == ""
-
-    def test_custom_values(self):
-        cfg = TelemetryConfig(
-            enabled=False,
-            umami_url="https://umami.example.com",
-            website_id="abc-123",
-        )
-        assert cfg.enabled is False
-        assert cfg.umami_url == "https://umami.example.com"
-        assert cfg.website_id == "abc-123"
-
-
-class TestGlobalStoreTelemetry:
-    def test_get_default_config(self, isolated_store):
-        cfg = isolated_store.get_telemetry_config()
-        assert cfg.enabled is True
-        # Defaults are empty; env vars can override via SKLM_UMAMI_URL / SKLM_WEBSITE_ID
-        assert cfg.umami_url == ""
-        assert cfg.website_id == ""
-
-    def test_set_and_get_config(self, isolated_store):
-        original = TelemetryConfig(
-            enabled=False,
-            umami_url="https://umami.example.com",
-            website_id="abc-123",
-        )
-        isolated_store.set_telemetry_config(original)
-        loaded = isolated_store.get_telemetry_config()
-        assert loaded.enabled is False
-        assert loaded.umami_url == "https://umami.example.com"
-        assert loaded.website_id == "abc-123"
-
-    def test_env_overrides(self, isolated_store, monkeypatch):
-        monkeypatch.setenv("SKLM_UMAMI_URL", "https://env.umami.com")
-        monkeypatch.setenv("SKLM_WEBSITE_ID", "env-456")
-        cfg = isolated_store.get_telemetry_config()
-        assert cfg.umami_url == "https://env.umami.com"
-        assert cfg.website_id == "env-456"
-
-    def test_env_disable(self, isolated_store, monkeypatch):
-        monkeypatch.setenv("SKLM_TELEMETRY", "0")
-        cfg = isolated_store.get_telemetry_config()
-        assert cfg.enabled is False
-
-    def test_env_disable_false(self, isolated_store, monkeypatch):
-        monkeypatch.setenv("SKLM_TELEMETRY", "false")
-        cfg = isolated_store.get_telemetry_config()
-        assert cfg.enabled is False
-
-
-class TestUmamiTracker:
-    """Tests for UmamiTracker.track_command enriched error fields."""
-
-    def _make_tracker(self, active=True):
-        from sklm.telemetry import UmamiTracker
-        return UmamiTracker(
-            umami_url="https://umami.test" if active else "",
-            website_id="test-id" if active else "",
-            enabled=active,
-        )
-
-    def test_error_fields_included(self):
-        tracker = self._make_tracker()
-        tracker._send_event = lambda name, data: None
-        events: list[dict] = []
-
-        def fake_send(event_name, custom_data):
-            events.append(custom_data)
-
-        tracker._send_event = fake_send
-        tracker.track_command(
-            "test-cmd", success=False, duration_ms=100,
-            error_type="ValueError", error_message="bad value", traceback="  File test.py, line 1",
-        )
-        assert len(events) == 1
-        data = events[0]
-        assert data["error"] == "ValueError"
-        assert data["error_message"] == "bad value"
-        assert data["traceback"] == "  File test.py, line 1"
-        assert data["success"] is False
-
-    def test_no_error_fields_on_success(self):
-        tracker = self._make_tracker()
-        events: list[dict] = []
-
-        def fake_send(event_name, custom_data):
-            events.append(custom_data)
-
-        tracker._send_event = fake_send
-        tracker.track_command(
-            "test-cmd", success=True, duration_ms=100,
-            error_type=None, error_message="should not appear", traceback="should not appear",
-        )
-        assert len(events) == 1
-        data = events[0]
-        assert "error_message" not in data
-        assert "traceback" not in data
-        assert "error" not in data
-
-    def test_no_error_fields_when_omitted(self):
-        tracker = self._make_tracker()
-        events: list[dict] = []
-
-        def fake_send(event_name, custom_data):
-            events.append(custom_data)
-
-        tracker._send_event = fake_send
-        tracker.track_command("test-cmd", success=False, duration_ms=100, error_type="KeyError")
-        assert len(events) == 1
-        data = events[0]
-        assert data["error"] == "KeyError"
-        assert "error_message" not in data
-        assert "traceback" not in data
-
-
-class TestCLIErrorTelemetry:
-    """Tests that CLI error chain (raise from) and run() capture work correctly."""
-
-    def test_run_extracts_cause_from_system_exit(self, monkeypatch):
-        """run() extracts error_type, error_message, and traceback from __cause__."""
-        import traceback
-        from sklm.cli.main import run
-
-        events: list[dict] = []
-
-        def fake_track_command(command, success, duration_ms, error_type=None,
-                               error_message=None, traceback=None, dry_run=False):
-            events.append(dict(
-                command=command, success=success, error_type=error_type,
-                error_message=error_message, traceback=traceback,
-            ))
-
-        tracker = MagicMock()
-        tracker.track_command.side_effect = fake_track_command
-        monkeypatch.setattr("sklm.cli.main._tracker_start", 1000.0)
-        monkeypatch.setattr("sklm.cli.main._tracker_command", "test-cmd")
-        monkeypatch.setattr("sklm.cli.main.get_tracker", lambda: tracker)
-
-        original_app = None
-        def failing_app():
-            try:
-                raise ValueError("something went wrong")
-            except ValueError as e:
-                raise SystemExit(1) from e
-
-        monkeypatch.setattr("sklm.cli.main.app", failing_app)
-        try:
-            run()
-        except SystemExit:
-            pass
-
-        assert len(events) == 1
-        data = events[0]
-        assert data["success"] is False
-        assert data["error_type"] == "ValueError"
-        assert "something went wrong" in data["error_message"]
-
-    def test_raise_typer_exit_from_e_chains_exception(self):
-        """Verify raise typer.Exit(1) from e sets __cause__ properly."""
-        import typer
-        try:
-            try:
-                raise FileNotFoundError("resource not found")
-            except FileNotFoundError as e:
-                raise typer.Exit(1) from e
-        except typer.Exit as e:
-            cause = getattr(e, "__cause__", None)
-            assert cause is not None
-            assert isinstance(cause, FileNotFoundError)
-            assert "resource not found" in str(cause)
-
-
 class TestWorkspace:
     def test_init_no_dir(self, temp_dir):
         ws = Workspace(temp_dir)
@@ -593,8 +411,8 @@ class TestWorkspace:
         config = ws.init(agents=["opencode"])
         assert ws.exists()
         assert config.agents == ["opencode"]
-        assert (temp_dir / ".sklm").is_dir()
-        assert (temp_dir / ".sklm" / "sklm.yaml").exists()
+        assert (temp_dir / ".skim").is_dir()
+        assert (temp_dir / ".skim" / "skim.yaml").exists()
 
     def test_add_and_list_resources(self, temp_dir):
         ws = Workspace(temp_dir)
@@ -627,7 +445,7 @@ class TestWorkspace:
             name="s1",
             kind=ResourceKind.skill,
             target=Path("/tmp/s1"),
-            link_path=Path("/tmp/.sklm/links/skills/s1"),
+            link_path=Path("/tmp/.skim/links/skills/s1"),
         )
         ws.add_link(link)
         assert len(ws.list_links()) == 1
@@ -651,7 +469,7 @@ class TestWorkspace:
 
 class TestAgentRegistry:
     def test_loads_all_agents(self, temp_dir):
-        from sklm.agents.registry import AgentRegistry
+        from skim.agents.registry import AgentRegistry
         registry = AgentRegistry()
         agents = registry.get_agent_ids()
         assert len(agents) == 30
@@ -669,44 +487,44 @@ class TestAgentRegistry:
         assert "continue" in agents
 
     def test_detect_returns_none_when_no_agent_dir(self, temp_dir):
-        from sklm.agents.registry import AgentRegistry
+        from skim.agents.registry import AgentRegistry
         registry = AgentRegistry()
         assert registry.detect(temp_dir) == []
 
     def test_detect_opencode(self, temp_dir):
-        from sklm.agents.registry import AgentRegistry
+        from skim.agents.registry import AgentRegistry
         (temp_dir / ".opencode").mkdir()
         registry = AgentRegistry()
         assert registry.detect(temp_dir) == ["opencode"]
 
     def test_detect_priority_order(self, temp_dir):
-        from sklm.agents.registry import AgentRegistry
+        from skim.agents.registry import AgentRegistry
         (temp_dir / ".opencode").mkdir()
         (temp_dir / ".claude").mkdir()
         registry = AgentRegistry()
         assert registry.detect(temp_dir) == ["opencode", "claude"]
 
     def test_get_adapter_returns_generic(self, temp_dir):
-        from sklm.agents.registry import AgentRegistry
+        from skim.agents.registry import AgentRegistry
         registry = AgentRegistry()
         adapter = registry.get_adapter("cursor")
-        from sklm.agents.generic import GenericAdapter
+        from skim.agents.generic import GenericAdapter
         assert isinstance(adapter, GenericAdapter)
 
     def test_get_adapter_handles_github_copilot(self, temp_dir):
-        from sklm.agents.registry import AgentRegistry
+        from skim.agents.registry import AgentRegistry
         registry = AgentRegistry()
         adapter = registry.get_adapter("github-copilot")
-        from sklm.agents.github_copilot import GitHubCopilotAdapter
+        from skim.agents.github_copilot import GitHubCopilotAdapter
         assert isinstance(adapter, GitHubCopilotAdapter)
 
     def test_get_adapter_returns_none_for_unknown(self, temp_dir):
-        from sklm.agents.registry import AgentRegistry
+        from skim.agents.registry import AgentRegistry
         registry = AgentRegistry()
         assert registry.get_adapter("nonexistent") is None
 
     def test_list_agents_shows_active(self, temp_dir):
-        from sklm.agents.registry import AgentRegistry
+        from skim.agents.registry import AgentRegistry
         (temp_dir / ".cursor").mkdir()
         registry = AgentRegistry()
         agents = registry.list_agents(temp_dir)
@@ -716,15 +534,15 @@ class TestAgentRegistry:
         assert opencode["active"] is False
 
     def test_detect_adapter_returns_adapter(self, temp_dir):
-        from sklm.agents.registry import AgentRegistry
+        from skim.agents.registry import AgentRegistry
         (temp_dir / ".claude").mkdir()
         registry = AgentRegistry()
         adapter = registry.detect_adapter(temp_dir)
-        from sklm.agents.generic import GenericAdapter
+        from skim.agents.generic import GenericAdapter
         assert isinstance(adapter, GenericAdapter)
 
     def test_copilot_not_auto_detected(self, temp_dir):
-        from sklm.agents.registry import AgentRegistry
+        from skim.agents.registry import AgentRegistry
         (temp_dir / ".github").mkdir()
         registry = AgentRegistry()
         assert registry.detect(temp_dir) == []
@@ -735,24 +553,24 @@ class TestAgentRegistry:
 
 class TestGenericAdapter:
     def test_detect(self, temp_dir):
-        from sklm.agents.generic import GenericAdapter
+        from skim.agents.generic import GenericAdapter
         (temp_dir / ".cursor").mkdir()
         adapter = GenericAdapter("cursor", {"dir_name": ".cursor"})
         assert adapter.detect(temp_dir) is True
 
     def test_no_detect_without_dir(self, temp_dir):
-        from sklm.agents.generic import GenericAdapter
+        from skim.agents.generic import GenericAdapter
         adapter = GenericAdapter("cursor", {"dir_name": ".cursor"})
         assert adapter.detect(temp_dir) is False
 
     def test_get_skills_path(self, temp_dir):
-        from sklm.agents.generic import GenericAdapter
+        from skim.agents.generic import GenericAdapter
         adapter = GenericAdapter("cursor", {"dir_name": ".cursor"})
         assert adapter.get_skills_path(temp_dir) == temp_dir / ".cursor" / "skills"
 
     def test_sync_creates_skills(self, temp_dir):
-        from sklm.agents.generic import GenericAdapter
-        from sklm.models import Link, ResourceKind
+        from skim.agents.generic import GenericAdapter
+        from skim.models import Link, ResourceKind
         skill_dir = temp_dir / "source-skill"
         skill_dir.mkdir()
         (skill_dir / "SKILL.md").write_text("# Test")
@@ -767,8 +585,8 @@ class TestGenericAdapter:
         assert (temp_dir / ".cursor" / "skills" / "test-skill" / "SKILL.md").exists()
 
     def test_sync_removes_unlinked(self, temp_dir):
-        from sklm.agents.generic import GenericAdapter
-        from sklm.models import Link, ResourceKind
+        from skim.agents.generic import GenericAdapter
+        from skim.models import Link, ResourceKind
         skill_dir = temp_dir / "source-skill"
         skill_dir.mkdir()
         (skill_dir / "SKILL.md").write_text("# Test")
@@ -790,13 +608,13 @@ class TestGenericAdapter:
 
 class TestGitHubCopilotAdapter:
     def test_detect_always_false(self, temp_dir):
-        from sklm.agents.github_copilot import GitHubCopilotAdapter
+        from skim.agents.github_copilot import GitHubCopilotAdapter
         (temp_dir / ".github").mkdir()
         adapter = GitHubCopilotAdapter()
         assert adapter.detect(temp_dir) is False
 
     def test_get_skills_path(self, temp_dir):
-        from sklm.agents.github_copilot import GitHubCopilotAdapter
+        from skim.agents.github_copilot import GitHubCopilotAdapter
         adapter = GitHubCopilotAdapter()
         assert adapter.get_skills_path(temp_dir) == temp_dir / ".github" / "skills"
 
@@ -808,9 +626,9 @@ class TestSkillVariants:
     """Test variant overlay during sync."""
 
     def test_variant_overrides_base_skill_md(self, temp_dir):
-        from sklm.agents.generic import GenericAdapter
-        from sklm.agents._sync import sync_skills, get_variant_names
-        from sklm.models import Link, ResourceKind
+        from skim.agents.generic import GenericAdapter
+        from skim.agents._sync import sync_skills, get_variant_names
+        from skim.models import Link, ResourceKind
         skill_dir = temp_dir / "source-skill"
         skill_dir.mkdir()
         (skill_dir / "SKILL.md").write_text("# Base")
@@ -832,8 +650,8 @@ class TestSkillVariants:
         assert get_variant_names(skill_dir) == ["cursor"]
 
     def test_variant_adds_new_files(self, temp_dir):
-        from sklm.agents._sync import sync_skills
-        from sklm.models import Link, ResourceKind
+        from skim.agents._sync import sync_skills
+        from skim.models import Link, ResourceKind
         skill_dir = temp_dir / "source-skill"
         skill_dir.mkdir()
         (skill_dir / "SKILL.md").write_text("# Base")
@@ -853,8 +671,8 @@ class TestSkillVariants:
         assert (agent_dir / "skills" / "test-skill" / "references" / "extra.md").exists()
 
     def test_base_files_not_in_variant_survive(self, temp_dir):
-        from sklm.agents._sync import sync_skills
-        from sklm.models import Link, ResourceKind
+        from skim.agents._sync import sync_skills
+        from skim.models import Link, ResourceKind
         skill_dir = temp_dir / "source-skill"
         skill_dir.mkdir()
         (skill_dir / "SKILL.md").write_text("# Base")
@@ -876,8 +694,8 @@ class TestSkillVariants:
         assert (agent_dir / "skills" / "test-skill" / "references" / "shared.md").exists()
 
     def test_no_variant_preserves_current_behavior(self, temp_dir):
-        from sklm.agents.generic import GenericAdapter
-        from sklm.models import Link, ResourceKind
+        from skim.agents.generic import GenericAdapter
+        from skim.models import Link, ResourceKind
         skill_dir = temp_dir / "source-skill"
         skill_dir.mkdir()
         (skill_dir / "SKILL.md").write_text("# Base")
@@ -893,8 +711,8 @@ class TestSkillVariants:
         assert content == "# Base"
 
     def test_variant_for_non_matching_agent_ignored(self, temp_dir):
-        from sklm.agents._sync import sync_skills
-        from sklm.models import Link, ResourceKind
+        from skim.agents._sync import sync_skills
+        from skim.models import Link, ResourceKind
         skill_dir = temp_dir / "source-skill"
         skill_dir.mkdir()
         (skill_dir / "SKILL.md").write_text("# Base")
@@ -914,8 +732,8 @@ class TestSkillVariants:
         assert content == "# Base"
 
     def test_variants_directory_not_leaked(self, temp_dir):
-        from sklm.agents._sync import sync_skills
-        from sklm.models import Link, ResourceKind
+        from skim.agents._sync import sync_skills
+        from skim.models import Link, ResourceKind
         skill_dir = temp_dir / "source-skill"
         skill_dir.mkdir()
         (skill_dir / "SKILL.md").write_text("# Base")
@@ -934,7 +752,7 @@ class TestSkillVariants:
         assert not (agent_dir / "skills" / "test-skill" / "variants").exists()
 
     def test_get_variant_names(self, temp_dir):
-        from sklm.agents._sync import get_variant_names
+        from skim.agents._sync import get_variant_names
         skill_dir = temp_dir / "source-skill"
         skill_dir.mkdir()
         (skill_dir / "SKILL.md").write_text("# Base")
@@ -946,9 +764,9 @@ class TestSkillVariants:
         assert "claude" in names
 
     def test_github_copilot_adapter_with_variant(self, temp_dir):
-        from sklm.agents.github_copilot import GitHubCopilotAdapter
-        from sklm.agents._sync import get_variant_names
-        from sklm.models import Link, ResourceKind
+        from skim.agents.github_copilot import GitHubCopilotAdapter
+        from skim.agents._sync import get_variant_names
+        from skim.models import Link, ResourceKind
         skill_dir = temp_dir / "source-skill"
         skill_dir.mkdir()
         (skill_dir / "SKILL.md").write_text("# Base")
@@ -973,7 +791,7 @@ class TestSkillVariants:
 
 class TestAgentKind:
     def test_known_agents(self):
-        from sklm.models import AgentKind
+        from skim.models import AgentKind
         assert AgentKind("opencode") == AgentKind.opencode
         assert AgentKind("claude") == AgentKind.claude
         assert AgentKind("cursor") == AgentKind.cursor
@@ -1006,22 +824,22 @@ class TestAgentKind:
         assert AgentKind("vibe") == AgentKind.vibe
 
     def test_unknown_agent_raises(self):
-        from sklm.models import AgentKind
+        from skim.models import AgentKind
         with pytest.raises(ValueError):
             AgentKind("nonexistent-agent")
 
     def test_workspace_config_validates_agent(self, temp_dir):
-        from sklm.models import WorkspaceConfig
+        from skim.models import WorkspaceConfig
         config = WorkspaceConfig(agents=["claude"])
         assert config.agents == ["claude"]
 
     def test_workspace_config_rejects_unknown(self, temp_dir):
-        from sklm.models import WorkspaceConfig
+        from skim.models import WorkspaceConfig
         with pytest.raises(ValueError, match="Unknown agent"):
             WorkspaceConfig(agents=["nonexistent-agent"])
 
     def test_workspace_config_accepts_none(self, temp_dir):
-        from sklm.models import WorkspaceConfig
+        from skim.models import WorkspaceConfig
         config = WorkspaceConfig(agents=["none"])
         assert config.agents == ["none"]
 
@@ -1052,7 +870,7 @@ class TestMultiAgentWorkspaceConfig:
 
     def test_yaml_round_trip_multiple(self, temp_dir):
         config = WorkspaceConfig(agents=["cursor", "gemini"])
-        path = temp_dir / "sklm.yaml"
+        path = temp_dir / "skim.yaml"
         config.to_yaml(path)
         loaded = WorkspaceConfig.from_yaml(path)
         assert loaded.agents == ["cursor", "gemini"]
@@ -1129,29 +947,29 @@ class TestMultiAgentCLI:
 
     @pytest.fixture(autouse=True)
     def setup(self, monkeypatch, temp_dir):
-        monkeypatch.setattr("sklm.store.SKLM_HOME", temp_dir / ".sklm-home")
-        monkeypatch.setattr("sklm.core.registry.REGISTRIES_PATH", temp_dir / ".sklm-home" / "registries.yaml")
-        monkeypatch.setattr("sklm.core.registry.REGISTRY_CACHE", temp_dir / ".sklm-home" / "cache")
-        monkeypatch.setattr("sklm.cli.main._sklm", None)
+        monkeypatch.setattr("skim.store.SKIM_HOME", temp_dir / ".skim-home")
+        monkeypatch.setattr("skim.core.registry.REGISTRIES_PATH", temp_dir / ".skim-home" / "registries.yaml")
+        monkeypatch.setattr("skim.core.registry.REGISTRY_CACHE", temp_dir / ".skim-home" / "cache")
+        monkeypatch.setattr("skim.cli.main._skim", None)
 
     def test_init_repeatable_agent(self, temp_dir):
-        """sklm init --agent opencode --agent claude doit configurer les deux."""
+        """skim init --agent opencode --agent claude doit configurer les deux."""
         from typer.testing import CliRunner
-        from sklm.cli.main import app
+        from skim.cli.main import app
         runner = CliRunner()
         result = runner.invoke(app, ["init", "--agent", "opencode", "--agent", "claude"])
         assert result.exit_code == 0
         assert "opencode" in result.output
         assert "claude" in result.output
-        from sklm.api import Sklm
-        f = Sklm()
+        from skim.api import Skim
+        f = Skim()
         config = f.workspace.load_config()
         assert config.agents == ["opencode", "claude"]
 
     def test_init_multiple_agents_syncs_dirs(self, temp_dir):
-        """sklm init --agent opencode --agent claude doit créer les deux dossiers skills."""
+        """skim init --agent opencode --agent claude doit créer les deux dossiers skills."""
         from typer.testing import CliRunner
-        from sklm.cli.main import app
+        from skim.cli.main import app
         runner = CliRunner()
         result = runner.invoke(app, ["init", "--agent", "opencode", "--agent", "claude"])
         assert result.exit_code == 0
@@ -1159,50 +977,50 @@ class TestMultiAgentCLI:
         assert (temp_dir / ".claude" / "skills").is_dir()
 
     def test_init_prompt_cancel(self, temp_dir):
-        """sklm init (sans --agent, sans dossier) avec cancel → agents: none."""
+        """skim init (sans --agent, sans dossier) avec cancel → agents: none."""
         from typer.testing import CliRunner
-        from sklm.cli.main import app
+        from skim.cli.main import app
         runner = CliRunner()
         result = runner.invoke(app, ["init"], input="c\n")
         assert result.exit_code == 0
         assert "none" in result.output
-        from sklm.api import Sklm
-        f = Sklm()
+        from skim.api import Skim
+        f = Skim()
         config = f.workspace.load_config()
         assert config.agents == ["none"]
 
     def test_init_prompt_selects_one(self, temp_dir):
-        """sklm init (sans --agent, sans dossier) avec choix 1 → opencode."""
+        """skim init (sans --agent, sans dossier) avec choix 1 → opencode."""
         from typer.testing import CliRunner
-        from sklm.cli.main import app
+        from skim.cli.main import app
         runner = CliRunner()
         result = runner.invoke(app, ["init"], input="1\n")
         assert result.exit_code == 0
         assert "opencode" in result.output
-        from sklm.api import Sklm
-        f = Sklm()
+        from skim.api import Skim
+        f = Skim()
         config = f.workspace.load_config()
         assert config.agents == ["opencode"]
         assert (temp_dir / ".opencode" / "skills").is_dir()
 
     def test_agent_add_command(self, temp_dir):
-        """sklm agent add claude après init doit configurer Claude."""
+        """skim agent add claude après init doit configurer Claude."""
         from typer.testing import CliRunner
-        from sklm.cli.main import app
+        from skim.cli.main import app
         runner = CliRunner()
         runner.invoke(app, ["init", "--agent", "opencode"])
         result = runner.invoke(app, ["agent", "add", "claude"])
         assert result.exit_code == 0
-        from sklm.api import Sklm
-        f = Sklm()
+        from skim.api import Skim
+        f = Skim()
         config = f.workspace.load_config()
         assert "claude" in config.agents
         assert (temp_dir / ".claude" / "skills").is_dir()
 
     def test_agent_add_unknown(self, temp_dir):
-        """sklm agent add unknown doit échouer."""
+        """skim agent add unknown doit échouer."""
         from typer.testing import CliRunner
-        from sklm.cli.main import app
+        from skim.cli.main import app
         runner = CliRunner()
         runner.invoke(app, ["init", "--agent", "opencode"])
         result = runner.invoke(app, ["agent", "add", "nonexistent"])
@@ -1210,22 +1028,22 @@ class TestMultiAgentCLI:
         assert "Unknown" in result.output
 
     def test_agent_remove_command(self, temp_dir):
-        """sklm agent remove claude après add doit retirer Claude de la config."""
+        """skim agent remove claude après add doit retirer Claude de la config."""
         from typer.testing import CliRunner
-        from sklm.cli.main import app
+        from skim.cli.main import app
         runner = CliRunner()
         runner.invoke(app, ["init", "--agent", "opencode", "--agent", "claude"])
         result = runner.invoke(app, ["agent", "remove", "claude"])
         assert result.exit_code == 0
-        from sklm.api import Sklm
-        f = Sklm()
+        from skim.api import Skim
+        f = Skim()
         config = f.workspace.load_config()
         assert config.agents == ["opencode"]
 
     def test_add_warns_when_no_agent(self, temp_dir, fake_skill_dir):
-        """sklm add sans agent configuré doit afficher un avertissement."""
+        """skim add sans agent configuré doit afficher un avertissement."""
         from typer.testing import CliRunner
-        from sklm.cli.main import app
+        from skim.cli.main import app
         runner = CliRunner()
         runner.invoke(app, ["init"], input="c\n")
         runner.invoke(app, ["global", "add", "skill", str(fake_skill_dir), "--name", "test-skill"])
@@ -1234,9 +1052,9 @@ class TestMultiAgentCLI:
         assert "no agent configured" in result.output.lower() or "Warning" in result.output
 
     def test_rm_warns_when_no_agent(self, temp_dir, fake_skill_dir):
-        """sklm rm sans agent configuré doit afficher un avertissement."""
+        """skim rm sans agent configuré doit afficher un avertissement."""
         from typer.testing import CliRunner
-        from sklm.cli.main import app
+        from skim.cli.main import app
         runner = CliRunner()
         runner.invoke(app, ["init"], input="c\n")
         runner.invoke(app, ["global", "add", "skill", str(fake_skill_dir), "--name", "test-skill"])
@@ -1252,15 +1070,14 @@ class TestMultiAgentCLI:
 class TestCLIIntegration:
     @pytest.fixture(autouse=True)
     def setup(self, monkeypatch, temp_dir):
-        monkeypatch.setattr("sklm.store.SKLM_HOME", temp_dir / ".sklm-home")
-        monkeypatch.setattr("sklm.core.registry.REGISTRIES_PATH", temp_dir / ".sklm-home" / "registries.yaml")
-        monkeypatch.setattr("sklm.core.registry.REGISTRY_CACHE", temp_dir / ".sklm-home" / "cache")
-        monkeypatch.setattr("sklm.cli.main._sklm", None)
-        monkeypatch.setattr("sklm.cli.main._tracker", None)
+        monkeypatch.setattr("skim.store.SKIM_HOME", temp_dir / ".skim-home")
+        monkeypatch.setattr("skim.core.registry.REGISTRIES_PATH", temp_dir / ".skim-home" / "registries.yaml")
+        monkeypatch.setattr("skim.core.registry.REGISTRY_CACHE", temp_dir / ".skim-home" / "cache")
+        monkeypatch.setattr("skim.cli.main._skim", None)
 
     def test_help(self):
         from typer.testing import CliRunner
-        from sklm.cli.main import app
+        from skim.cli.main import app
         runner = CliRunner()
         result = runner.invoke(app, ["--help"])
         assert result.exit_code == 0
@@ -1268,17 +1085,17 @@ class TestCLIIntegration:
 
     def test_version(self):
         from typer.testing import CliRunner
-        from sklm.cli.main import app
+        from skim.cli.main import app
         runner = CliRunner()
         result = runner.invoke(app, ["--version"])
         assert result.exit_code == 0
-        assert "sklm v" in result.output
+        assert "skim v" in result.output
 
     def test_init_and_status(self, temp_dir):
         from typer.testing import CliRunner
-        from sklm.cli.main import app
+        from skim.cli.main import app
         runner = CliRunner()
-        result = runner.invoke(app, ["init"])
+        result = runner.invoke(app, ["init"], input="\n")
         assert result.exit_code == 0
         assert "Workspace created" in result.output
         result = runner.invoke(app, ["status"])
@@ -1287,7 +1104,7 @@ class TestCLIIntegration:
 
     def test_init_with_agent(self, temp_dir):
         from typer.testing import CliRunner
-        from sklm.cli.main import app
+        from skim.cli.main import app
         runner = CliRunner()
         result = runner.invoke(app, ["init", "--agent", "opencode"])
         assert result.exit_code == 0
@@ -1296,11 +1113,11 @@ class TestCLIIntegration:
 
     def test_global_ls_rm(self, temp_dir, fake_skill_dir, monkeypatch):
         from typer.testing import CliRunner
-        from sklm.cli.main import app
-        from sklm.api import Sklm
-        from sklm.models import ResourceKind
+        from skim.cli.main import app
+        from skim.api import Skim
+        from skim.models import ResourceKind
         runner = CliRunner()
-        f = Sklm()
+        f = Skim()
         f.global_add(ResourceKind.skill, fake_skill_dir, "test-skill")
         result = runner.invoke(app, ["global", "ls"])
         assert result.exit_code == 0
@@ -1311,9 +1128,9 @@ class TestCLIIntegration:
 
     def test_add_rm_resource(self, temp_dir, fake_skill_dir):
         from typer.testing import CliRunner
-        from sklm.cli.main import app
+        from skim.cli.main import app
         runner = CliRunner()
-        runner.invoke(app, ["init"])
+        runner.invoke(app, ["init"], input="\n")
         result = runner.invoke(app, ["add", "skill", str(fake_skill_dir)])
         assert result.exit_code == 0
         assert "Added" in result.output
@@ -1323,12 +1140,12 @@ class TestCLIIntegration:
 
     def test_info(self, temp_dir, fake_skill_dir):
         from typer.testing import CliRunner
-        from sklm.cli.main import app
-        from sklm.api import Sklm
-        from sklm.models import ResourceKind
+        from skim.cli.main import app
+        from skim.api import Skim
+        from skim.models import ResourceKind
         runner = CliRunner()
         runner.invoke(app, ["init"])
-        f = Sklm()
+        f = Skim()
         f.global_add(ResourceKind.skill, fake_skill_dir, "test-skill")
         runner.invoke(app, ["add", "skill", "test-skill"])
         result = runner.invoke(app, ["info", "skill", "test-skill"])
@@ -1337,12 +1154,12 @@ class TestCLIIntegration:
 
     def test_ls_json(self, temp_dir, fake_skill_dir):
         from typer.testing import CliRunner
-        from sklm.cli.main import app
-        from sklm.api import Sklm
-        from sklm.models import ResourceKind
+        from skim.cli.main import app
+        from skim.api import Skim
+        from skim.models import ResourceKind
         runner = CliRunner()
         runner.invoke(app, ["init"])
-        f = Sklm()
+        f = Skim()
         f.global_add(ResourceKind.skill, fake_skill_dir, "test-skill")
         runner.invoke(app, ["add", "skill", "test-skill"])
         result = runner.invoke(app, ["ls", "--json"])
@@ -1353,7 +1170,7 @@ class TestCLIIntegration:
 
     def test_registry_lifecycle(self, temp_dir):
         from typer.testing import CliRunner
-        from sklm.cli.main import app
+        from skim.cli.main import app
         runner = CliRunner()
         result = runner.invoke(app, ["registry", "add", str(temp_dir), "--name", "test-reg"])
         assert result.exit_code == 0
@@ -1363,7 +1180,7 @@ class TestCLIIntegration:
 
     def test_registry_search(self, temp_dir, fake_skill_dir):
         from typer.testing import CliRunner
-        from sklm.cli.main import app
+        from skim.cli.main import app
         runner = CliRunner()
         runner.invoke(app, ["registry", "add", str(fake_skill_dir.parent), "--name", "test-reg"])
         result = runner.invoke(app, ["registry", "search", "my-skill"])
@@ -1373,7 +1190,7 @@ class TestCLIIntegration:
     def test_registry_search_json(self, temp_dir, fake_skill_dir):
         """--json output includes in_workspace field."""
         from typer.testing import CliRunner
-        from sklm.cli.main import app
+        from skim.cli.main import app
         runner = CliRunner()
         runner.invoke(app, ["registry", "add", str(fake_skill_dir.parent), "--name", "test-reg"])
         result = runner.invoke(app, ["registry", "search", "my-skill", "--json"])
@@ -1385,14 +1202,14 @@ class TestCLIIntegration:
 
     def test_agent_detect(self, temp_dir):
         from typer.testing import CliRunner
-        from sklm.cli.main import app
+        from skim.cli.main import app
         runner = CliRunner()
         result = runner.invoke(app, ["agent", "detect"])
         assert result.exit_code == 0
 
     def test_agent_list_contains_agents(self, temp_dir):
         from typer.testing import CliRunner
-        from sklm.cli.main import app
+        from skim.cli.main import app
         runner = CliRunner()
         result = runner.invoke(app, ["agent", "list"])
         assert result.exit_code == 0
@@ -1402,7 +1219,7 @@ class TestCLIIntegration:
 
     def test_agent_list_json(self, temp_dir):
         from typer.testing import CliRunner
-        from sklm.cli.main import app
+        from skim.cli.main import app
         runner = CliRunner()
         result = runner.invoke(app, ["agent", "list", "--json"])
         assert result.exit_code == 0
@@ -1415,99 +1232,38 @@ class TestCLIIntegration:
     def test_agent_list_shows_active(self, temp_dir):
         (temp_dir / ".cursor").mkdir()
         from typer.testing import CliRunner
-        from sklm.cli.main import app
+        from skim.cli.main import app
         runner = CliRunner()
         result = runner.invoke(app, ["agent", "list"])
         assert result.exit_code == 0
         assert "ACTIVE" in result.output
         assert "cursor" in result.output
 
-    def test_telemetry_status_inactive_by_default(self, temp_dir):
-        """Telemetry is inactive without env vars (no hardcoded defaults)."""
-        from typer.testing import CliRunner
-        from sklm.cli.main import app
-        runner = CliRunner()
-        result = runner.invoke(app, ["telemetry", "status"])
-        assert result.exit_code != 0
-        assert "inactive" in result.output.lower() or "disabled" in result.output.lower()
-
-    def test_telemetry_on_off_lifecycle(self, temp_dir, monkeypatch):
-        from typer.testing import CliRunner
-        from sklm.cli.main import app
-        from sklm.store import GlobalStore
-
-        monkeypatch.setenv("SKLM_UMAMI_URL", "https://umami.test")
-        monkeypatch.setenv("SKLM_WEBSITE_ID", "test-id")
-
-        runner = CliRunner()
-        result = runner.invoke(app, ["telemetry", "on"])
-        assert result.exit_code == 0
-        assert "enabled" in result.output.lower()
-
-        store = GlobalStore()
-        cfg = store.get_telemetry_config()
-        assert cfg.enabled is True
-
-        result = runner.invoke(app, ["telemetry", "off"])
-        assert result.exit_code == 0
-        assert "disabled" in result.output.lower()
-
-        cfg = store.get_telemetry_config()
-        assert cfg.enabled is False
-
-    def test_telemetry_ping_success(self, temp_dir, monkeypatch):
-        from unittest.mock import Mock
-        from typer.testing import CliRunner
-        from sklm.cli.main import app
-
-        monkeypatch.setenv("SKLM_UMAMI_URL", "https://umami.test")
-        monkeypatch.setenv("SKLM_WEBSITE_ID", "test-id")
-        monkeypatch.setattr("sklm.telemetry.umami.new_event", Mock(return_value={}))
-
-        runner = CliRunner()
-        result = runner.invoke(app, ["telemetry", "ping"])
-        assert result.exit_code == 0
-        assert "succeeded" in result.output.lower()
-
-    def test_telemetry_ping_failure(self, temp_dir, monkeypatch):
-        from unittest.mock import Mock
-        from typer.testing import CliRunner
-        from sklm.cli.main import app
-
-        monkeypatch.setenv("SKLM_UMAMI_URL", "https://umami.test")
-        monkeypatch.setenv("SKLM_WEBSITE_ID", "test-id")
-        monkeypatch.setattr("sklm.telemetry.umami.new_event", Mock(side_effect=RuntimeError("Connection refused")))
-
-        runner = CliRunner()
-        result = runner.invoke(app, ["telemetry", "ping"])
-        assert result.exit_code == 1
-        assert "failed" in result.output.lower()
-
     def test_init_creates_agent_dirs(self, temp_dir):
-        """sklm init doit créer les dossiers de l'agent détecté."""
+        """skim init doit créer les dossiers de l'agent détecté."""
         # Simuler un projet OpenCode
         (temp_dir / ".opencode").mkdir()
         from typer.testing import CliRunner
-        from sklm.cli.main import app
+        from skim.cli.main import app
         runner = CliRunner()
         result = runner.invoke(app, ["init"])
         assert result.exit_code == 0
         assert (temp_dir / ".opencode" / "skills").is_dir()
 
     def test_init_creates_agent_dirs_with_flag(self, temp_dir):
-        """sklm init --agent opencode doit créer les dossiers même sans .opencode/."""
+        """skim init --agent opencode doit créer les dossiers même sans .opencode/."""
         from typer.testing import CliRunner
-        from sklm.cli.main import app
+        from skim.cli.main import app
         runner = CliRunner()
         result = runner.invoke(app, ["init", "--agent", "opencode"])
         assert result.exit_code == 0
         assert (temp_dir / ".opencode" / "skills").is_dir()
 
     def test_add_copies_skill_content(self, temp_dir, fake_skill_dir):
-        """sklm add doit copier le contenu du skill dans .opencode/skills/<name>/."""
+        """skim add doit copier le contenu du skill dans .opencode/skills/<name>/."""
         (temp_dir / ".opencode").mkdir()
         from typer.testing import CliRunner
-        from sklm.cli.main import app
+        from skim.cli.main import app
         runner = CliRunner()
         runner.invoke(app, ["init"])
         runner.invoke(app, ["global", "add", "skill", str(fake_skill_dir), "--name", "test-skill"])
@@ -1519,10 +1275,10 @@ class TestCLIIntegration:
         assert (agent_skill_dir / "SKILL.md").read_text() == "# My Skill\nA test skill."
 
     def test_rm_removes_agent_skill(self, temp_dir, fake_skill_dir):
-        """sklm rm doit supprimer le dossier skill de l'agent."""
+        """skim rm doit supprimer le dossier skill de l'agent."""
         (temp_dir / ".opencode").mkdir()
         from typer.testing import CliRunner
-        from sklm.cli.main import app
+        from skim.cli.main import app
         runner = CliRunner()
         runner.invoke(app, ["init"])
         runner.invoke(app, ["global", "add", "skill", str(fake_skill_dir), "--name", "test-skill"])
@@ -1534,10 +1290,10 @@ class TestCLIIntegration:
         assert not agent_skill_dir.exists()
 
     def test_agent_sync_updates_content(self, temp_dir, fake_skill_dir):
-        """sklm agent sync doit copier le contenu dans l'agent."""
+        """skim agent sync doit copier le contenu dans l'agent."""
         (temp_dir / ".opencode").mkdir()
         from typer.testing import CliRunner
-        from sklm.cli.main import app
+        from skim.cli.main import app
         runner = CliRunner()
         runner.invoke(app, ["init"])
         runner.invoke(app, ["global", "add", "skill", str(fake_skill_dir), "--name", "test-skill"])
@@ -1550,9 +1306,9 @@ class TestCLIIntegration:
         assert (temp_dir / ".opencode" / "skills" / "test-skill" / "SKILL.md").read_text() == "# My Skill\nA test skill."
 
     def test_install_command_help(self, temp_dir):
-        """sklm install --help doit afficher l'aide."""
+        """skim install --help doit afficher l'aide."""
         from typer.testing import CliRunner
-        from sklm.cli.main import app
+        from skim.cli.main import app
         runner = CliRunner()
         result = runner.invoke(app, ["install", "--help"])
         assert result.exit_code == 0
@@ -1560,18 +1316,18 @@ class TestCLIIntegration:
 
     def test_backward_compat_opencode_yaml(self, temp_dir):
         """Existing agent: opencode in YAML should load without error (ignored)."""
-        from sklm.models import WorkspaceConfig
-        path = temp_dir / "sklm.yaml"
+        from skim.models import WorkspaceConfig
+        path = temp_dir / "skim.yaml"
         path.write_text("agent: opencode\nversion: 1\nresources: []\nlinks: []\n")
         config = WorkspaceConfig.from_yaml(path)
         assert config.agents == ["none"]
         assert config.version == 1
 
     def test_backward_compat_init_opencode(self, temp_dir):
-        """sklm init in a project with .opencode/ should work."""
+        """skim init in a project with .opencode/ should work."""
         (temp_dir / ".opencode").mkdir()
         from typer.testing import CliRunner
-        from sklm.cli.main import app
+        from skim.cli.main import app
         runner = CliRunner()
         result = runner.invoke(app, ["init"])
         assert result.exit_code == 0
@@ -1579,9 +1335,9 @@ class TestCLIIntegration:
         assert "Agents" in result.output
 
     def test_add_with_from_flag(self, temp_dir):
-        """sklm add --help doit mentionner --from."""
+        """skim add --help doit mentionner --from."""
         from typer.testing import CliRunner
-        from sklm.cli.main import app
+        from skim.cli.main import app
         runner = CliRunner()
         result = runner.invoke(app, ["add", "--help"])
         assert result.exit_code == 0
@@ -1590,10 +1346,10 @@ class TestCLIIntegration:
         assert "Git repository URL to install from" in result.output
 
     def test_uninstall_command(self, temp_dir, fake_skill_dir):
-        """sklm uninstall doit supprimer un skill du store."""
+        """skim uninstall doit supprimer un skill du store."""
         (temp_dir / ".opencode").mkdir()
         from typer.testing import CliRunner
-        from sklm.cli.main import app
+        from skim.cli.main import app
         runner = CliRunner()
         runner.invoke(app, ["init"])
         runner.invoke(app, ["global", "add", "skill", str(fake_skill_dir), "--name", "test-skill"])
@@ -1602,10 +1358,10 @@ class TestCLIIntegration:
         assert "Uninstalled" in result.output
 
     def test_uninstall_linked_skill(self, temp_dir, fake_skill_dir):
-        """sklm uninstall d'un skill lié doit demander confirmation."""
+        """skim uninstall d'un skill lié doit demander confirmation."""
         (temp_dir / ".opencode").mkdir()
         from typer.testing import CliRunner
-        from sklm.cli.main import app
+        from skim.cli.main import app
         runner = CliRunner()
         runner.invoke(app, ["init"])
         runner.invoke(app, ["global", "add", "skill", str(fake_skill_dir), "--name", "test-skill"])
@@ -1616,14 +1372,14 @@ class TestCLIIntegration:
         assert "Uninstalled" in result.output
 
     def test_migrate_command(self, temp_dir):
-        """sklm migrate doit importer depuis ~/.agents/."""
+        """skim migrate doit importer depuis ~/.agents/."""
         agents_skills = Path.home() / ".agents" / "skills"
         agents_skills.mkdir(parents=True, exist_ok=True)
         test_skill_dir = agents_skills / "test-agent-skill"
         test_skill_dir.mkdir(exist_ok=True)
         (test_skill_dir / "SKILL.md").write_text("# Agent Skill\nFrom skills.sh")
         from typer.testing import CliRunner
-        from sklm.cli.main import app
+        from skim.cli.main import app
         runner = CliRunner()
         result = runner.invoke(app, ["migrate", "skill", "test-agent-skill"])
         assert result.exit_code == 0
@@ -1633,9 +1389,9 @@ class TestCLIIntegration:
         shutil.rmtree(test_skill_dir)
 
     def test_migrate_from_registry(self, temp_dir):
-        """sklm migrate --from-registry doit importer depuis un registry local."""
+        """skim migrate --from-registry doit importer depuis un registry local."""
         from typer.testing import CliRunner
-        from sklm.cli.main import app
+        from skim.cli.main import app
         runner = CliRunner()
         reg_path = temp_dir / "test-registry"
         reg_path.mkdir()
@@ -1649,21 +1405,21 @@ class TestCLIIntegration:
         assert "reg-skill" in result.output
 
     def test_migrate_from_registry_not_found(self, temp_dir):
-        """sklm migrate --from-registry avec un nom inconnu doit échouer."""
+        """skim migrate --from-registry avec un nom inconnu doit échouer."""
         from typer.testing import CliRunner
-        from sklm.cli.main import app
+        from skim.cli.main import app
         runner = CliRunner()
         result = runner.invoke(app, ["migrate", "--from-registry", "does-not-exist"])
         assert result.exit_code != 0
         assert "not found" in result.output
 
     def test_migrate_from_git_registry_errors(self, temp_dir):
-        """sklm migrate --from-registry avec un registry git doit échouer."""
+        """skim migrate --from-registry avec un registry git doit échouer."""
         import yaml
         from typer.testing import CliRunner
-        from sklm.cli.main import app
+        from skim.cli.main import app
         runner = CliRunner()
-        reg_path = temp_dir / ".sklm-home" / "registries.yaml"
+        reg_path = temp_dir / ".skim-home" / "registries.yaml"
         reg_path.parent.mkdir(parents=True, exist_ok=True)
         reg_data = {
             "registries": {
@@ -1680,14 +1436,14 @@ class TestCLIIntegration:
         assert "git registry" in result.output.lower()
 
     def test_migrate_force_cleanup(self, temp_dir):
-        """sklm migrate --force-cleanup doit supprimer les sources."""
+        """skim migrate --force-cleanup doit supprimer les sources."""
         agents_skills = Path.home() / ".agents" / "skills"
         agents_skills.mkdir(parents=True, exist_ok=True)
         test_skill_dir = agents_skills / "test-force-clean-skill"
         test_skill_dir.mkdir(exist_ok=True)
         (test_skill_dir / "SKILL.md").write_text("# Force Cleanup")
         from typer.testing import CliRunner
-        from sklm.cli.main import app
+        from skim.cli.main import app
         runner = CliRunner()
         result = runner.invoke(app, ["migrate", "skill", "test-force-clean-skill", "--force-cleanup"])
         assert result.exit_code == 0
@@ -1695,14 +1451,14 @@ class TestCLIIntegration:
         assert not test_skill_dir.exists()
 
     def test_migrate_no_cleanup(self, temp_dir):
-        """sklm migrate --no-cleanup doit préserver les sources."""
+        """skim migrate --no-cleanup doit préserver les sources."""
         agents_skills = Path.home() / ".agents" / "skills"
         agents_skills.mkdir(parents=True, exist_ok=True)
         test_skill_dir = agents_skills / "test-no-clean-skill"
         test_skill_dir.mkdir(exist_ok=True)
         (test_skill_dir / "SKILL.md").write_text("# No Cleanup")
         from typer.testing import CliRunner
-        from sklm.cli.main import app
+        from skim.cli.main import app
         runner = CliRunner()
         result = runner.invoke(app, ["migrate", "skill", "test-no-clean-skill", "--no-cleanup"])
         assert result.exit_code == 0
@@ -1712,14 +1468,14 @@ class TestCLIIntegration:
         shutil.rmtree(test_skill_dir)
 
     def test_migrate_non_interactive_message(self, temp_dir):
-        """sklm migrate en mode non-interactif affiche le message de conservation."""
+        """skim migrate en mode non-interactif affiche le message de conservation."""
         agents_skills = Path.home() / ".agents" / "skills"
         agents_skills.mkdir(parents=True, exist_ok=True)
         test_skill_dir = agents_skills / "test-non-int-skill"
         test_skill_dir.mkdir(exist_ok=True)
         (test_skill_dir / "SKILL.md").write_text("# Non-interactive")
         from typer.testing import CliRunner
-        from sklm.cli.main import app
+        from skim.cli.main import app
         runner = CliRunner()
         result = runner.invoke(app, ["migrate", "skill", "test-non-int-skill"])
         assert result.exit_code == 0
@@ -1732,47 +1488,47 @@ class TestCLIIntegration:
         """_prompt_cleanup avec confirmation yes supprime les sources."""
         import sys
         from pathlib import Path
-        from sklm.models import ResourceKind, ResourceRef
-        from sklm.cli.main import _prompt_cleanup
+        from skim.models import ResourceKind, ResourceRef
+        from skim.cli.main import _prompt_cleanup
         test_dir = temp_dir / "int-yes-src"
         test_dir.mkdir()
         ref_src = [
             (ResourceRef(name="test", kind=ResourceKind.skill, origin=str(test_dir)), test_dir)
         ]
-        monkeypatch.delenv("SKLM_NO_INTERACTIVE", raising=False)
+        monkeypatch.delenv("SKIM_NO_INTERACTIVE", raising=False)
         with unittest.mock.patch.object(sys.stdout, "isatty", return_value=True), \
-             unittest.mock.patch("sklm.cli.main.typer.confirm", return_value=True):
+             unittest.mock.patch("skim.cli.main.typer.confirm", return_value=True):
             _prompt_cleanup(ref_src, force_cleanup=False, no_cleanup=False)
         assert not test_dir.exists()
 
     def test_migrate_interactive_no(self, temp_dir, monkeypatch):
         """_prompt_cleanup avec confirmation no preserve les sources."""
         import sys
-        from sklm.models import ResourceKind, ResourceRef
-        from sklm.cli.main import _prompt_cleanup
+        from skim.models import ResourceKind, ResourceRef
+        from skim.cli.main import _prompt_cleanup
         test_dir = temp_dir / "int-no-src"
         test_dir.mkdir()
         ref_src = [
             (ResourceRef(name="test", kind=ResourceKind.skill, origin=str(test_dir)), test_dir)
         ]
-        monkeypatch.delenv("SKLM_NO_INTERACTIVE", raising=False)
+        monkeypatch.delenv("SKIM_NO_INTERACTIVE", raising=False)
         with unittest.mock.patch.object(sys.stdout, "isatty", return_value=True), \
-             unittest.mock.patch("sklm.cli.main.typer.confirm", return_value=False):
+             unittest.mock.patch("skim.cli.main.typer.confirm", return_value=False):
             _prompt_cleanup(ref_src, force_cleanup=False, no_cleanup=False)
         assert test_dir.exists()
         import shutil
         shutil.rmtree(test_dir)
 
     def test_migrate_api_returns_tuples(self, temp_dir):
-        """Sklm.migrate() retourne list[tuple[ResourceRef, Path]]."""
-        from sklm.models import ResourceKind, ResourceRef
-        from sklm.api import Sklm
+        """Skim.migrate() retourne list[tuple[ResourceRef, Path]]."""
+        from skim.models import ResourceKind, ResourceRef
+        from skim.api import Skim
         agents_skills = Path.home() / ".agents" / "skills"
         agents_skills.mkdir(parents=True, exist_ok=True)
         test_skill_dir = agents_skills / "api-tuple-test"
         test_skill_dir.mkdir(exist_ok=True)
         (test_skill_dir / "SKILL.md").write_text("# API Tuple Test")
-        f = Sklm()
+        f = Skim()
         result = f.migrate(ResourceKind.skill, "api-tuple-test")
         assert len(result) == 1
         ref, src = result[0]
@@ -1784,9 +1540,9 @@ class TestCLIIntegration:
         shutil.rmtree(test_skill_dir)
 
     def test_link_unlink_not_in_cli(self, temp_dir):
-        """sklm link et unlink ne doivent PAS être des commandes accessibles."""
+        """skim link et unlink ne doivent PAS être des commandes accessibles."""
         from typer.testing import CliRunner
-        from sklm.cli.main import app
+        from skim.cli.main import app
         runner = CliRunner()
         result = runner.invoke(app, ["link", "skill", "test"], input="n\n")
         assert result.exit_code != 0
@@ -1794,10 +1550,10 @@ class TestCLIIntegration:
         assert result.exit_code != 0
 
     def test_install_api(self, temp_dir):
-        """Sklm.install() avec --from doit appeler add_resource_from_git."""
-        from sklm.api import Sklm
-        from sklm.models import ResourceKind
-        f = Sklm()
+        """Skim.install() avec --from doit appeler add_resource_from_git."""
+        from skim.api import Skim
+        from skim.models import ResourceKind
+        f = Skim()
         mock_resource = MagicMock()
         mock_resource.name = "test-skill"
         mock_resource.kind = ResourceKind.skill
@@ -1810,18 +1566,18 @@ class TestCLIIntegration:
             assert ref.origin == "https://github.com/test/repo"
 
     def test_add_from_url_calls_install(self, temp_dir):
-        """Sklm.add() avec from_url doit appeler install()."""
-        from sklm.api import Sklm
-        from sklm.models import ResourceKind
+        """Skim.add() avec from_url doit appeler install()."""
+        from skim.api import Skim
+        from skim.models import ResourceKind
         ref = MagicMock()
         ref.name = "test-skill"
         ref.kind = ResourceKind.skill
         (temp_dir / ".opencode").mkdir()
-        f = Sklm()
+        f = Skim()
         f.init_workspace(["none"])
         with unittest.mock.patch.object(f, "install") as mock_install:
             mock_install.return_value = ref
-            with unittest.mock.patch("sklm.api._link_resource") as mock_link:
+            with unittest.mock.patch("skim.api._link_resource") as mock_link:
                 mock_link.return_value = MagicMock()
                 with unittest.mock.patch.object(f, "agent_sync") as mock_sync:
                     mock_sync.return_value = {"agent": "test", "synced": True}
@@ -1832,7 +1588,7 @@ class TestCLIIntegration:
                     )
 
     def test_status_warns_external_skills(self, temp_dir):
-        """sklm status doit avertir si des skills externes sont détectés."""
+        """skim status doit avertir si des skills externes sont détectés."""
         agents_skills = Path.home() / ".agents" / "skills"
         agents_skills.mkdir(parents=True, exist_ok=True)
         test_skill_dir = agents_skills / "test-warning-skill"
@@ -1840,11 +1596,11 @@ class TestCLIIntegration:
         (test_skill_dir / "SKILL.md").write_text("# Warning Skill")
         (temp_dir / ".opencode").mkdir()
         from typer.testing import CliRunner
-        from sklm.cli.main import app
+        from skim.cli.main import app
         runner = CliRunner()
         runner.invoke(app, ["init"])
         result = runner.invoke(app, ["status"])
-        assert "outside Sklm's store" in result.output
+        assert "outside Skim's store" in result.output
         assert "migrate" in result.output
         import shutil
         shutil.rmtree(test_skill_dir)
@@ -1854,62 +1610,62 @@ class TestCLIIntegration:
 
 
 class TestUpdateChecker:
-    """Tests for sklm.core.update.UpdateChecker."""
+    """Tests for skim.core.update.UpdateChecker."""
 
     @pytest.fixture(autouse=True)
     def setup(self, monkeypatch, temp_dir):
-        cache_dir = temp_dir / ".sklm-cache"
-        monkeypatch.setattr("sklm.core.update.CACHE_DIR", cache_dir)
-        monkeypatch.setattr("sklm.core.update.CACHE_FILE", cache_dir / "update-check")
+        cache_dir = temp_dir / ".skim-cache"
+        monkeypatch.setattr("skim.core.update.CACHE_DIR", cache_dir)
+        monkeypatch.setattr("skim.core.update.CACHE_FILE", cache_dir / "update-check")
 
     def test_parse_version_strips_v_prefix(self):
-        from sklm.core.update import UpdateChecker
+        from skim.core.update import UpdateChecker
         assert UpdateChecker._parse_version("v0.2.0") == (0, 2, 0)
         assert UpdateChecker._parse_version("v1.0.0") == (1, 0, 0)
 
     def test_parse_version_no_prefix(self):
-        from sklm.core.update import UpdateChecker
+        from skim.core.update import UpdateChecker
         assert UpdateChecker._parse_version("0.2.0") == (0, 2, 0)
 
     def test_parse_version_strips_suffix(self):
-        from sklm.core.update import UpdateChecker
+        from skim.core.update import UpdateChecker
         assert UpdateChecker._parse_version("v0.2.0-alpha") == (0, 2, 0)
         assert UpdateChecker._parse_version("v0.2.0+build") == (0, 2, 0)
 
     def test_parse_version_invalid_returns_zero(self):
-        from sklm.core.update import UpdateChecker
+        from skim.core.update import UpdateChecker
         assert UpdateChecker._parse_version("invalid") == (0,)
 
     def test_is_newer_returns_true(self):
-        from sklm.core.update import UpdateChecker
+        from skim.core.update import UpdateChecker
         checker = UpdateChecker(current_version="0.1.0")
         assert checker._is_newer("v0.2.0") is True
         assert checker._is_newer("v1.0.0") is True
 
     def test_is_newer_returns_false(self):
-        from sklm.core.update import UpdateChecker
+        from skim.core.update import UpdateChecker
         checker = UpdateChecker(current_version="0.1.0")
         assert checker._is_newer("v0.1.0") is False
         assert checker._is_newer("v0.0.9") is False
 
     def test_should_check_no_cache(self, temp_dir):
-        from sklm.core.update import UpdateChecker
+        from skim.core.update import UpdateChecker
         checker = UpdateChecker()
         assert checker._should_check() is True
 
     def test_should_check_cached_recently(self, temp_dir, monkeypatch):
-        from sklm.core.update import UpdateChecker
-        cache = temp_dir / ".sklm-cache" / "update-check"
+        from skim.core.update import UpdateChecker
+        cache = temp_dir / ".skim-cache" / "update-check"
         cache.parent.mkdir(parents=True, exist_ok=True)
         cache.write_text("0")
         checker = UpdateChecker()
         assert checker._should_check() is False
 
     def test_should_check_cache_expired(self, temp_dir, monkeypatch):
-        from sklm.core.update import UpdateChecker
+        from skim.core.update import UpdateChecker
         import os
         import time
-        cache = temp_dir / ".sklm-cache" / "update-check"
+        cache = temp_dir / ".skim-cache" / "update-check"
         cache.parent.mkdir(parents=True, exist_ok=True)
         cache.write_text("0")
         old = time.time() - 90000
@@ -1918,23 +1674,23 @@ class TestUpdateChecker:
         assert checker._should_check() is True
 
     def test_update_cache_creates_file(self, temp_dir):
-        from sklm.core.update import UpdateChecker
+        from skim.core.update import UpdateChecker
         checker = UpdateChecker()
         checker._update_cache()
         assert checker.cache_path.exists()
 
     def test_check_returns_none_when_cached(self, temp_dir, monkeypatch):
-        from sklm.core.update import UpdateChecker
-        cache = temp_dir / ".sklm-cache" / "update-check"
+        from skim.core.update import UpdateChecker
+        cache = temp_dir / ".skim-cache" / "update-check"
         cache.parent.mkdir(parents=True, exist_ok=True)
         cache.write_text("9999999999")
         checker = UpdateChecker()
         assert checker.check() is None
 
     def test_check_returns_latest_when_newer(self, temp_dir, monkeypatch):
-        from sklm.core.update import UpdateChecker
+        from skim.core.update import UpdateChecker
         monkeypatch.setattr(
-            "sklm.core.update.UpdateChecker._get_latest_version_via_api",
+            "skim.core.update.UpdateChecker._get_latest_version_via_api",
             lambda self: "v0.2.0",
         )
         checker = UpdateChecker(current_version="0.1.0")
@@ -1942,18 +1698,18 @@ class TestUpdateChecker:
         assert result == "v0.2.0"
 
     def test_check_returns_none_when_same_version(self, temp_dir, monkeypatch):
-        from sklm.core.update import UpdateChecker
+        from skim.core.update import UpdateChecker
         monkeypatch.setattr(
-            "sklm.core.update.UpdateChecker._get_latest_version_via_api",
+            "skim.core.update.UpdateChecker._get_latest_version_via_api",
             lambda self: "v0.1.0",
         )
         checker = UpdateChecker(current_version="0.1.0")
         assert checker.check() is None
 
     def test_get_latest_returns_version(self, temp_dir, monkeypatch):
-        from sklm.core.update import UpdateChecker
+        from skim.core.update import UpdateChecker
         monkeypatch.setattr(
-            "sklm.core.update.UpdateChecker._get_latest_version_via_api",
+            "skim.core.update.UpdateChecker._get_latest_version_via_api",
             lambda self: "v0.2.0",
         )
         checker = UpdateChecker()
@@ -1965,41 +1721,41 @@ class TestUpdateCLI:
 
     @pytest.fixture(autouse=True)
     def setup(self, monkeypatch, temp_dir):
-        monkeypatch.setattr("sklm.store.SKLM_HOME", temp_dir / ".sklm-home")
-        monkeypatch.setattr("sklm.core.registry.REGISTRIES_PATH", temp_dir / ".sklm-home" / "registries.yaml")
-        monkeypatch.setattr("sklm.core.registry.REGISTRY_CACHE", temp_dir / ".sklm-home" / "cache")
-        monkeypatch.setattr("sklm.cli.main._sklm", None)
-        monkeypatch.setattr("sklm.core.update.CACHE_DIR", temp_dir / ".sklm-cache")
+        monkeypatch.setattr("skim.store.SKIM_HOME", temp_dir / ".skim-home")
+        monkeypatch.setattr("skim.core.registry.REGISTRIES_PATH", temp_dir / ".skim-home" / "registries.yaml")
+        monkeypatch.setattr("skim.core.registry.REGISTRY_CACHE", temp_dir / ".skim-home" / "cache")
+        monkeypatch.setattr("skim.cli.main._skim", None)
+        monkeypatch.setattr("skim.core.update.CACHE_DIR", temp_dir / ".skim-cache")
         # Patch version in both modules that import it via
-        # "from sklm import __version__" (creates local bindings).
+        # "from skim import __version__" (creates local bindings).
         # Note: TestUpdateChecker tests now inject version via constructor
         # (current_version=...), but CLI tests still need these monkeypatches
         # because the CLI command creates UpdateChecker() internally without
         # passing a version parameter.
-        monkeypatch.setattr("sklm.core.update.__version__", "0.1.0")
-        monkeypatch.setattr("sklm.cli.main.__version__", "0.1.0")
+        monkeypatch.setattr("skim.core.update.__version__", "0.1.0")
+        monkeypatch.setattr("skim.cli.main.__version__", "0.1.0")
 
     def test_update_check_no_update(self, temp_dir, monkeypatch):
-        monkeypatch.setattr("sklm.__version__", "0.1.0")
+        monkeypatch.setattr("skim.__version__", "0.1.0")
         monkeypatch.setattr(
-            "sklm.core.update.UpdateChecker._get_latest_version_via_api",
+            "skim.core.update.UpdateChecker._get_latest_version_via_api",
             lambda self: "v0.1.0",
         )
         from typer.testing import CliRunner
-        from sklm.cli.main import app
+        from skim.cli.main import app
         runner = CliRunner()
         result = runner.invoke(app, ["update", "--check"])
         assert result.exit_code == 0
         assert "up to date" in result.output.lower()
 
     def test_update_check_new_version(self, temp_dir, monkeypatch):
-        monkeypatch.setattr("sklm.__version__", "0.1.0")
+        monkeypatch.setattr("skim.__version__", "0.1.0")
         monkeypatch.setattr(
-            "sklm.core.update.UpdateChecker._get_latest_version_via_api",
+            "skim.core.update.UpdateChecker._get_latest_version_via_api",
             lambda self: "v0.2.0",
         )
         from typer.testing import CliRunner
-        from sklm.cli.main import app
+        from skim.cli.main import app
         runner = CliRunner()
         result = runner.invoke(app, ["update", "--check", "--force"])
         assert result.exit_code == 0
@@ -2008,44 +1764,44 @@ class TestUpdateCLI:
     def test_update_success(self, temp_dir, monkeypatch):
         import sys
         from unittest.mock import Mock
-        monkeypatch.setattr("sklm.__version__", "0.1.0")
+        monkeypatch.setattr("skim.__version__", "0.1.0")
         monkeypatch.setattr(
-            "sklm.core.update.UpdateChecker._get_latest_version_via_api",
+            "skim.core.update.UpdateChecker._get_latest_version_via_api",
             lambda self: "v0.2.0",
         )
         mock_run = Mock(return_value=Mock(returncode=0))
-        monkeypatch.setattr("sklm.cli.main.subprocess.run", mock_run)
+        monkeypatch.setattr("skim.cli.main.subprocess.run", mock_run)
         from typer.testing import CliRunner
-        from sklm.cli.main import app
+        from skim.cli.main import app
         runner = CliRunner()
         result = runner.invoke(app, ["update", "--force"])
         assert result.exit_code == 0, f"Failed: {result.output}"
         assert "Updated" in result.output
-        # Verify pip install -U sklm-cli was called
+        # Verify pip install -U skim was called
         mock_run.assert_called_once_with(
-            [sys.executable, "-m", "pip", "install", "-U", "sklm-cli"],
+            [sys.executable, "-m", "pip", "install", "-U", "skim"],
             capture_output=True, timeout=60,
         )
 
     def test_update_fails(self, temp_dir, monkeypatch):
         from unittest.mock import Mock
-        monkeypatch.setattr("sklm.__version__", "0.1.0")
+        monkeypatch.setattr("skim.__version__", "0.1.0")
         monkeypatch.setattr(
-            "sklm.core.update.UpdateChecker._get_latest_version_via_api",
+            "skim.core.update.UpdateChecker._get_latest_version_via_api",
             lambda self: "v0.2.0",
         )
         mock_run = Mock(return_value=Mock(returncode=1, stderr=b"error"))
-        monkeypatch.setattr("sklm.cli.main.subprocess.run", mock_run)
+        monkeypatch.setattr("skim.cli.main.subprocess.run", mock_run)
         from typer.testing import CliRunner
-        from sklm.cli.main import app
+        from skim.cli.main import app
         runner = CliRunner()
         result = runner.invoke(app, ["update", "--force"])
         assert result.exit_code == 1
         assert "Update failed" in result.output
 
-    def test_sklm_no_update_check_env(self, temp_dir, monkeypatch):
-        monkeypatch.setenv("SKLM_NO_UPDATE_CHECK", "1")
-        from sklm.cli.main import _show_update_notice
+    def test_skim_no_update_check_env(self, temp_dir, monkeypatch):
+        monkeypatch.setenv("SKIM_NO_UPDATE_CHECK", "1")
+        from skim.cli.main import _show_update_notice
         _show_update_notice()
 
 
@@ -2057,11 +1813,11 @@ class TestWizardDetectState:
 
     def test_no_store_no_workspace(self, temp_dir, monkeypatch):
         """State A: no store, no workspace."""
-        monkeypatch.setattr("sklm.store.SKLM_HOME", temp_dir / ".sklm-empty")
-        monkeypatch.setattr("sklm.cli.wizard.SKLM_HOME", temp_dir / ".sklm-empty")
-        from sklm.cli.wizard import SystemState, detect_state
-        from sklm.api import Sklm
-        f = Sklm()
+        monkeypatch.setattr("skim.store.SKIM_HOME", temp_dir / ".skim-empty")
+        monkeypatch.setattr("skim.cli.wizard.SKIM_HOME", temp_dir / ".skim-empty")
+        from skim.cli.wizard import SystemState, detect_state
+        from skim.api import Skim
+        f = Skim()
         state = detect_state(f)
         assert isinstance(state, SystemState)
         assert state.has_store is False
@@ -2072,16 +1828,16 @@ class TestWizardDetectState:
 
     def test_store_only(self, temp_dir, monkeypatch):
         """State B: store exists with skills, no workspace."""
-        sklm_home = temp_dir / ".sklm-home"
-        skills_dir = sklm_home / "store" / "skills"
+        skim_home = temp_dir / ".skim-home"
+        skills_dir = skim_home / "store" / "skills"
         skills_dir.mkdir(parents=True)
         (skills_dir / "skill-a").mkdir()
         (skills_dir / "skill-b").mkdir()
-        monkeypatch.setattr("sklm.store.SKLM_HOME", sklm_home)
-        monkeypatch.setattr("sklm.cli.wizard.SKLM_HOME", sklm_home)
-        from sklm.cli.wizard import detect_state
-        from sklm.api import Sklm
-        f = Sklm()
+        monkeypatch.setattr("skim.store.SKIM_HOME", skim_home)
+        monkeypatch.setattr("skim.cli.wizard.SKIM_HOME", skim_home)
+        from skim.cli.wizard import detect_state
+        from skim.api import Skim
+        f = Skim()
         state = detect_state(f)
         assert state.has_store is True
         assert state.has_workspace is False
@@ -2089,17 +1845,17 @@ class TestWizardDetectState:
 
     def test_store_and_workspace(self, temp_dir, monkeypatch):
         """State C: both store and workspace exist."""
-        sklm_home = temp_dir / ".sklm-home"
-        skills_dir = sklm_home / "store" / "skills"
+        skim_home = temp_dir / ".skim-home"
+        skills_dir = skim_home / "store" / "skills"
         skills_dir.mkdir(parents=True)
         (skills_dir / "skill-a").mkdir()
-        monkeypatch.setattr("sklm.store.SKLM_HOME", sklm_home)
-        monkeypatch.setattr("sklm.cli.wizard.SKLM_HOME", sklm_home)
-        from sklm.api import Sklm
-        f = Sklm()
+        monkeypatch.setattr("skim.store.SKIM_HOME", skim_home)
+        monkeypatch.setattr("skim.cli.wizard.SKIM_HOME", skim_home)
+        from skim.api import Skim
+        f = Skim()
         # Create workspace
         f.init_workspace(["opencode"])
-        from sklm.cli.wizard import detect_state
+        from skim.cli.wizard import detect_state
         state = detect_state(f)
         assert state.has_store is True
         assert state.has_workspace is True
@@ -2111,29 +1867,29 @@ class TestWizardDetectState:
         agent_dir.mkdir(parents=True)
         (agent_dir / "old-skill").mkdir()
         (agent_dir / "old-skill" / "SKILL.md").write_text("# Old")
-        monkeypatch.setattr("sklm.store.SKLM_HOME", temp_dir / ".sklm-home")
-        monkeypatch.setattr("sklm.cli.wizard.SKLM_HOME", temp_dir / ".sklm-home")
+        monkeypatch.setattr("skim.store.SKIM_HOME", temp_dir / ".skim-home")
+        monkeypatch.setattr("skim.cli.wizard.SKIM_HOME", temp_dir / ".skim-home")
         # Patch Path.home() to return temp_dir so ~/.agents resolves to temp_dir/.agents
         monkeypatch.setattr("pathlib.Path.home", lambda: temp_dir)
-        from sklm.cli.wizard import detect_state
-        from sklm.api import Sklm
-        f = Sklm()
+        from skim.cli.wizard import detect_state
+        from skim.api import Skim
+        f = Skim()
         state = detect_state(f)
         assert state.has_migration is True
 
     def test_broken_links(self, temp_dir, monkeypatch):
         """Detect broken symlinks in workspace."""
-        sklm_home = temp_dir / ".sklm-home"
-        skills_dir = sklm_home / "store" / "skills"
+        skim_home = temp_dir / ".skim-home"
+        skills_dir = skim_home / "store" / "skills"
         skills_dir.mkdir(parents=True)
         (skills_dir / "my-skill").mkdir()
-        monkeypatch.setattr("sklm.store.SKLM_HOME", sklm_home)
-        monkeypatch.setattr("sklm.cli.wizard.SKLM_HOME", sklm_home)
-        from sklm.api import Sklm
-        f = Sklm()
+        monkeypatch.setattr("skim.store.SKIM_HOME", skim_home)
+        monkeypatch.setattr("skim.cli.wizard.SKIM_HOME", skim_home)
+        from skim.api import Skim
+        f = Skim()
         f.init_workspace(["opencode"])
         # Add a link pointing to a non-existent target
-        from sklm.models import Link, ResourceKind
+        from skim.models import Link, ResourceKind
         broken_link = Link(
             name="ghost",
             kind=ResourceKind.skill,
@@ -2141,7 +1897,7 @@ class TestWizardDetectState:
             link_path=temp_dir / "nonexistent-link",
         )
         f.workspace.add_link(broken_link)
-        from sklm.cli.wizard import detect_state
+        from skim.cli.wizard import detect_state
         state = detect_state(f)
         assert state.broken_links == 1
 
@@ -2151,7 +1907,7 @@ class TestWizardBuildChoices:
 
     def test_state_a_no_migration(self):
         """State A (no store, no workspace) without migration source."""
-        from sklm.cli.wizard import SystemState, build_choices
+        from skim.cli.wizard import SystemState, build_choices
         state = SystemState()
         choices = build_choices(state)
         assert "Install a skill" in choices
@@ -2164,7 +1920,7 @@ class TestWizardBuildChoices:
 
     def test_state_a_with_migration(self):
         """State A with migration source available."""
-        from sklm.cli.wizard import SystemState, build_choices
+        from skim.cli.wizard import SystemState, build_choices
         state = SystemState(has_migration=True)
         choices = build_choices(state)
         assert "Migrate skills" in choices
@@ -2172,7 +1928,7 @@ class TestWizardBuildChoices:
 
     def test_state_b(self):
         """State B (store exists, no workspace)."""
-        from sklm.cli.wizard import SystemState, build_choices
+        from skim.cli.wizard import SystemState, build_choices
         state = SystemState(has_store=True, store_count=2)
         choices = build_choices(state)
         assert "Install a skill" in choices
@@ -2184,7 +1940,7 @@ class TestWizardBuildChoices:
 
     def test_state_c(self):
         """State C (store and workspace exist)."""
-        from sklm.cli.wizard import SystemState, build_choices
+        from skim.cli.wizard import SystemState, build_choices
         state = SystemState(has_store=True, has_workspace=True, store_count=2)
         choices = build_choices(state)
         assert "Install a skill" in choices
@@ -2197,7 +1953,7 @@ class TestWizardBuildChoices:
 
     def test_state_c_with_migration(self):
         """State C with migration source."""
-        from sklm.cli.wizard import SystemState, build_choices
+        from skim.cli.wizard import SystemState, build_choices
         state = SystemState(
             has_store=True, has_workspace=True,
             store_count=2, has_migration=True,
@@ -2211,35 +1967,35 @@ class TestWizardCheckAndRepair:
 
     def test_no_broken_links_skips_repair(self, temp_dir, monkeypatch):
         """When no links are broken, repair is not prompted."""
-        sklm_home = temp_dir / ".sklm-home"
-        skills_dir = sklm_home / "store" / "skills"
+        skim_home = temp_dir / ".skim-home"
+        skills_dir = skim_home / "store" / "skills"
         skills_dir.mkdir(parents=True)
         (skills_dir / "my-skill").mkdir()
-        monkeypatch.setattr("sklm.store.SKLM_HOME", sklm_home)
-        monkeypatch.setattr("sklm.cli.wizard.SKLM_HOME", sklm_home)
-        from sklm.api import Sklm
-        f = Sklm()
+        monkeypatch.setattr("skim.store.SKIM_HOME", skim_home)
+        monkeypatch.setattr("skim.cli.wizard.SKIM_HOME", skim_home)
+        from skim.api import Skim
+        f = Skim()
         f.init_workspace(["opencode"])
-        from sklm.cli.wizard import check_and_repair_links
+        from skim.cli.wizard import check_and_repair_links
         # No broken links -> should return silently without calling questionary
         mock_confirm = unittest.mock.MagicMock()
-        monkeypatch.setattr("sklm.cli.wizard.questionary.confirm", mock_confirm)
+        monkeypatch.setattr("skim.cli.wizard.questionary.confirm", mock_confirm)
         check_and_repair_links(f)
         mock_confirm.assert_not_called()
 
     def test_repair_declined(self, temp_dir, monkeypatch):
         """When user declines repair, links remain broken."""
-        sklm_home = temp_dir / ".sklm-home"
-        skills_dir = sklm_home / "store" / "skills"
+        skim_home = temp_dir / ".skim-home"
+        skills_dir = skim_home / "store" / "skills"
         skills_dir.mkdir(parents=True)
         (skills_dir / "my-skill").mkdir()
-        monkeypatch.setattr("sklm.store.SKLM_HOME", sklm_home)
-        monkeypatch.setattr("sklm.cli.wizard.SKLM_HOME", sklm_home)
-        from sklm.api import Sklm
-        f = Sklm()
+        monkeypatch.setattr("skim.store.SKIM_HOME", skim_home)
+        monkeypatch.setattr("skim.cli.wizard.SKIM_HOME", skim_home)
+        from skim.api import Skim
+        f = Skim()
         f.init_workspace(["opencode"])
         # Add a broken link
-        from sklm.models import Link, ResourceKind
+        from skim.models import Link, ResourceKind
         broken_link = Link(
             name="ghost",
             kind=ResourceKind.skill,
@@ -2247,17 +2003,17 @@ class TestWizardCheckAndRepair:
             link_path=temp_dir / "nonexistent-link",
         )
         f.workspace.add_link(broken_link)
-        from sklm.cli.wizard import check_and_repair_links
+        from skim.cli.wizard import check_and_repair_links
 
         # Mock questionary.confirm to return a mock with .ask() returning False
         class MockConfirm:
             def ask(self):
                 return False
-        monkeypatch.setattr("sklm.cli.wizard.questionary.confirm", lambda *a, **kw: MockConfirm())
+        monkeypatch.setattr("skim.cli.wizard.questionary.confirm", lambda *a, **kw: MockConfirm())
 
         check_and_repair_links(f)
         # Link should still be broken
-        from sklm.core.linking import detect_broken_links
+        from skim.core.linking import detect_broken_links
         broken = detect_broken_links(f.workspace)
         assert len(broken) == 1
 
@@ -2269,57 +2025,57 @@ class TestWizardTTYDetection:
         """When TTY and no args, run_wizard should be called."""
         import sys
         monkeypatch.setattr("sys.stdin.isatty", lambda: True)
-        monkeypatch.setattr("sys.argv", ["sklm"])
+        monkeypatch.setattr("sys.argv", ["skim"])
         calls = []
 
         class MockWizardModule:
             run_wizard = staticmethod(lambda: calls.append("called"))
 
-        monkeypatch.setitem(sys.modules, "sklm.cli.wizard", MockWizardModule())
-        from sklm.cli.main import run
+        monkeypatch.setitem(sys.modules, "skim.cli.wizard", MockWizardModule())
+        from skim.cli.main import run
         run()
         assert len(calls) == 1
 
     def test_help_shown_when_not_tty_and_no_args(self, monkeypatch):
         """When not TTY and no args, help should be shown."""
         monkeypatch.setattr("sys.stdin.isatty", lambda: False)
-        monkeypatch.setattr("sys.argv", ["sklm"])
+        monkeypatch.setattr("sys.argv", ["skim"])
         help_calls = []
 
         def mock_app(args):
             if args == ["--help"]:
                 help_calls.append("called")
 
-        monkeypatch.setattr("sklm.cli.main.app", mock_app)
-        from sklm.cli.main import run
+        monkeypatch.setattr("skim.cli.main.app", mock_app)
+        from skim.cli.main import run
         run()
         assert len(help_calls) == 1
 
     def test_typer_runs_when_args_present(self, monkeypatch):
         """When args are present, Typer app should run regardless of TTY."""
         monkeypatch.setattr("sys.stdin.isatty", lambda: True)
-        monkeypatch.setattr("sys.argv", ["sklm", "--version"])
+        monkeypatch.setattr("sys.argv", ["skim", "--version"])
         app_calls = []
 
         def mock_app():
             app_calls.append("called")
 
-        monkeypatch.setattr("sklm.cli.main.app", mock_app)
-        from sklm.cli.main import run
+        monkeypatch.setattr("skim.cli.main.app", mock_app)
+        from skim.cli.main import run
         run()
         assert len(app_calls) == 1
 
     def test_typer_runs_when_not_tty_with_args(self, monkeypatch):
         """When not TTY with args, Typer app should run."""
         monkeypatch.setattr("sys.stdin.isatty", lambda: False)
-        monkeypatch.setattr("sys.argv", ["sklm", "init"])
+        monkeypatch.setattr("sys.argv", ["skim", "init"])
         app_calls = []
 
         def mock_app():
             app_calls.append("called")
 
-        monkeypatch.setattr("sklm.cli.main.app", mock_app)
-        from sklm.cli.main import run
+        monkeypatch.setattr("skim.cli.main.app", mock_app)
+        from skim.cli.main import run
         run()
         assert len(app_calls) == 1
 
@@ -2332,10 +2088,10 @@ class TestWizardInstallFlow:
         class MockQ:
             def ask(self):
                 return "Back"
-        monkeypatch.setattr("sklm.cli.wizard.questionary.select", lambda *a, **kw: MockQ())
-        from sklm.cli.wizard import install_flow
-        from sklm.api import Sklm
-        f = Sklm()
+        monkeypatch.setattr("skim.cli.wizard.questionary.select", lambda *a, **kw: MockQ())
+        from skim.cli.wizard import install_flow
+        from skim.api import Skim
+        f = Skim()
         # Should not raise
         install_flow(f)
 
@@ -2359,19 +2115,19 @@ class TestWizardInstallFlow:
         mock = MockQ(responses)
 
         monkeypatch.setattr(
-            "sklm.cli.wizard.questionary.select",
+            "skim.cli.wizard.questionary.select",
             lambda *a, **kw: MockQ(responses),
         )
         monkeypatch.setattr(
-            "sklm.cli.wizard.questionary.path",
+            "skim.cli.wizard.questionary.path",
             lambda *a, **kw: MockQ(iter([str(skill_dir)])),
         )
-        from sklm.cli.wizard import install_flow
-        from sklm.api import Sklm
-        f = Sklm()
+        from skim.cli.wizard import install_flow
+        from skim.api import Skim
+        f = Skim()
         install_flow(f)
         # Skill should be in global store
-        from sklm.models import ResourceKind
+        from skim.models import ResourceKind
         resources = f.global_ls(ResourceKind.skill)
         names = [r.name for r in resources]
         assert "my-test-skill" in names
@@ -2384,9 +2140,9 @@ class TestWizardInitWorkspace:
         """When agents are detected, they should be pre-checked."""
         # Create an agent directory to trigger detection
         (temp_dir / ".opencode").mkdir()
-        monkeypatch.setattr("sklm.store.SKLM_HOME", temp_dir / ".sklm-home")
-        monkeypatch.setattr("sklm.cli.wizard.SKLM_HOME", temp_dir / ".sklm-home")
-        monkeypatch.setattr("sklm.cli.wizard.AgentRegistry.detect", lambda self, root: ["opencode"])
+        monkeypatch.setattr("skim.store.SKIM_HOME", temp_dir / ".skim-home")
+        monkeypatch.setattr("skim.cli.wizard.SKIM_HOME", temp_dir / ".skim-home")
+        monkeypatch.setattr("skim.cli.wizard.AgentRegistry.detect", lambda self, root: ["opencode"])
 
         class MockCheckbox:
             def ask(self):
@@ -2396,17 +2152,17 @@ class TestWizardInitWorkspace:
                 return False
 
         monkeypatch.setattr(
-            "sklm.cli.wizard.questionary.checkbox",
+            "skim.cli.wizard.questionary.checkbox",
             lambda *a, **kw: MockCheckbox(),
         )
         monkeypatch.setattr(
-            "sklm.cli.wizard.questionary.confirm",
+            "skim.cli.wizard.questionary.confirm",
             lambda *a, **kw: MockConfirm(),
         )
 
-        from sklm.cli.wizard import init_workspace_flow
-        from sklm.api import Sklm
-        f = Sklm()
+        from skim.cli.wizard import init_workspace_flow
+        from skim.api import Skim
+        f = Skim()
         init_workspace_flow(f)
 
         assert f.workspace.exists()
@@ -2415,15 +2171,15 @@ class TestWizardInitWorkspace:
 
     def test_init_workspace_no_agents_detected(self, temp_dir, monkeypatch):
         """When no agents are detected, show full list."""
-        monkeypatch.setattr("sklm.store.SKLM_HOME", temp_dir / ".sklm-home")
-        monkeypatch.setattr("sklm.cli.wizard.SKLM_HOME", temp_dir / ".sklm-home")
+        monkeypatch.setattr("skim.store.SKIM_HOME", temp_dir / ".skim-home")
+        monkeypatch.setattr("skim.cli.wizard.SKIM_HOME", temp_dir / ".skim-home")
         # No agent dirs exist -> detection returns empty
         monkeypatch.setattr(
-            "sklm.cli.wizard.AgentRegistry.detect",
+            "skim.cli.wizard.AgentRegistry.detect",
             lambda self, root: [],
         )
         monkeypatch.setattr(
-            "sklm.cli.wizard.AgentRegistry.get_agent_ids",
+            "skim.cli.wizard.AgentRegistry.get_agent_ids",
             lambda self: ["opencode", "claude", "cursor"],
         )
 
@@ -2435,17 +2191,17 @@ class TestWizardInitWorkspace:
                 return False
 
         monkeypatch.setattr(
-            "sklm.cli.wizard.questionary.checkbox",
+            "skim.cli.wizard.questionary.checkbox",
             lambda *a, **kw: MockCheckbox(),
         )
         monkeypatch.setattr(
-            "sklm.cli.wizard.questionary.confirm",
+            "skim.cli.wizard.questionary.confirm",
             lambda *a, **kw: MockConfirm(),
         )
 
-        from sklm.cli.wizard import init_workspace_flow
-        from sklm.api import Sklm
-        f = Sklm()
+        from skim.cli.wizard import init_workspace_flow
+        from skim.api import Skim
+        f = Skim()
         init_workspace_flow(f)
 
         assert f.workspace.exists()

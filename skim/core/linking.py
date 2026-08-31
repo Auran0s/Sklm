@@ -6,9 +6,9 @@ import os
 from pathlib import Path
 from typing import Optional
 
-from sklm.models import Link, ResourceKind
-from sklm.store import GlobalStore
-from sklm.core.workspace import Workspace
+from skim.models import Link, ResourceKind
+from skim.store import GlobalStore
+from skim.core.workspace import Workspace
 
 
 def link_resource(

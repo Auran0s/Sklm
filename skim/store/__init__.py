@@ -1,4 +1,4 @@
-"""Global store — manages ~/.sklm/ directory."""
+"""Global store — manages ~/.skim/ directory."""
 
 from __future__ import annotations
 
@@ -12,14 +12,14 @@ from typing import Optional
 import yaml
 from rich.console import Console
 
-from sklm.models import GlobalConfig, Resource, ResourceKind, SourceMetadata, TelemetryConfig
+from skim.models import GlobalConfig, Resource, ResourceKind, SourceMetadata
 
 
 console = Console()
 
 
-SKLM_HOME = Path.home() / ".sklm"
-SOURCE_META_FILENAME = ".sklm-source.yaml"
+SKIM_HOME = Path.home() / ".skim"
+SOURCE_META_FILENAME = ".skim-source.yaml"
 
 
 def url_to_repo_slug(url: str) -> str:
@@ -48,10 +48,10 @@ def url_to_repo_slug(url: str) -> str:
 
 
 class GlobalStore:
-    """Manages the global Sklm store at ~/.sklm/."""
+    """Manages the global Skim store at ~/.skim/."""
 
     def __init__(self) -> None:
-        self.root = SKLM_HOME
+        self.root = SKIM_HOME
         self.store_dir = self.root / "store"
         self.skills_dir = self.store_dir / "skills"
         self.config_path = self.root / "config.yaml"
@@ -121,7 +121,7 @@ class GlobalStore:
         subdir: Optional[str] = None,
         ref: str = "HEAD",
     ) -> Resource:
-        from sklm.core.registry import RegistryManager
+        from skim.core.registry import RegistryManager
 
         registry = RegistryManager()
         repo_slug = url_to_repo_slug(repo_url)
@@ -157,7 +157,7 @@ class GlobalStore:
                             candidate = Path(dirpath) / name
                             if (candidate / "SKILL.md").exists():
                                 src = candidate
-                                resolved_subdir = str(src.relative_to(cache_path))
+                                resolved_subdir = src.relative_to(cache_path).as_posix()
                                 break
 
         if not src.exists() or not src.is_dir():
@@ -240,29 +240,3 @@ class GlobalStore:
     def get_resource(self, kind: ResourceKind, name: str) -> Optional[Resource]:
         config = self._load_config()
         return config.resources.get(f"{kind.value}:{name}")
-
-    def get_telemetry_config(self) -> TelemetryConfig:
-        config = self._load_config()
-        cfg = config.telemetry
-
-        if "SKLM_TELEMETRY" in os.environ:
-            enabled = os.environ["SKLM_TELEMETRY"] not in (
-                "0",
-                "false",
-                "no",
-                "off",
-                "",
-            )
-        else:
-            enabled = cfg.enabled
-
-        return TelemetryConfig(
-            enabled=enabled,
-            umami_url=os.environ.get("SKLM_UMAMI_URL") or cfg.umami_url,
-            website_id=os.environ.get("SKLM_WEBSITE_ID") or cfg.website_id,
-        )
-
-    def set_telemetry_config(self, cfg: TelemetryConfig) -> None:
-        config = self._load_config()
-        config.telemetry = cfg
-        self._save_config(config)

@@ -9,15 +9,15 @@ from typing import Optional
 
 import yaml
 
-from sklm.models import RegistrySource, RegistryType, Resource, ResourceKind
+from skim.models import RegistrySource, RegistryType, Resource, ResourceKind
 
 
 # Filesystem-safe pattern: only allow alphanumeric, hyphens, underscores
 _SAFE_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
 
 
-REGISTRIES_PATH = Path.home() / ".sklm" / "registries.yaml"
-REGISTRY_CACHE = Path.home() / ".sklm" / "cache"
+REGISTRIES_PATH = Path.home() / ".skim" / "registries.yaml"
+REGISTRY_CACHE = Path.home() / ".skim" / "cache"
 
 
 class RegistryManager:

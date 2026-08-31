@@ -1,4 +1,4 @@
-"""Pydantic data models for Sklm."""
+"""Pydantic data models for Skim."""
 
 from __future__ import annotations
 
@@ -140,23 +140,10 @@ class SourceMetadata(BaseModel):
     ref: str = "HEAD"
 
 
-class TelemetryConfig(BaseModel):
-    enabled: bool = Field(default=True, description="Enable telemetry")
-    umami_url: str = Field(
-        default="",
-        description="Umami instance URL (set via SKLM_UMAMI_URL env var)",
-    )
-    website_id: str = Field(
-        default="",
-        description="Umami website UUID (set via SKLM_WEBSITE_ID env var)",
-    )
-
-
 class GlobalConfig(BaseModel):
     version: int = Field(default=1)
     registries: dict[str, RegistrySource] = Field(default_factory=dict)
     resources: dict[str, Resource] = Field(default_factory=dict)
-    telemetry: TelemetryConfig = Field(default_factory=TelemetryConfig)
 
     @classmethod
     def from_yaml(cls, path: Path) -> "GlobalConfig":

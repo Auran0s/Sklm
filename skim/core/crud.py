@@ -7,10 +7,17 @@ from typing import Optional
 
 from rich.console import Console
 
-from sklm.models import ResourceKind, ResourceRef
-from sklm.core.workspace import Workspace
-from sklm.core.registry import RegistryManager
-from sklm.store import GlobalStore
+from skim.models import ResourceKind, ResourceRef
+from skim.core.workspace import Workspace
+from skim.core.registry import RegistryManager
+from skim.store import GlobalStore
+
+
+def _is_windows_path(name: str) -> bool:
+    """True if ``name`` looks like an absolute Windows path (e.g. ``C:\\...``)."""
+    if len(name) < 3:
+        return False
+    return name[0].isalpha() and name[1] == ":" and name[2] in ("\\", "/")
 
 
 console = Console()
@@ -37,7 +44,7 @@ def remove_resource_from_workspace(
     if not ref:
         raise KeyError(f"Resource '{kind.value}:{name}' not found in workspace")
     if ref.linked:
-        from sklm.core.linking import unlink_resource
+        from skim.core.linking import unlink_resource
         unlink_resource(workspace, kind, name)
     return workspace.remove_resource(kind, name)
 
@@ -75,7 +82,7 @@ def _resolve_resource(
     kind: ResourceKind,
     name: str,
 ) -> ResourceRef:
-    if ":" in name:
+    if ":" in name and not _is_windows_path(name):
         registry_name, resource_name = name.split(":", 1)
         results = registry_manager.search(resource_name, registry_filter=registry_name, type_filter=kind)
         if results:

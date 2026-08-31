@@ -1,4 +1,4 @@
-"""Interactive wizard for Sklm — state detection and contextual menus."""
+"""Interactive wizard for Skim — state detection and contextual menus."""
 
 from __future__ import annotations
 
@@ -11,13 +11,13 @@ import questionary
 from rich.console import Console
 from rich.table import Table
 
-from sklm.api import Sklm
+from skim.api import Skim
 
 _BACK_CHOICE = questionary.Choice(title="← Back", value="Back")
-from sklm.models import ResourceKind
-from sklm.agents.registry import AgentRegistry
-from sklm.core.linking import detect_broken_links, link_resource as _do_link
-from sklm.store import SKLM_HOME
+from skim.models import ResourceKind
+from skim.agents.registry import AgentRegistry
+from skim.core.linking import detect_broken_links, link_resource as _do_link
+from skim.store import SKIM_HOME
 
 
 console = Console()
@@ -38,12 +38,12 @@ class SystemState:
     agents: list[str] = field(default_factory=list)
 
 
-def detect_state(f: Sklm) -> SystemState:
+def detect_state(f: Skim) -> SystemState:
     """Detect the current system state by probing filesystem and config."""
     state = SystemState()
 
     # Store detection
-    skills_dir = SKLM_HOME / "store" / "skills"
+    skills_dir = SKIM_HOME / "store" / "skills"
     if skills_dir.is_dir():
         entries = [d for d in skills_dir.iterdir() if d.is_dir()]
         state.has_store = len(entries) > 0
@@ -80,7 +80,7 @@ def detect_state(f: Sklm) -> SystemState:
 def show_header(state: SystemState) -> None:
     """Display a context banner with the current system state."""
     console.print()
-    console.print("[bold]Sklm — Skills manager for AI agents[/]")
+    console.print("[bold]Skim — Skills manager for AI agents[/]")
     console.print()
 
     parts: list[str] = []
@@ -140,7 +140,7 @@ def build_choices(state: SystemState) -> list[str]:
 # ─── Check & Repair Links ─────────────────────────────────────────────────
 
 
-def check_and_repair_links(f: Sklm) -> None:
+def check_and_repair_links(f: Skim) -> None:
     """Check for broken workspace links and offer to repair them."""
     broken = detect_broken_links(f.workspace)
     if not broken:
@@ -179,7 +179,7 @@ def check_and_repair_links(f: Sklm) -> None:
 # ─── Install Flow ─────────────────────────────────────────────────────────
 
 
-def install_flow(f: Sklm) -> None:
+def install_flow(f: Skim) -> None:
     """Guide the user through installing a skill."""
     try:
         source = questionary.select(
@@ -341,7 +341,7 @@ def install_flow(f: Sklm) -> None:
 # ─── Init Workspace Flow ──────────────────────────────────────────────────
 
 
-def init_workspace_flow(f: Sklm) -> None:
+def init_workspace_flow(f: Skim) -> None:
     """Initialize a workspace with agent selection."""
     try:
         registry = AgentRegistry()
@@ -398,7 +398,7 @@ def init_workspace_flow(f: Sklm) -> None:
 # ─── Add to Workspace Flow ────────────────────────────────────────────────
 
 
-def add_to_workspace_flow(f: Sklm) -> None:
+def add_to_workspace_flow(f: Skim) -> None:
     """Select globally installed skills via checkbox and add them to the workspace."""
     if not f.workspace.exists():
         console.print("[yellow]⚠ No workspace found. Initialize one first.[/]")
@@ -455,7 +455,7 @@ def add_to_workspace_flow(f: Sklm) -> None:
 # ─── List Skills Flow ─────────────────────────────────────────────────────
 
 
-def list_skills_flow(f: Sklm) -> None:
+def list_skills_flow(f: Skim) -> None:
     """Display skills from global store and/or workspace."""
     store_skills = f.global_ls(ResourceKind.skill)
     ws_skills = []
@@ -492,7 +492,7 @@ def list_skills_flow(f: Sklm) -> None:
 # ─── Remove Skill Flow ────────────────────────────────────────────────────
 
 
-def remove_skill_flow(f: Sklm) -> None:
+def remove_skill_flow(f: Skim) -> None:
     """Remove a skill from workspace or global store."""
     try:
         scope = questionary.select(
@@ -563,7 +563,7 @@ def remove_skill_flow(f: Sklm) -> None:
 # ─── Migrate Flow ─────────────────────────────────────────────────────────
 
 
-def migrate_flow(f: Sklm) -> None:
+def migrate_flow(f: Skim) -> None:
     """Migrate skills from ~/.agents/skills/ into the global store."""
     kind = ResourceKind.skill
     try:
@@ -602,7 +602,7 @@ def migrate_flow(f: Sklm) -> None:
 # ─── Settings Sub-Menu ────────────────────────────────────────────────────
 
 
-def settings_menu(f: Sklm) -> None:
+def settings_menu(f: Skim) -> None:
     """Display the settings sub-menu."""
     while True:
         try:
@@ -610,7 +610,6 @@ def settings_menu(f: Sklm) -> None:
                 "Settings:",
                 choices=[
                     "Manage agents",
-                    "Toggle telemetry",
                     "Check for updates",
                     "Manage registries",
                     _BACK_CHOICE,
@@ -623,52 +622,34 @@ def settings_menu(f: Sklm) -> None:
             return
         elif choice == "Manage agents":
             agents_menu(f)
-        elif choice == "Toggle telemetry":
-            _toggle_telemetry(f)
         elif choice == "Check for updates":
             _check_updates()
         elif choice == "Manage registries":
             registries_menu(f)
 
 
-def _toggle_telemetry(f: Sklm) -> None:
-    """Toggle telemetry on or off."""
-    from sklm.store import GlobalStore
-
-    store = GlobalStore()
-    cfg = store.get_telemetry_config()
-    if cfg.enabled:
-        cfg.enabled = False
-        store.set_telemetry_config(cfg)
-        console.print("[yellow]⚠ Telemetry disabled[/]")
-    else:
-        cfg.enabled = True
-        store.set_telemetry_config(cfg)
-        console.print("[green]✓ Telemetry enabled[/]")
-
-
 def _check_updates() -> None:
-    """Check for sklm updates."""
-    from sklm.core.update import UpdateChecker
-    from sklm import __version__
+    """Check for skim updates."""
+    from skim.core.update import UpdateChecker
+    from skim import __version__
 
     checker = UpdateChecker()
     console.print("[dim]Checking for updates...[/]")
     latest = checker.check()
     if latest is None:
-        console.print(f"[green]✓[/] sklm is up to date (v{__version__})")
+        console.print(f"[green]✓[/] skim is up to date (v{__version__})")
     else:
         console.print(
-            f"[yellow]⚠[/] sklm [bold]v{latest}[/] available "
+            f"[yellow]⚠[/] skim [bold]v{latest}[/] available "
             f"(current: v{__version__})"
         )
-        console.print("   Run [bold]sklm update[/] to upgrade.")
+        console.print("   Run [bold]skim update[/] to upgrade.")
 
 
 # ─── Agents Sub-Menu ──────────────────────────────────────────────────────
 
 
-def agents_menu(f: Sklm) -> None:
+def agents_menu(f: Skim) -> None:
     """Display the agents management sub-menu."""
     while True:
         try:
@@ -700,7 +681,7 @@ def agents_menu(f: Sklm) -> None:
             _sync_skills(f)
 
 
-def _list_agents(f: Sklm) -> None:
+def _list_agents(f: Skim) -> None:
     agents = f.list_agents()
     if not agents:
         console.print("[yellow]No agents configured.[/]")
@@ -718,7 +699,7 @@ def _list_agents(f: Sklm) -> None:
     console.print(table)
 
 
-def _add_agent(f: Sklm) -> None:
+def _add_agent(f: Skim) -> None:
     if not f.workspace.exists():
         console.print("[yellow]No workspace found. Initialize one first.[/]")
         return
@@ -743,7 +724,7 @@ def _add_agent(f: Sklm) -> None:
         console.print(f"[red]✗[/] {e}")
 
 
-def _remove_agent(f: Sklm) -> None:
+def _remove_agent(f: Skim) -> None:
     if not f.workspace.exists():
         console.print("[yellow]No workspace found.[/]")
         return
@@ -767,7 +748,7 @@ def _remove_agent(f: Sklm) -> None:
         console.print(f"[red]✗[/] {e}")
 
 
-def _detect_agents(f: Sklm) -> None:
+def _detect_agents(f: Skim) -> None:
     detected = f.agent_detect()
     if detected:
         console.print(f"[green]✓[/] Detected: [bold]{detected}[/]")
@@ -775,7 +756,7 @@ def _detect_agents(f: Sklm) -> None:
         console.print("[yellow]No supported agent detected.[/]")
 
 
-def _sync_skills(f: Sklm) -> None:
+def _sync_skills(f: Skim) -> None:
     try:
         result = f.agent_sync()
         agents_str = ", ".join(result.get("agents", []))
@@ -787,7 +768,7 @@ def _sync_skills(f: Sklm) -> None:
 # ─── Registries Sub-Menu ──────────────────────────────────────────────────
 
 
-def registries_menu(f: Sklm) -> None:
+def registries_menu(f: Skim) -> None:
     """Display the registries management sub-menu."""
     while True:
         try:
@@ -813,7 +794,7 @@ def registries_menu(f: Sklm) -> None:
             _search_registries(f)
 
 
-def _list_registries(f: Sklm) -> None:
+def _list_registries(f: Skim) -> None:
     sources = f.registry_ls()
     if not sources:
         console.print("[yellow]No registries configured.[/]")
@@ -827,7 +808,7 @@ def _list_registries(f: Sklm) -> None:
     console.print(table)
 
 
-def _add_registry(f: Sklm) -> None:
+def _add_registry(f: Skim) -> None:
     try:
         url_or_path = questionary.text(
             "Registry path or URL:",
@@ -848,7 +829,7 @@ def _add_registry(f: Sklm) -> None:
         console.print(f"[red]✗[/] Failed to add registry: {e}")
 
 
-def _search_registries(f: Sklm) -> None:
+def _search_registries(f: Skim) -> None:
     try:
         query = questionary.text(
             "Enter search keyword:",
@@ -882,7 +863,7 @@ def _search_registries(f: Sklm) -> None:
 
 def run_wizard() -> None:
     """Entry point for the interactive wizard."""
-    f = Sklm()
+    f = Skim()
 
     try:
         state = detect_state(f)
