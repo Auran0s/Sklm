@@ -138,6 +138,58 @@ class TestGlobalConfig:
         assert loaded.type == RegistryType.local
 
 
+class TestRegistryNameValidation:
+    """registry_add dérive des noms valides ; _load_sources ignore les entrées cassées."""
+
+    def test_derive_registry_name_dot_path_not_empty(self, temp_dir):
+        """Un chemin '.' DOIT dériver un nom non vide (jamais '')."""
+        from sklm.core.registry import _SAFE_NAME_RE, derive_registry_name
+        name = derive_registry_name(Path("."), is_git=False)
+        assert name
+        assert not name.startswith(".")
+        assert _SAFE_NAME_RE.match(name)
+
+    def test_derive_registry_name_dot_prefixed(self):
+        """Un préfixe point ('.agents') DOIT être retiré du nom dérivé."""
+        from sklm.core.registry import derive_registry_name
+        name = derive_registry_name(Path("~/.agents"), is_git=False)
+        assert name == "agents"
+
+    def test_registry_add_dot_derives_valid_name(self, temp_dir, monkeypatch):
+        """registry_add('.') DOIT sauver un nom valide (non vide) plutôt que ''."""
+        from sklm.api import Sklm
+        monkeypatch.setattr("sklm.store.SKLM_HOME", temp_dir / ".sklm-home")
+        monkeypatch.setattr("sklm.core.registry.REGISTRIES_PATH", temp_dir / ".sklm-home" / "registries.yaml")
+        monkeypatch.setattr("sklm.core.registry.REGISTRY_CACHE", temp_dir / ".sklm-home" / "cache")
+        f = Sklm(project_root=temp_dir)
+        src = f.registry_add(".")
+        assert src.name
+        assert not src.name.startswith(".")
+
+    def test_load_sources_skips_malformed_row(self, temp_dir, monkeypatch):
+        """Une ligne invalide ('.agents') DOIT être ignorée sans casser le chargement."""
+        from sklm.core.registry import RegistryManager
+        reg_path = temp_dir / ".sklm-home" / "registries.yaml"
+        reg_path.parent.mkdir(parents=True, exist_ok=True)
+        reg_path.write_text("\n".join([
+            "registries:",
+            "  good-reg:",
+            "    name: good-reg",
+            "    type: local",
+            "    url_or_path: /tmp/good",
+            "  .agents:",
+            "    name: .agents",
+            "    type: local",
+            "    url_or_path: ~/.agents",
+        ]))
+        monkeypatch.setattr("sklm.core.registry.REGISTRIES_PATH", reg_path)
+        monkeypatch.setattr("sklm.core.registry.REGISTRY_CACHE", temp_dir / ".sklm-home" / "cache")
+        mgr = RegistryManager()
+        sources = mgr.list_sources()
+        assert "good-reg" in sources
+        assert ".agents" not in sources
+
+
 # ─── Store Layer ─────────────────────────────────────────────────────────────
 
 
@@ -242,6 +294,58 @@ class TestNestedSkillResolution:
         meta = isolated_store.get_source_metadata(ResourceKind.skill, "entity-seo")
         assert meta is not None
         assert meta.source_subdir == "skills/seo/entity-seo"
+
+    def test_subdir_leading_slash_normalized(self, isolated_store, temp_dir):
+        """Un subdir avec slash au début DOIT être normalisé et résolu."""
+        from sklm.models import ResourceKind
+
+        cache_dir = isolated_store.cache_dir / "test-subdir-slash"
+        self._make_repo(cache_dir, {
+            "skills/my-skill": "# My Skill",
+        })
+        with unittest.mock.patch("sklm.core.registry.RegistryManager") as MockReg:
+            MockReg.return_value.clone_or_fetch.return_value = cache_dir
+            resource = isolated_store.add_resource_from_git(
+                ResourceKind.skill, "my-skill", "https://github.com/test/repo",
+                subdir="/skills/my-skill",
+            )
+        assert resource.name == "my-skill"
+        assert (resource.path / "SKILL.md").read_text() == "# My Skill"
+        meta = isolated_store.get_source_metadata(ResourceKind.skill, "my-skill")
+        assert meta is not None
+        assert meta.source_subdir == "skills/my-skill"
+
+    def test_name_path_derives_basename_and_subdir(self, isolated_store, temp_dir):
+        """Un nom de type chemin DOIT produire basename (id) + chemin complet (subdir)."""
+        from sklm.models import ResourceKind
+
+        cache_dir = isolated_store.cache_dir / "test-name-path"
+        self._make_repo(cache_dir, {
+            "skills/my-skill": "# My Skill",
+        })
+        with unittest.mock.patch("sklm.core.registry.RegistryManager") as MockReg:
+            MockReg.return_value.clone_or_fetch.return_value = cache_dir
+            resource = isolated_store.add_resource_from_git(
+                ResourceKind.skill, "skills/my-skill", "https://github.com/test/repo"
+            )
+        assert resource.name == "my-skill"
+        assert resource.path.exists()
+        assert (resource.path / "SKILL.md").read_text() == "# My Skill"
+        meta = isolated_store.get_source_metadata(ResourceKind.skill, "my-skill")
+        assert meta is not None
+        assert meta.source_subdir == "skills/my-skill"
+
+    def test_invalid_name_fails_fast_without_cloning(self, isolated_store):
+        """Un nom invalide DOIT lever ValueError sans jamais cloner."""
+        from sklm.models import ResourceKind
+
+        with unittest.mock.patch("sklm.core.registry.RegistryManager") as MockReg:
+            with pytest.raises(ValueError) as exc:
+                isolated_store.add_resource_from_git(
+                    ResourceKind.skill, "foo bar", "https://github.com/test/repo"
+                )
+        assert "kebab-case" in str(exc.value)
+        MockReg.assert_not_called()
 
 
 class TestInstallFromGit:

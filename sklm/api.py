@@ -10,7 +10,7 @@ from rich.console import Console
 from sklm.models import Link, ResourceKind, ResourceRef
 from sklm.store import GlobalStore
 from sklm.core.workspace import Workspace
-from sklm.core.registry import RegistryManager, RegistrySource
+from sklm.core.registry import RegistryManager, RegistrySource, derive_registry_name
 from sklm.core.crud import (
     add_resource_to_workspace,
     remove_resource_from_workspace,
@@ -259,7 +259,7 @@ class Sklm:
     def registry_add(self, url_or_path: str, name: Optional[str] = None) -> RegistrySource:
         path = Path(url_or_path)
         is_git = path.suffix == ".git" or "github.com" in url_or_path
-        source_name = name or path.name.replace(".git", "")
+        source_name = name or derive_registry_name(path, is_git)
         src = RegistrySource(
             name=source_name,
             type="git" if is_git else "local",

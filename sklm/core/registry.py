@@ -8,12 +8,29 @@ from pathlib import Path
 from typing import Optional
 
 import yaml
+from pydantic import ValidationError
 
 from sklm.models import RegistrySource, RegistryType, Resource, ResourceKind
 
 
 # Filesystem-safe pattern: only allow alphanumeric, hyphens, underscores
 _SAFE_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
+
+
+def derive_registry_name(path: Path, is_git: bool) -> str:
+    """Derive a valid kebab-case registry name from a source path or URL.
+
+    Falls back to the resolved directory name when ``path.name`` is empty
+    (e.g. ``.``), strips leading dots (e.g. ``.agents``), and sanitizes any
+    remaining non-safe characters to hyphens so the result always passes the
+    ``RegistrySource`` validator.
+    """
+    base = path.name.replace(".git", "") if is_git else path.name
+    if not base:
+        base = path.resolve().name
+    base = base.lstrip(".")
+    name = re.sub(r"[^a-zA-Z0-9_-]+", "-", base).strip("-")
+    return name or "registry"
 
 
 REGISTRIES_PATH = Path.home() / ".sklm" / "registries.yaml"
@@ -35,7 +52,13 @@ class RegistryManager:
             data = yaml.safe_load(f)
         if not data or "registries" not in data:
             return {}
-        return {name: RegistrySource(**src) for name, src in data["registries"].items()}
+        sources: dict[str, RegistrySource] = {}
+        for name, src in data["registries"].items():
+            try:
+                sources[name] = RegistrySource(**src)
+            except ValidationError:
+                continue
+        return sources
 
     def _save_sources(self, sources: dict[str, RegistrySource]) -> None:
         data = {"registries": {name: src.model_dump(mode="json") for name, src in sources.items()}}

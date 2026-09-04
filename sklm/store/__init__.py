@@ -123,6 +123,19 @@ class GlobalStore:
     ) -> Resource:
         from sklm.core.registry import RegistryManager
 
+        # A path-style name (containing a separator) is a repo-relative path:
+        # the basename becomes the resource identifier and the full path becomes
+        # the source subdir (unless an explicit subdir was provided).
+        if "/" in name or "\\" in name:
+            subdir = subdir or name
+            name = Path(name).name
+        # A leading slash would make `cache_path / subdir` absolute and discard
+        # the cache path entirely (e.g. `/skills/x` -> Path("/skills/x")).
+        if subdir:
+            subdir = subdir.lstrip("/")
+        if not name.replace("-", "").isalnum():
+            raise ValueError(f"Invalid skill name '{name}': must be kebab-case")
+
         registry = RegistryManager()
         repo_slug = url_to_repo_slug(repo_url)
         console.print(f"[dim]Cloning from {repo_url}...[/]")
