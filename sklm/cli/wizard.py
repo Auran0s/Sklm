@@ -16,6 +16,7 @@ from sklm.api import Sklm
 _BACK_CHOICE = questionary.Choice(title="← Back", value="Back")
 from sklm.models import ResourceKind
 from sklm.agents.registry import AgentRegistry
+from sklm.cli.prompts import prompt_discovered_selection
 from sklm.core.linking import detect_broken_links, link_resource as _do_link
 from sklm.store import SKLM_HOME
 
@@ -205,33 +206,81 @@ def install_flow(f: Sklm) -> None:
 
     if source == "Git URL":
         try:
-            url = questionary.text(
-                "Git repository URL:",
+            raw = questionary.text(
+                "Source (owner/repo, Git URL, or local path):",
                 validate=lambda v: len(v.strip()) > 0,
             ).ask()
-            if not url:
-                return
-            name = questionary.text(
-                "Skill name:",
-                validate=lambda v: len(v.strip()) > 0,
-            ).ask()
-            if not name:
+            if not raw:
                 return
             subdir = questionary.text(
-                "Subdirectory (optional):",
+                "Subdirectory (optional, press Enter to skip):",
                 default="",
             ).ask()
-            from_url = url.strip()
-            subdir = subdir.strip() or None
         except KeyboardInterrupt:
             return
 
+        source_value = raw.strip()
+        subdir = (subdir or "").strip() or None
+
         try:
-            ref = f.install(kind, name, from_url=from_url, subdir=subdir)
-            console.print(f"[green]✓[/] Installed [bold]{ref.name}[/] from Git")
+            resolved = f.resolve_source(source_value, subdir=subdir)
         except Exception as e:
-            console.print(f"[red]✗[/] Failed to install from Git: {e}")
+            console.print(f"[red]✗[/] Failed to resolve source: {e}")
             return
+
+        if not resolved.skills:
+            console.print("[yellow]No skills found in this source.[/]")
+            return
+
+        chosen = prompt_discovered_selection(resolved.skills)
+        if not chosen:
+            return
+
+        try:
+            refs = f.install_source(source_value, skills=chosen, subdir=subdir)
+        except Exception as e:
+            console.print(f"[red]✗[/] Failed to install from source: {e}")
+            return
+
+        for ref in refs:
+            console.print(f"[green]✓[/] Installed [bold]{ref.name}[/]")
+
+        # Destination choice
+        try:
+            dest = questionary.select(
+                "Destination:",
+                choices=["Global store only", "Global store + workspace", _BACK_CHOICE],
+            ).ask()
+        except KeyboardInterrupt:
+            return
+
+        if dest == "Global store + workspace":
+            if not f.workspace.exists():
+                console.print("[yellow]No workspace found. Initializing one first...[/]")
+                init_workspace_flow(f)
+
+            if f.workspace.exists():
+                for ref in refs:
+                    try:
+                        if not f.workspace.get_resource(ResourceKind.skill, ref.name):
+                            f.workspace.add_resource(ref)
+                        _do_link(f.workspace, f.global_store, ResourceKind.skill, ref.name)
+                        console.print(f"[green]✓[/] Added [bold]{ref.name}[/] to workspace")
+                    except Exception as e:
+                        console.print(
+                            f"[yellow]⚠[/] Installed globally but could not add "
+                            f"[bold]{ref.name}[/] to workspace: {e}"
+                        )
+                try:
+                    f.agent_sync()
+                except RuntimeError:
+                    pass
+            else:
+                console.print("[dim]Skills installed globally only.[/]")
+
+        elif dest == "Global store only":
+            console.print("[dim]Skills installed globally.[/]")
+        return
 
     elif source == "Search registries":
         try:
@@ -327,7 +376,7 @@ def install_flow(f: Sklm) -> None:
 
         if f.workspace.exists():
             try:
-                ref = f.add(kind, name, from_url=from_url, subdir=subdir)
+                ref = f.add(kind, name)
                 console.print(f"[green]✓[/] Added [bold]{ref.name}[/] to workspace")
             except Exception as e:
                 console.print(f"[yellow]⚠[/] Installed globally but could not add to workspace: {e}")

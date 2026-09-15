@@ -15,6 +15,11 @@ from sklm.models import RegistrySource, RegistryType, Resource, ResourceKind
 # Filesystem-safe pattern: only allow alphanumeric, hyphens, underscores
 _SAFE_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
 
+_GIT_MISSING_MESSAGE = (
+    "git is required for this operation but no 'git' executable was found on "
+    "PATH. Install git from https://git-scm.com/downloads and try again."
+)
+
 
 REGISTRIES_PATH = Path.home() / ".sklm" / "registries.yaml"
 REGISTRY_CACHE = Path.home() / ".sklm" / "cache"
@@ -88,16 +93,21 @@ class RegistryManager:
                 raise ValueError(
                     f"Timed out updating cached repo '{name}' from {url}"
                 )
+            except FileNotFoundError as exc:
+                raise ValueError(_GIT_MISSING_MESSAGE) from exc
             if result.returncode != 0:
                 raise ValueError(
                     f"Failed to update cached repo '{name}' from {url}: {result.stderr.strip()}"
                 )
             if ref != "HEAD":
-                result = subprocess.run(
-                    ["git", "-C", str(repo_cache), "checkout", "--", ref],
-                    capture_output=True,
-                    text=True,
-                )
+                try:
+                    result = subprocess.run(
+                        ["git", "-C", str(repo_cache), "checkout", "--", ref],
+                        capture_output=True,
+                        text=True,
+                    )
+                except FileNotFoundError as exc:
+                    raise ValueError(_GIT_MISSING_MESSAGE) from exc
                 if result.returncode != 0:
                     raise ValueError(
                         f"Failed to checkout ref '{ref}' in '{name}': {result.stderr.strip()}"
@@ -114,16 +124,21 @@ class RegistryManager:
                 raise ValueError(
                     f"Timed out cloning '{url}'"
                 )
+            except FileNotFoundError as exc:
+                raise ValueError(_GIT_MISSING_MESSAGE) from exc
             if result.returncode != 0:
                 raise ValueError(
                     f"Failed to clone '{url}': {result.stderr.strip()}"
                 )
             if ref != "HEAD":
-                result = subprocess.run(
-                    ["git", "-C", str(repo_cache), "checkout", "--", ref],
-                    capture_output=True,
-                    text=True,
-                )
+                try:
+                    result = subprocess.run(
+                        ["git", "-C", str(repo_cache), "checkout", "--", ref],
+                        capture_output=True,
+                        text=True,
+                    )
+                except FileNotFoundError as exc:
+                    raise ValueError(_GIT_MISSING_MESSAGE) from exc
                 if result.returncode != 0:
                     raise ValueError(
                         f"Failed to checkout ref '{ref}' in '{name}': {result.stderr.strip()}"

@@ -21,11 +21,14 @@ from sklm import __version__
 from sklm.api import Sklm
 from sklm.cli.prompts import (
     prompt_agent_selection,
+    prompt_discovered_selection,
     prompt_install_from_git,
     prompt_main_menu,
     prompt_skill_selection,
 )
 from sklm.models import RegistryType, ResourceKind
+from sklm.core.sources import SourceParseError, looks_like_source
+from sklm.core.fetch import SourceFetchError
 from sklm.agents.registry import AgentRegistry
 
 app = typer.Typer(
@@ -75,6 +78,194 @@ def parse_resource_type(val: str) -> ResourceKind:
     if val in ("skill", "skills"):
         return ResourceKind.skill
     raise typer.BadParameter(f"Invalid type '{val}'. Use 'skill'.")
+
+
+_LEGACY_TYPE_TOKENS = ("skill", "skills")
+
+
+def _legacy_type_error(command: str, corrected: str) -> None:
+    """Report that the resource-type argument was removed from *command*."""
+    console.print(
+        f"[red]✗[/] The resource-type argument was removed from "
+        f"[bold]sklm {command}[/]."
+    )
+    console.print(f"   Use [bold]{corrected}[/] instead.")
+    raise typer.Exit(1)
+
+
+def _single_positional(
+    values: Optional[list[str]], command: str, corrected: str
+) -> Optional[str]:
+    """Return the single positional argument, rejecting the legacy type token."""
+    if not values:
+        return None
+    if values[0] in _LEGACY_TYPE_TOKENS:
+        _legacy_type_error(command, corrected)
+    if len(values) > 1:
+        console.print(
+            f"[red]✗[/] Expected at most one argument for [bold]sklm {command}[/]."
+        )
+        raise typer.Exit(1)
+    return values[0]
+
+
+def _positional_names(
+    values: Optional[list[str]], command: str, corrected: str
+) -> list[str]:
+    """Return resource names, rejecting the legacy type token."""
+    if not values:
+        return []
+    if values[0] in _LEGACY_TYPE_TOKENS:
+        _legacy_type_error(command, corrected)
+    return list(values)
+
+
+def _print_discovered(resolved) -> None:
+    """Print the skills found in a resolved source."""
+    if not resolved.skills:
+        console.print("[yellow]No skills found in this source.[/]")
+        return
+    table = Table(title=f"Skills in {resolved.parsed.display}")
+    table.add_column("Name", style="cyan")
+    table.add_column("Description", style="white")
+    for skill in resolved.skills:
+        table.add_row(skill.name, skill.description or "")
+    console.print(table)
+
+
+def _interactive_add(f: Sklm) -> None:
+    """Interactive picker over skills in the global store."""
+    selected = prompt_skill_selection(f, mode="add")
+    if not selected:
+        return
+    linked_names = {l.name for l in f.workspace.list_links()}
+    added = 0
+    for skill_name in selected:
+        if skill_name in linked_names:
+            continue
+        try:
+            f.add(ResourceKind.skill, skill_name)
+            console.print(f"[green]✓[/] Added [bold]{skill_name}[/]")
+            added += 1
+        except (FileNotFoundError, FileExistsError, ValueError) as e:
+            console.print(f"[red]✗[/] {e}")
+    if added == 0:
+        console.print(
+            "[yellow]No new skills to add (all selected are already installed).[/]"
+        )
+        return
+    try:
+        f.agent_sync()
+    except RuntimeError:
+        pass
+
+
+def _interactive_rm(f: Sklm) -> None:
+    """Interactive picker over skills linked in the workspace."""
+    selected = prompt_skill_selection(f, mode="remove")
+    if not selected:
+        return
+    for skill_name in selected:
+        try:
+            ref = f.remove(ResourceKind.skill, skill_name)
+            console.print(f"[green]✓[/] Removed skill [bold]{ref.name}[/]")
+        except (KeyError, RuntimeError) as e:
+            console.print(f"[red]✗[/] {e}")
+    try:
+        f.agent_sync()
+    except RuntimeError:
+        pass
+
+
+def _run_source_command(
+    f: Sklm,
+    source: str,
+    skill_filters: list[str],
+    all_: bool,
+    list_: bool,
+    ref: Optional[str],
+    subdir: Optional[str],
+    activate: bool,
+) -> None:
+    """Resolve *source*, select skills, and store (and optionally activate) them."""
+    if not all_ and not skill_filters and not list_:
+        if not sys.stdout.isatty():
+            console.print(
+                "[red]✗[/] No skill selected. Use [bold]--skill <name>[/], "
+                "[bold]--all[/], or [bold]--list[/]."
+            )
+            raise typer.Exit(1)
+
+    console.print(f"[dim]Resolving {source}...[/]")
+    try:
+        resolved = f.resolve_source(source, subdir=subdir)
+    except (SourceParseError, SourceFetchError, ValueError, OSError) as e:
+        console.print(f"[red]✗[/] {e}")
+        raise typer.Exit(1) from e
+
+    if list_:
+        _print_discovered(resolved)
+        return
+
+    if not resolved.skills:
+        console.print(f"[red]✗[/] No skills found in '{source}'.")
+        raise typer.Exit(1)
+
+    if not skill_filters and not all_:
+        chosen = prompt_discovered_selection(resolved.skills)
+        if not chosen:
+            return
+        skill_filters = chosen
+
+    try:
+        if activate:
+            refs = f.add_source(
+                source, skills=skill_filters, all_=all_, subdir=subdir, ref=ref
+            )
+        else:
+            refs = f.install_source(
+                source, skills=skill_filters, all_=all_, subdir=subdir, ref=ref
+            )
+    except (SourceParseError, SourceFetchError, ValueError, FileNotFoundError, OSError) as e:
+        console.print(f"[red]✗[/] {e}")
+        raise typer.Exit(1) from e
+
+    verb = "Added" if activate else "Installed"
+    for resource_ref in refs:
+        console.print(
+            f"[green]✓[/] {verb} skill [bold]{resource_ref.name}[/] "
+            f"(from {resource_ref.origin})"
+        )
+
+
+def _resolve_source_args(
+    command: str,
+    corrected: str,
+    values: Optional[list[str]],
+    from_url: Optional[str],
+    skill: Optional[list[str]],
+) -> tuple[Optional[str], Optional[str], list[str]]:
+    """Split positionals and ``--from`` into (source, bare name, skill filters).
+
+    A source is returned in the first slot. When the positional is a stored
+    skill name instead, it is returned in the second slot so the caller can
+    take the store lookup path.
+    """
+    positional = _single_positional(values, command, corrected)
+    filters = list(skill or [])
+
+    if from_url:
+        if positional and not looks_like_source(positional):
+            filters.append(positional)
+        return from_url, None, filters
+
+    if positional is None:
+        return None, None, filters
+
+    if looks_like_source(positional):
+        return positional, None, filters
+
+    return None, positional, filters
 
 
 def _prompt_cleanup(
@@ -223,64 +414,98 @@ def status(
 
 @app.command()
 def install(
-    resource_type: str = typer.Argument(..., help="Resource type: skill"),
-    name: str = typer.Argument(..., help="Resource name"),
+    source: Optional[list[str]] = typer.Argument(
+        None,
+        help="Source to install from (owner/repo, URL, or local path), or a skill name",
+    ),
+    skill: Optional[list[str]] = typer.Option(
+        None, "--skill", "-s", help="Skill to install from the source (repeatable)"
+    ),
+    all_: bool = typer.Option(
+        False, "--all", help="Install every skill found in the source"
+    ),
+    list_: bool = typer.Option(
+        False, "--list", "-l", help="List the skills found in the source without installing"
+    ),
+    ref: Optional[str] = typer.Option(
+        None, "--ref", help="Git ref (branch, tag, or commit) to use"
+    ),
     from_url: Optional[str] = typer.Option(
-        None, "--from", help="Git repository URL to install from"
+        None, "--from", help="Source URL (alias for the positional argument)"
     ),
     subdir: Optional[str] = typer.Option(
-        None, "--subdir", help="Subdirectory within the repo (default: skills/<name>)"
+        None, "--subdir", help="Restrict discovery to this subdirectory of the source"
     ),
 ):
-    """Install a resource into the global store without activating it."""
+    """Install a skill into the global store without activating it."""
     f = get_sklm()
-    kind = parse_resource_type(resource_type)
-    try:
-        ref = f.install(kind, name, from_url=from_url, subdir=subdir)
-    except (FileNotFoundError, FileExistsError, ValueError, OSError, subprocess.TimeoutExpired) as e:
-        console.print(f"[red]✗[/] {e}")
-        raise typer.Exit(1) from e
-    console.print(f"[green]✓[/] Installed {kind.value} [bold]{ref.name}[/] in global store")
-    if ref.origin:
-        console.print(f"   Source: {ref.origin}")
+    source_value, bare_name, filters = _resolve_source_args(
+        "install", "sklm install my-skill", source, from_url, skill
+    )
+
+    if source_value is None and bare_name is None:
+        console.print(
+            "[red]✗[/] Provide a source or a skill name. Run "
+            "[bold]sklm install --help[/] for usage."
+        )
+        raise typer.Exit(1)
+
+    if source_value is None:
+        try:
+            resource_ref = f.install(ResourceKind.skill, bare_name)
+        except (FileNotFoundError, FileExistsError, ValueError, OSError) as e:
+            console.print(f"[red]✗[/] {e}")
+            raise typer.Exit(1) from e
+        console.print(
+            f"[green]✓[/] Installed skill [bold]{resource_ref.name}[/] in global store"
+        )
+        if resource_ref.origin:
+            console.print(f"   Source: {resource_ref.origin}")
+        return
+
+    _run_source_command(
+        f, source_value, filters, all_, list_, ref, subdir, activate=False
+    )
 
 
 @app.command()
 def uninstall(
-    resource_type: str = typer.Argument(..., help="Resource type: skill"),
-    name: str = typer.Argument(..., help="Resource name to uninstall"),
+    names: Optional[list[str]] = typer.Argument(
+        None, help="Skill name(s) to uninstall"
+    ),
     force: bool = typer.Option(False, "--force", help="Skip confirmation"),
 ):
-    """Remove a resource from the global store permanently."""
+    """Remove a skill from the global store permanently."""
     f = get_sklm()
-    kind = parse_resource_type(resource_type)
-    linked_projects = []
-    try:
-        f.workspace.get_resource(kind, name)
-        linked_projects.append("current project")
-    except KeyError:
-        pass
-    if linked_projects and not force:
+    targets = _positional_names(names, "uninstall", "sklm uninstall my-skill")
+    if not targets:
+        console.print("[red]✗[/] Provide a skill name to uninstall.")
+        raise typer.Exit(1)
+
+    kind = ResourceKind.skill
+    for name in targets:
+        linked = f.workspace.get_resource(kind, name)
+        if linked and not force:
+            console.print(
+                f"[yellow]⚠[/] skill [bold]{name}[/] is linked in the current project."
+            )
+            if not typer.confirm("Unlink and uninstall?"):
+                console.print("[yellow]Cancelled.[/]")
+                continue
+        try:
+            f.uninstall(kind, name)
+        except KeyError as e:
+            console.print(f"[red]✗[/] {e}")
+            raise typer.Exit(1) from e
         console.print(
-            f"[yellow]⚠[/] {kind.value} [bold]{name}[/] is linked in the current project."
+            f"[green]✓[/] Uninstalled skill [bold]{name}[/] from global store"
         )
-        confirm = typer.confirm("Unlink and uninstall?")
-        if not confirm:
-            console.print("[yellow]Cancelled.[/]")
-            raise typer.Exit(0)
-    try:
-        f.uninstall(kind, name)
-    except KeyError as e:
-        console.print(f"[red]✗[/] {e}")
-        raise typer.Exit(1) from e
-    console.print(f"[green]✓[/] Uninstalled {kind.value} [bold]{name}[/] from global store")
 
 
 @app.command()
 def migrate(
-    resource_type: str = typer.Argument("skill", help="Resource type: skill"),
-    name: Optional[str] = typer.Argument(
-        None, help="Resource name (omit to migrate all)"
+    names: Optional[list[str]] = typer.Argument(
+        None, help="Skill name to migrate (omit to migrate all)"
     ),
     from_registry: Optional[str] = typer.Option(
         None, "--from-registry", help="Migrate from a local registry by name"
@@ -292,9 +517,15 @@ def migrate(
         False, "--no-cleanup", help="Preserve source files without prompting"
     ),
 ):
-    """Import resources from ~/.agents/ or a local registry into the Sklm global store."""
+    """Import skills from ~/.agents/ or a local registry into the Sklm global store."""
     f = get_sklm()
-    kind = parse_resource_type(resource_type)
+    kind = ResourceKind.skill
+
+    targets = _positional_names(names, "migrate", "sklm migrate my-skill")
+    if len(targets) > 1:
+        console.print("[red]✗[/] Provide at most one skill name.")
+        raise typer.Exit(1)
+    name = targets[0] if targets else None
 
     source_path: Optional[Path] = None
     if from_registry:
@@ -336,100 +567,89 @@ def migrate(
 
 @app.command()
 def add(
-    resource_type: Optional[str] = typer.Argument(
-        None, help="Resource type: skill"
+    source: Optional[list[str]] = typer.Argument(
+        None,
+        help="Source to install from (owner/repo, URL, or local path), or a stored skill name",
     ),
-    name: Optional[str] = typer.Argument(
-        None, help="Resource name (optionally prefixed: registry:name)"
+    skill: Optional[list[str]] = typer.Option(
+        None, "--skill", "-s", help="Skill to install from the source (repeatable)"
+    ),
+    all_: bool = typer.Option(
+        False, "--all", help="Install every skill found in the source"
+    ),
+    list_: bool = typer.Option(
+        False, "--list", "-l", help="List the skills found in the source without installing"
+    ),
+    ref: Optional[str] = typer.Option(
+        None, "--ref", help="Git ref (branch, tag, or commit) to use"
     ),
     from_url: Optional[str] = typer.Option(
-        None, "--from", help="Git repository URL to install from"
+        None, "--from", help="Source URL (alias for the positional argument)"
     ),
     subdir: Optional[str] = typer.Option(
-        None, "--subdir", help="Subdirectory within the repo (default: skills/<name>)"
+        None, "--subdir", help="Restrict discovery to this subdirectory of the source"
     ),
 ):
-    """Add and activate a resource in the project (resolves, stores, links, syncs agent).
+    """Add and activate a skill in the project.
 
-    When called without arguments, opens an interactive checkbox prompt to select
-    skills from the global store.
+    With a source, discovers the skills it contains and installs the selected
+    ones. With a plain name, resolves the skill from the global store. With no
+    argument, opens an interactive picker over the global store.
     """
     f = get_sklm()
+    source_value, bare_name, filters = _resolve_source_args(
+        "add", "sklm add my-skill", source, from_url, skill
+    )
 
-    # Interactive prompt when name is omitted
-    if not name:
-        selected = prompt_skill_selection(f, mode="add")
-        if not selected:
-            return
-        linked_names = {l.name for l in f.workspace.list_links()}
-        added = 0
-        for skill_name in selected:
-            if skill_name in linked_names:
-                continue  # already installed, skip
-            try:
-                f.add(ResourceKind.skill, skill_name)
-                console.print(f"[green]✓[/] Added [bold]{skill_name}[/]")
-                added += 1
-            except (FileNotFoundError, FileExistsError, ValueError) as e:
-                console.print(f"[red]✗[/] {e}")
-        if added == 0:
-            console.print("[yellow]No new skills to add (all selected are already installed).[/]")
-            return
-        try:
-            f.agent_sync()
-        except RuntimeError:
-            pass
+    if source_value is None and bare_name is None:
+        if list_ or all_ or filters:
+            console.print("[red]✗[/] Provide a source to install from.")
+            raise typer.Exit(1)
+        _interactive_add(f)
         return
 
-    kind = parse_resource_type(resource_type or "skill")
-    try:
-        ref = f.add(kind, name, from_url=from_url, subdir=subdir)
-    except (FileNotFoundError, FileExistsError, ValueError) as e:
-        console.print(f"[red]✗[/] {e}")
-        raise typer.Exit(1) from e
-    console.print(f"[green]✓[/] Added {kind.value} [bold]{ref.name}[/] (origin: {ref.origin})")
+    if source_value is None:
+        try:
+            ref = f.add(ResourceKind.skill, bare_name)
+        except (FileNotFoundError, FileExistsError, ValueError) as e:
+            console.print(f"[red]✗[/] {e}")
+            raise typer.Exit(1) from e
+        console.print(
+            f"[green]✓[/] Added skill [bold]{ref.name}[/] (origin: {ref.origin})"
+        )
+        return
+
+    _run_source_command(
+        f, source_value, filters, all_, list_, ref, subdir, activate=True
+    )
 
 
 @app.command()
 def rm(
-    resource_type: Optional[str] = typer.Argument(
-        None, help="Resource type: skill"
-    ),
-    name: Optional[str] = typer.Argument(
-        None, help="Resource name to remove"
+    names: Optional[list[str]] = typer.Argument(
+        None, help="Skill name(s) to remove"
     ),
 ):
-    """Remove a resource from the workspace (unlinks and syncs agent).
+    """Remove a skill from the workspace (unlinks and syncs agent).
 
     When called without arguments, opens an interactive checkbox prompt to select
     linked skills to remove.
     """
     f = get_sklm()
+    targets = _positional_names(names, "rm", "sklm rm my-skill")
 
-    # Interactive prompt when name is omitted
-    if not name:
-        selected = prompt_skill_selection(f, mode="remove")
-        if not selected:
-            return
-        for skill_name in selected:
-            try:
-                ref = f.remove(ResourceKind.skill, skill_name)
-                console.print(f"[green]✓[/] Removed {ref.kind.value} [bold]{ref.name}[/]")
-            except (KeyError, RuntimeError) as e:
-                console.print(f"[red]✗[/] {e}")
-        try:
-            f.agent_sync()
-        except RuntimeError:
-            pass
+    if not targets:
+        _interactive_rm(f)
         return
 
-    kind = parse_resource_type(resource_type or "skill")
-    try:
-        ref = f.remove(kind, name)
-    except (KeyError, RuntimeError) as e:
-        console.print(f"[red]✗[/] {e}")
-        raise typer.Exit(1) from e
-    console.print(f"[green]✓[/] Removed {kind.value} [bold]{ref.name}[/]")
+    kind = ResourceKind.skill
+    for name in targets:
+        try:
+            ref = f.remove(kind, name)
+        except (KeyError, RuntimeError) as e:
+            console.print(f"[red]✗[/] {e}")
+            raise typer.Exit(1) from e
+        console.print(f"[green]✓[/] Removed skill [bold]{ref.name}[/]")
 
 
 @app.command()
@@ -546,14 +766,23 @@ def skills():
         if not url:
             return
         try:
-            ref = f.install(ResourceKind.skill, "from-git", from_url=url, subdir=subdir)
-            console.print(f"[green]✓[/] Installed from git: [bold]{ref.name}[/]")
-            f.workspace.add_resource(ref)
-            from sklm.core.linking import link_resource as _link_resource
-            _link_resource(f.workspace, f.global_store, ResourceKind.skill, ref.name)
-            f.agent_sync()
-        except (FileNotFoundError, FileExistsError, ValueError, OSError, subprocess.TimeoutExpired) as e:
+            resolved = f.resolve_source(url, subdir=subdir)
+        except (SourceParseError, SourceFetchError, ValueError, OSError) as e:
             console.print(f"[red]✗[/] {e}")
+            return
+        if not resolved.skills:
+            console.print("[yellow]No skills found in this source.[/]")
+            return
+        chosen = prompt_discovered_selection(resolved.skills)
+        if not chosen:
+            return
+        try:
+            refs = f.add_source(url, skills=chosen, subdir=subdir)
+        except (SourceParseError, SourceFetchError, ValueError, FileNotFoundError, OSError) as e:
+            console.print(f"[red]✗[/] {e}")
+            return
+        for resource_ref in refs:
+            console.print(f"[green]✓[/] Added [bold]{resource_ref.name}[/]")
 
     elif action == "sync":
         try:
