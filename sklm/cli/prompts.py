@@ -19,6 +19,12 @@ from sklm.models import ResourceKind
 
 console = Console()
 
+# questionary renders plain prompt_toolkit text and does not interpret Rich
+# markup, so de-emphasis inside its prompts must come from a style class
+# rather than Rich tags like ``[dim]...[/]``.
+DIM_STYLE_CLASS = "dim"
+QUESTIONARY_STYLE = questionary.Style([(DIM_STYLE_CLASS, "dim")])
+
 
 def _ensure_tty() -> None:
     """Raise a RuntimeError if stdout is not a TTY.
@@ -156,17 +162,17 @@ def prompt_discovered_selection(skills: object) -> list[str]:
         console.print("[yellow]No skills found in this source.[/]")
         return []
 
-    choices = [
-        questionary.Choice(
-            title=f"{skill.name:28s} [dim]{skill.description or ''}[/]",
-            value=skill.name,
-        )
-        for skill in skill_list
-    ]
+    choices = []
+    for skill in skill_list:
+        title: list = [("", f"{skill.name:28s}")]
+        if skill.description:
+            title.append((f"class:{DIM_STYLE_CLASS}", skill.description))
+        choices.append(questionary.Choice(title=title, value=skill.name))
 
     selected = questionary.checkbox(
         "Select skills to install",
         choices=choices,
+        style=QUESTIONARY_STYLE,
     ).ask()
 
     if selected is None:
@@ -222,14 +228,20 @@ def prompt_agent_selection(registry: AgentRegistry) -> list[str]:
     console.print("[dim]Which agent(s) are you using?[/]\n")
 
     if sys.stdout.isatty():
-        choices = [
-            questionary.Choice(
-                title=f"{aid.replace('-', ' ').title():20s}  "
-                f"[dim]({registry.get_agent_config(aid).get('dir_name', '?') if registry.get_agent_config(aid) else '?'})[/]",
-                value=aid,
+        choices = []
+        for aid in agent_ids:
+            config = registry.get_agent_config(aid)
+            dir_name = config.get("dir_name", "?") if config else "?"
+            label = f"{aid.replace('-', ' ').title():20s}  "
+            choices.append(
+                questionary.Choice(
+                    title=[
+                        ("", label),
+                        (f"class:{DIM_STYLE_CLASS}", f"({dir_name})"),
+                    ],
+                    value=aid,
+                )
             )
-            for aid in agent_ids
-        ]
         choices.append(
             questionary.Choice(
                 title="Skip agent setup",
@@ -240,6 +252,7 @@ def prompt_agent_selection(registry: AgentRegistry) -> list[str]:
         result = questionary.select(
             "Select an agent (or multiple by running again):",
             choices=choices,
+            style=QUESTIONARY_STYLE,
         ).ask()
 
         if result is None or result == "none":

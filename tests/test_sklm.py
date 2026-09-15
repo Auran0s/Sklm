@@ -3379,3 +3379,120 @@ class TestLinkingFallback:
         assert result.exit_code != 0
         assert "No space left on device" in result.output
         assert "Traceback" not in result.output
+
+
+class TestPromptAgentSelection:
+    """Agent selection prompt renders labels without Rich markup (issue #38)."""
+
+    def test_tty_choice_titles_have_no_rich_markup(self, monkeypatch):
+        """TTY choices de-emphasize the config dir via a style class, not markup."""
+        from sklm.agents.registry import AgentRegistry
+        from sklm.cli import prompts
+
+        monkeypatch.setattr("sys.stdout.isatty", lambda: True)
+        captured = {}
+
+        class MockQuestion:
+            def ask(self):
+                return "opencode"
+
+        def fake_select(message, choices=None, **kwargs):
+            captured["message"] = message
+            captured["choices"] = choices
+            captured["kwargs"] = kwargs
+            return MockQuestion()
+
+        monkeypatch.setattr(prompts.questionary, "select", fake_select)
+
+        result = prompts.prompt_agent_selection(AgentRegistry())
+
+        assert result == ["opencode"]
+        assert "Select an agent" in captured["message"]
+        assert captured["kwargs"].get("style") is prompts.QUESTIONARY_STYLE
+
+        agent_choices = captured["choices"][:-1]  # last entry is "Skip agent setup"
+        assert agent_choices
+        for choice in agent_choices:
+            assert isinstance(choice.title, list)
+            text = "".join(segment for _, segment in choice.title)
+            assert "[dim]" not in text
+            assert "[/]" not in text
+            dir_segments = [
+                (style, segment)
+                for style, segment in choice.title
+                if segment.startswith("(")
+            ]
+            assert dir_segments, f"no config-dir segment in {choice.title!r}"
+            assert all(
+                style == f"class:{prompts.DIM_STYLE_CLASS}"
+                for style, _ in dir_segments
+            )
+
+    def test_non_tty_fallback_still_lists_numbered_choices(
+        self, monkeypatch, capsys
+    ):
+        """Non-TTY fallback keeps the numbered list and accepts numbers/'c'."""
+        from sklm.agents.registry import AgentRegistry
+        from sklm.cli import prompts
+
+        monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+        registry = AgentRegistry()
+        agent_ids = registry.get_agent_ids()
+
+        monkeypatch.setattr(prompts.typer, "prompt", lambda *a, **kw: "1")
+        assert prompts.prompt_agent_selection(registry) == [agent_ids[0]]
+
+        monkeypatch.setattr(prompts.typer, "prompt", lambda *a, **kw: "c")
+        assert prompts.prompt_agent_selection(registry) == ["none"]
+
+        out = capsys.readouterr().out
+        assert "[1]" in out
+        assert "(skip agent setup)" in out
+
+
+class TestPromptDiscoveredSelection:
+    """Discovered-skill labels render without Rich markup (same fix as #38)."""
+
+    def test_choice_titles_use_style_class_not_markup(self, monkeypatch):
+        from sklm.cli import prompts
+
+        monkeypatch.setattr("sys.stdout.isatty", lambda: True)
+        captured = {}
+
+        class MockQuestion:
+            def ask(self):
+                return ["alpha"]
+
+        def fake_checkbox(message, choices=None, **kwargs):
+            captured["choices"] = choices
+            captured["kwargs"] = kwargs
+            return MockQuestion()
+
+        monkeypatch.setattr(prompts.questionary, "checkbox", fake_checkbox)
+
+        class _Skill:
+            def __init__(self, name, description):
+                self.name = name
+                self.description = description
+
+        skills = [_Skill("alpha", "does alpha"), _Skill("beta", None)]
+        result = prompts.prompt_discovered_selection(skills)
+
+        assert result == ["alpha"]
+        assert captured["kwargs"].get("style") is prompts.QUESTIONARY_STYLE
+
+        alpha_title = captured["choices"][0].title
+        assert isinstance(alpha_title, list)
+        text = "".join(segment for _, segment in alpha_title)
+        assert "[dim]" not in text
+        assert "[/]" not in text
+        dim_segments = [
+            (style, segment) for style, segment in alpha_title if segment == "does alpha"
+        ]
+        assert dim_segments, f"no description segment in {alpha_title!r}"
+        assert all(
+            style == f"class:{prompts.DIM_STYLE_CLASS}" for style, _ in dim_segments
+        )
+
+        # A skill without a description still produces a valid title.
+        assert isinstance(captured["choices"][1].title, list)
