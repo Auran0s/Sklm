@@ -2451,3 +2451,72 @@ class TestWizardInitWorkspace:
         assert f.workspace.exists()
         config = f.workspace.load_config()
         assert "opencode" in config.agents
+
+
+class TestPromptAgentSelection:
+    """Agent selection prompt renders labels without Rich markup (issue #38)."""
+
+    def test_tty_choice_titles_have_no_rich_markup(self, monkeypatch):
+        """TTY choices de-emphasize the config dir via a style class, not markup."""
+        from sklm.agents.registry import AgentRegistry
+        from sklm.cli import prompts
+
+        monkeypatch.setattr("sys.stdout.isatty", lambda: True)
+        captured = {}
+
+        class MockQuestion:
+            def ask(self):
+                return "opencode"
+
+        def fake_select(message, choices=None, **kwargs):
+            captured["message"] = message
+            captured["choices"] = choices
+            captured["kwargs"] = kwargs
+            return MockQuestion()
+
+        monkeypatch.setattr(prompts.questionary, "select", fake_select)
+
+        result = prompts.prompt_agent_selection(AgentRegistry())
+
+        assert result == ["opencode"]
+        assert "Select an agent" in captured["message"]
+        assert captured["kwargs"].get("style") is prompts.QUESTIONARY_STYLE
+
+        agent_choices = captured["choices"][:-1]  # last entry is "Skip agent setup"
+        assert agent_choices
+        for choice in agent_choices:
+            assert isinstance(choice.title, list)
+            text = "".join(segment for _, segment in choice.title)
+            assert "[dim]" not in text
+            assert "[/]" not in text
+            dir_segments = [
+                (style, segment)
+                for style, segment in choice.title
+                if segment.startswith("(")
+            ]
+            assert dir_segments, f"no config-dir segment in {choice.title!r}"
+            assert all(
+                style == f"class:{prompts.DIM_STYLE_CLASS}"
+                for style, _ in dir_segments
+            )
+
+    def test_non_tty_fallback_still_lists_numbered_choices(
+        self, monkeypatch, capsys
+    ):
+        """Non-TTY fallback keeps the numbered list and accepts numbers/'c'."""
+        from sklm.agents.registry import AgentRegistry
+        from sklm.cli import prompts
+
+        monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+        registry = AgentRegistry()
+        agent_ids = registry.get_agent_ids()
+
+        monkeypatch.setattr(prompts.typer, "prompt", lambda *a, **kw: "1")
+        assert prompts.prompt_agent_selection(registry) == [agent_ids[0]]
+
+        monkeypatch.setattr(prompts.typer, "prompt", lambda *a, **kw: "c")
+        assert prompts.prompt_agent_selection(registry) == ["none"]
+
+        out = capsys.readouterr().out
+        assert "[1]" in out
+        assert "(skip agent setup)" in out
