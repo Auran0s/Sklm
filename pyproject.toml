@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sklm-cli"
-version = "0.2.0"
+version = "0.2.1"
 description = "Skills manager for AI agents"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -31,3 +31,6 @@ sklm = "sklm.cli.main:run"
 
 [tool.setuptools.packages.find]
 include = ["sklm*"]
+
+[tool.setuptools.package-data]
+"sklm.agents" = ["agents.yaml"]
