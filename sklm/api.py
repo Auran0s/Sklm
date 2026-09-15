@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
@@ -11,11 +12,15 @@ from sklm.models import Link, ResourceKind, ResourceRef
 from sklm.store import GlobalStore
 from sklm.core.workspace import Workspace
 from sklm.core.registry import RegistryManager, RegistrySource
+from sklm.core.sources import ParsedSource, parse_source
+from sklm.core.fetch import SourceFiles, resolve_source as resolve_source_files
+from sklm.core.discovery import DiscoveredSkill, discover_skills, select_skills
 from sklm.core.crud import (
     add_resource_to_workspace,
     remove_resource_from_workspace,
     list_workspace_resources,
     get_resource_info,
+    resolve_resource,
 )
 from sklm.core.linking import (
     link_resource as _link_resource,
@@ -27,6 +32,15 @@ from sklm.agents.base import AgentAdapter
 from sklm.agents.registry import AgentRegistry
 
 console = Console()
+
+
+@dataclass
+class ResolvedSource:
+    """A source that has been parsed, fetched, and searched for skills."""
+
+    parsed: ParsedSource
+    files: SourceFiles
+    skills: list[DiscoveredSkill] = field(default_factory=list)
 
 
 class Sklm:
@@ -86,24 +100,8 @@ class Sklm:
 
     # ── Install / Uninstall ───────────────────────────────────────────────
 
-    def install(
-        self,
-        kind: ResourceKind,
-        name: str,
-        from_url: Optional[str] = None,
-        subdir: Optional[str] = None,
-    ) -> ResourceRef:
-        if from_url:
-            resource = self.global_store.add_resource_from_git(
-                kind, name, from_url, subdir=subdir
-            )
-            return ResourceRef(
-                name=resource.name,
-                kind=resource.kind,
-                origin=from_url,
-                linked=False,
-                path=resource.path,
-            )
+    def install(self, kind: ResourceKind, name: str) -> ResourceRef:
+        """Resolve a known resource from the store or a registry into the store."""
         ref = add_resource_to_workspace(
             self.workspace, self.global_store, self.registry_manager, kind, name
         )
@@ -117,6 +115,83 @@ class Sklm:
             linked=False,
             path=ref.path,
         )
+
+    def resolve_source(
+        self, source: str, subdir: Optional[str] = None
+    ) -> ResolvedSource:
+        """Parse, fetch, and search *source* for skills."""
+        parsed = parse_source(source)
+        files = resolve_source_files(parsed)
+        effective_subpath = subdir or parsed.subpath
+        default_name = parsed.repo or Path(parsed.url).name
+        skills = discover_skills(
+            files, subpath=effective_subpath, default_name=default_name
+        )
+        return ResolvedSource(parsed=parsed, files=files, skills=skills)
+
+    def install_source(
+        self,
+        source: str,
+        skills: Optional[list[str]] = None,
+        all_: bool = False,
+        subdir: Optional[str] = None,
+        ref: Optional[str] = None,
+    ) -> list[ResourceRef]:
+        """Install the selected skills from *source* into the global store."""
+        resolved = self.resolve_source(source, subdir=subdir)
+        selected = select_skills(resolved.skills, requested=skills, all_=all_)
+        if not selected:
+            raise FileNotFoundError(f"No skills found in '{source}'")
+        refs: list[ResourceRef] = []
+        for skill in selected:
+            resource = self.global_store.add_resource_from_source(
+                ResourceKind.skill,
+                skill,
+                resolved.files,
+                source_repo=resolved.parsed.display,
+                ref=ref or resolved.parsed.ref or "HEAD",
+            )
+            refs.append(
+                ResourceRef(
+                    name=resource.name,
+                    kind=resource.kind,
+                    origin=resolved.parsed.display,
+                    linked=False,
+                    path=resource.path,
+                )
+            )
+        return refs
+
+    def add_source(
+        self,
+        source: str,
+        skills: Optional[list[str]] = None,
+        all_: bool = False,
+        subdir: Optional[str] = None,
+        ref: Optional[str] = None,
+    ) -> list[ResourceRef]:
+        """Install the selected skills from *source* and link them into the project."""
+        refs = self.install_source(
+            source, skills=skills, all_=all_, subdir=subdir, ref=ref
+        )
+        for ref in refs:
+            existing = self.workspace.get_resource(ResourceKind.skill, ref.name)
+            if not existing:
+                self.workspace.add_resource(ref)
+            elif existing.linked:
+                continue
+            _link_resource(self.workspace, self.global_store, ResourceKind.skill, ref.name)
+        try:
+            self.agent_sync()
+        except RuntimeError:
+            console.print(
+                "[yellow]⚠[/] Skills installed but no agent configured — "
+                "not synced to any agent directory."
+            )
+            console.print(
+                "   Run [bold]sklm init --agent <name>[/] to configure an agent."
+            )
+        return refs
 
     def uninstall(self, kind: ResourceKind, name: str) -> None:
         linked = False
@@ -179,24 +254,20 @@ class Sklm:
 
     # ── Resource CRUD ────────────────────────────────────────────────────
 
-    def add(
-        self,
-        kind: ResourceKind,
-        name: str,
-        from_url: Optional[str] = None,
-        subdir: Optional[str] = None,
-    ) -> ResourceRef:
-        if from_url:
-            ref = self.install(kind, name, from_url=from_url, subdir=subdir)
+    def add(self, kind: ResourceKind, name: str) -> ResourceRef:
+        ref = resolve_resource(self.global_store, self.registry_manager, kind, name)
+        existing_store = self.global_store.get_resource(kind, ref.name)
+        if not existing_store and ref.path:
+            self.global_store.add_resource(kind, ref.path, ref.name)
+
+        recorded = self.workspace.get_resource(kind, ref.name)
+        if recorded is None:
             self.workspace.add_resource(ref)
-        else:
-            ref = add_resource_to_workspace(
-                self.workspace, self.global_store, self.registry_manager, kind, name
-            )
-            existing = self.global_store.get_resource(kind, ref.name)
-            if not existing and ref.path:
-                self.global_store.add_resource(kind, ref.path, ref.name)
-        _link_resource(self.workspace, self.global_store, kind, ref.name)
+        if recorded is None or not recorded.linked:
+            # Either a fresh add, or a half-applied one that recorded the
+            # resource but failed before creating the link. Repair it.
+            _link_resource(self.workspace, self.global_store, kind, ref.name)
+
         try:
             self.agent_sync()
         except RuntimeError:

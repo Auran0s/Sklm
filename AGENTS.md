@@ -27,14 +27,19 @@ Two-level store:
   store/skills/            #   installed skill dirs (each has SKILL.md)
   config.yaml              #   GlobalConfig — resource catalog + telemetry
   registries.yaml          #   RegistrySource entries
-  cache/                   #   shallow-cloned git repos for install --from
+  cache/                   #   shallow-cloned git repos for git-fallback sources
 
 ./.sklm/                   # per-project workspace (gitignored)
   links/skills/            #   symlinks → ~/.sklm/store/skills/
   sklm.yaml                #   WorkspaceConfig (agents, resources, links)
 ```
 
-`sklm add` pipeline: resolve → store → link → sync (copy + variant overlay) to agent config.
+`sklm add` pipeline: parse source → discover skills → fetch → store → link → sync (copy + variant overlay) to agent config.
+
+A source is parsed by `sklm/core/sources.py`, fetched by `sklm/core/fetch.py`
+(HTTP for public GitHub, `git clone` otherwise), and searched for skills by
+`sklm/core/discovery.py`. Public GitHub sources need no `git` binary; the git
+fallback checks for `git` up front and raises an actionable error when missing.
 
 Note: `.sklm/` is in `.gitignore` — the per-project workspace is intentionally never committed.
 
@@ -42,11 +47,14 @@ Note: `.sklm/` is in `.gitignore` — the per-project workspace is intentionally
 
 | Path | Role |
 |---|---|
-| `sklm/api.py` | `Sklm` facade — wires everything |
+| `sklm/api.py` | `Sklm` facade — wires everything; `resolve_source`/`install_source`/`add_source` |
 | `sklm/cli/main.py` | Typer CLI — all commands |
 | `sklm/cli/wizard.py` | Interactive prompt and state detection |
 | `sklm/models/__init__.py` | Pydantic v2 models, YAML persistence |
-| `sklm/store/__init__.py` | `GlobalStore` — `~/.sklm/` management |
+| `sklm/store/__init__.py` | `GlobalStore` — `~/.sklm/` management, `add_resource_from_source` |
+| `sklm/core/sources.py` | `parse_source` — source grammar (`owner/repo`, URLs, tree paths, local paths) |
+| `sklm/core/fetch.py` | `SourceFiles`, `HttpGithubSource`, `DiskSource`, `resolve_source`, git precondition |
+| `sklm/core/discovery.py` | `discover_skills` — containers, depth, shadowing, frontmatter, selection |
 | `sklm/core/workspace.py` | `Workspace` — `.sklm/` management |
 | `sklm/core/registry.py` | `RegistryManager` — clone/fetch, search |
 | `sklm/core/crud.py` | Resource CRUD (resolve → store → link) |
@@ -69,7 +77,12 @@ Note: `.sklm/` is in `.gitignore` — the per-project workspace is intentionally
 - All `Path` args are `.resolve()`d eagerly.
 - CLI output: **Rich** tables; `--json` flag for machine-readable output.
 - Only `skill` resource kind exists — `ResourceKind` enum has a single value.
+- `add`/`install` take a **source or a stored name** as their only positional. A value matching `looks_like_source()` (`owner/repo`, a URL, an SSH prefix, or a path) is a source; anything else is a resource name.
+- The literal token `skill` is **reserved**: `add`, `install`, `rm`, `uninstall`, and `migrate` reject it with a migration error. The resource-type positional was removed in 0.3.0.
+- `--skill` selects skills within a source (repeatable); `--all` installs every discovered skill; `--list` prints them and installs nothing. With none of them, an interactive multi-select is shown, and a non-TTY run fails with guidance.
+- `--from URL` is retained as an alias for a source positional; `--subdir PATH` restricts discovery within a source.
 - `link`/`unlink` are **internal API only** (no CLI commands). Use `add`/`rm`.
+- Linking prefers a symlink and falls back to a **directory copy** when the platform refuses symlinks (Windows without Developer Mode, `WinError 1314`). Agent sync always reads `link.target` (the store), so a copied entry is never the source of truth. `detect_broken_links` checks the store target as well as the workspace entry.
 - Agent sync **copies** (not symlinks) content with variant overlay from `variants/<agent-id>/`.
 - Editable install optional (`pip install -e .`) — the update mechanism runs `pip install -U sklm-cli`.
 

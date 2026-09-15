@@ -141,107 +141,86 @@ class TestGlobalConfig:
 # ─── Store Layer ─────────────────────────────────────────────────────────────
 
 
-class TestNestedSkillResolution:
-    """Tests pour add_resource_from_git avec structures imbriquées."""
+class TestAddResourceFromSource:
+    """Tests pour GlobalStore.add_resource_from_source (découverte → store)."""
 
-    def _make_repo(self, root: Path, skill_paths: dict[str, str]) -> Path:
-        """Helper: crée une fausse arborescence de repo cloné.
-        skill_paths = { "rel/path/to/skill_dir": "SKILL.md content", ... }
-        """
-        for rel_path, content in skill_paths.items():
-            d = root / rel_path
-            d.mkdir(parents=True, exist_ok=True)
-            (d / "SKILL.md").write_text(content)
-        return root
+    def _files(self, mapping):
+        from sklm.core.fetch import SourceFiles
 
-    def test_finds_nested_skill_two_levels(self, isolated_store, temp_dir):
-        """skills/<category>/<name>/SKILL.md doit être trouvé."""
+        class _Fake(SourceFiles):
+            def __init__(self, files):
+                self._files = files
+
+            def list_paths(self):
+                return sorted(self._files)
+
+            def read_bytes(self, path):
+                return self._files[path].encode("utf-8")
+
+        return _Fake(mapping)
+
+    def _discover(self, mapping, subpath=None):
+        from sklm.core.discovery import discover_skills
+
+        files = self._files(mapping)
+        return files, discover_skills(files, subpath=subpath)
+
+    def test_installs_skill_with_supporting_files(self, isolated_store):
         from sklm.models import ResourceKind
 
-        cache_dir = isolated_store.cache_dir / "test-nested-2"
-        self._make_repo(cache_dir, {
-            "skills/seo/entity-seo": "# Entity SEO",
+        files, skills = self._discover({
+            "skills/foo/SKILL.md": "---\nname: Foo\n---\n# Foo",
+            "skills/foo/refs/a.md": "A",
         })
-        with unittest.mock.patch("sklm.core.registry.RegistryManager") as MockReg:
-            MockReg.return_value.clone_or_fetch.return_value = cache_dir
-            resource = isolated_store.add_resource_from_git(
-                ResourceKind.skill, "entity-seo", "https://github.com/test/repo"
-            )
-        assert resource.name == "entity-seo"
-        assert resource.path.exists()
-        assert (resource.path / "SKILL.md").read_text() == "# Entity SEO"
+        resource = isolated_store.add_resource_from_source(
+            ResourceKind.skill, skills[0], files, source_repo="owner/repo"
+        )
+        assert resource.name == "foo"
+        assert (resource.path / "SKILL.md").exists()
+        assert (resource.path / "refs" / "a.md").read_text() == "A"
 
-    def test_finds_nested_skill_three_levels(self, isolated_store, temp_dir):
-        """skills/<cat>/<sub>/<name>/SKILL.md doit être trouvé."""
+    def test_registers_resource_in_config(self, isolated_store):
         from sklm.models import ResourceKind
 
-        cache_dir = isolated_store.cache_dir / "test-nested-3"
-        self._make_repo(cache_dir, {
-            "skills/paid-ads/platforms/reddit-ads": "# Reddit Ads",
-        })
-        with unittest.mock.patch("sklm.core.registry.RegistryManager") as MockReg:
-            MockReg.return_value.clone_or_fetch.return_value = cache_dir
-            resource = isolated_store.add_resource_from_git(
-                ResourceKind.skill, "reddit-ads", "https://github.com/test/repo"
-            )
-        assert resource.name == "reddit-ads"
-        assert resource.path.exists()
-        assert (resource.path / "SKILL.md").read_text() == "# Reddit Ads"
+        files, skills = self._discover({"skills/foo/SKILL.md": "# Foo"})
+        isolated_store.add_resource_from_source(
+            ResourceKind.skill, skills[0], files, source_repo="owner/repo"
+        )
+        assert isolated_store.get_resource(ResourceKind.skill, "foo") is not None
+        assert [
+            r.name for r in isolated_store.list_resources(ResourceKind.skill)
+        ] == ["foo"]
 
-    def test_flat_structure_still_takes_priority(self, isolated_store, temp_dir):
-        """skills/<name>/ (flat) doit être prioritaire sur skills/<cat>/<name>/."""
+    def test_records_nested_subpath(self, isolated_store):
         from sklm.models import ResourceKind
 
-        cache_dir = isolated_store.cache_dir / "test-priority"
-        self._make_repo(cache_dir, {
-            "skills/my-skill": "# Flat Skill",
-            "skills/category/my-skill": "# Nested Skill",
+        files, skills = self._discover({
+            "skills/seo/entity-seo/SKILL.md": "# Entity SEO",
         })
-        with unittest.mock.patch("sklm.core.registry.RegistryManager") as MockReg:
-            MockReg.return_value.clone_or_fetch.return_value = cache_dir
-            resource = isolated_store.add_resource_from_git(
-                ResourceKind.skill, "my-skill", "https://github.com/test/repo"
-            )
-        assert (resource.path / "SKILL.md").read_text() == "# Flat Skill"
-
-    def test_not_found_error_lists_available(self, isolated_store, temp_dir):
-        """Quand aucun skill n'est trouvé, le message doit lister les disponibles."""
-        from sklm.models import ResourceKind
-
-        cache_dir = isolated_store.cache_dir / "test-not-found"
-        self._make_repo(cache_dir, {
-            "skills/seo/entity-seo": "# Entity SEO",
-            "skills/seo/on-page": "# On Page SEO",
-            "skills/channels/email/email-marketing": "# Email Marketing",
-        })
-        with unittest.mock.patch("sklm.core.registry.RegistryManager") as MockReg:
-            MockReg.return_value.clone_or_fetch.return_value = cache_dir
-            with pytest.raises(FileNotFoundError) as exc:
-                isolated_store.add_resource_from_git(
-                    ResourceKind.skill, "nonexistent", "https://github.com/test/repo"
-                )
-        msg = str(exc.value)
-        assert "entity-seo" in msg
-        assert "on-page" in msg
-        assert "email-marketing" in msg
-        assert "--subdir" in msg
-
-    def test_source_subdir_reflects_nested_path(self, isolated_store, temp_dir):
-        """source_subdir dans les métadonnées doit refléter le chemin réel."""
-        from sklm.models import ResourceKind
-
-        cache_dir = isolated_store.cache_dir / "test-subdir-meta"
-        self._make_repo(cache_dir, {
-            "skills/seo/entity-seo": "# Entity SEO",
-        })
-        with unittest.mock.patch("sklm.core.registry.RegistryManager") as MockReg:
-            MockReg.return_value.clone_or_fetch.return_value = cache_dir
-            isolated_store.add_resource_from_git(
-                ResourceKind.skill, "entity-seo", "https://github.com/test/repo"
-            )
+        isolated_store.add_resource_from_source(
+            ResourceKind.skill, skills[0], files, source_repo="owner/repo"
+        )
         meta = isolated_store.get_source_metadata(ResourceKind.skill, "entity-seo")
         assert meta is not None
         assert meta.source_subdir == "skills/seo/entity-seo"
+        assert meta.source_repo == "owner/repo"
+
+    def test_reinstall_replaces_skill_and_metadata(self, isolated_store):
+        from sklm.models import ResourceKind
+
+        files_a, skills_a = self._discover({"skills/foo/SKILL.md": "# v1"})
+        isolated_store.add_resource_from_source(
+            ResourceKind.skill, skills_a[0], files_a, source_repo="owner/repo"
+        )
+        files_b, skills_b = self._discover({"skills/foo/SKILL.md": "# v2"})
+        isolated_store.add_resource_from_source(
+            ResourceKind.skill, skills_b[0], files_b, source_repo="other/repo"
+        )
+        resource = isolated_store.get_resource(ResourceKind.skill, "foo")
+        assert (resource.path / "SKILL.md").read_text() == "# v2"
+        meta = isolated_store.get_source_metadata(ResourceKind.skill, "foo")
+        assert meta is not None
+        assert meta.source_repo == "other/repo"
 
 
 class TestInstallFromGit:
@@ -282,16 +261,15 @@ class TestInstallFromGit:
     def test_clone_timeout_wraps_to_value_error(self, isolated_store):
         """Vérifie qu'un TimeoutExpired sur git clone lève ValueError."""
         import subprocess
-        from sklm.models import ResourceKind
+        from sklm.core.registry import RegistryManager
 
-        repo_cache = isolated_store.cache_dir / "test_timeout_repo"
-        with unittest.mock.patch("subprocess.run") as mock_run:
-            mock_run.side_effect = subprocess.TimeoutExpired(cmd="git clone", timeout=120)
-            with pytest.raises(ValueError) as exc:
-                isolated_store.add_resource_from_git(
-                    ResourceKind.skill, "my-skill",
-                    "https://github.com/test/repo",
-                )
+        with unittest.mock.patch("sklm.core.registry.REGISTRY_CACHE", isolated_store.cache_dir):
+            with unittest.mock.patch("subprocess.run") as mock_run:
+                mock_run.side_effect = subprocess.TimeoutExpired(cmd="git clone", timeout=120)
+                with pytest.raises(ValueError) as exc:
+                    RegistryManager().clone_or_fetch(
+                        "https://github.com/test/repo", "test_repo"
+                    )
         assert "Timed out" in str(exc.value)
 
     def test_url_to_repo_slug_various_formats(self):
@@ -309,57 +287,36 @@ class TestInstallFromGit:
             assert url_to_repo_slug(url) == expected, f"Échec pour {url}"
 
     def test_cache_key_uses_repo_slug(self, isolated_store):
-        """Vérifie que clone_or_fetch reçoit un slug de repo (pas le nom du skill)."""
-        from sklm.models import ResourceKind
-        from sklm.store import url_to_repo_slug
+        """Vérifie que le cache git est nommé d'après le slug du repo, pas du skill."""
+        from sklm.core.fetch import resolve_source
+        from sklm.core.sources import parse_source
 
-        repo_cache = isolated_store.cache_dir / url_to_repo_slug("https://github.com/example/repo")
+        repo_cache = isolated_store.cache_dir / "example_repo"
         repo_cache.mkdir(parents=True)
         (repo_cache / "SKILL.md").write_text("# Repo root skill")
-        with unittest.mock.patch.object(isolated_store, "_type_dir") as mock_type_dir:
-            mock_type_dir.return_value = isolated_store.cache_dir
+        with unittest.mock.patch(
+            "sklm.core.registry.REGISTRY_CACHE", isolated_store.cache_dir
+        ):
             with unittest.mock.patch("sklm.core.registry.RegistryManager") as MockReg:
                 MockReg.return_value.clone_or_fetch.return_value = repo_cache
-                isolated_store.add_resource_from_git(
-                    ResourceKind.skill, "my-skill",
-                    "https://github.com/example/repo",
-                )
+                resolve_source(parse_source("https://gitlab.com/example/repo"))
         cache_name = MockReg.return_value.clone_or_fetch.call_args[0][1]
         assert cache_name == "example_repo", f"Attendu example_repo, obtenu {cache_name}"
-        assert cache_name != "my-skill", "Le cache ne devrait PAS être nommé d'après le skill"
-
-    def test_progress_messages_during_clone(self, isolated_store):
-        """Vérifie que console.print est appelée avant et après le clone."""
-        from sklm.models import ResourceKind
-
-        repo_cache = isolated_store.cache_dir / "test_progress_repo"
-        repo_cache.mkdir(parents=True)
-        (repo_cache / "SKILL.md").write_text("# Progress test")
-        with unittest.mock.patch.object(isolated_store, "_type_dir") as mock_type_dir:
-            mock_type_dir.return_value = isolated_store.cache_dir
-            with unittest.mock.patch("sklm.store.console.print") as mock_print:
-                with unittest.mock.patch("sklm.core.registry.RegistryManager") as MockReg:
-                    MockReg.return_value.clone_or_fetch.return_value = repo_cache
-                    isolated_store.add_resource_from_git(
-                        ResourceKind.skill, "my-skill",
-                        "https://github.com/test/repo",
-                    )
-        texts = [call.args[0] for call in mock_print.call_args_list]
-        assert any("Cloning from" in t for t in texts), "Message de clone manquant"
-        assert any("Repository cloned" in t for t in texts), "Message de succès manquant"
 
     def test_oserror_in_cli_produces_error_message(self, temp_dir):
         """Vérifie que OSError dans install affiche un message d'erreur (pas un traceback brut)."""
         from typer.testing import CliRunner
         from sklm.cli.main import app
-        from sklm.models import ResourceKind
 
         runner = CliRunner()
         with unittest.mock.patch("sklm.cli.main.get_sklm") as mock_get:
             f = unittest.mock.MagicMock()
-            f.install.side_effect = PermissionError("Permission denied: /tmp")
+            f.resolve_source.side_effect = PermissionError("Permission denied: /tmp")
             mock_get.return_value = f
-            result = runner.invoke(app, ["install", "skill", "test-skill", "--from", "https://test.com/repo"])
+            result = runner.invoke(
+                app,
+                ["install", "https://github.com/owner/repo", "--skill", "test-skill"],
+            )
         assert result.exit_code != 0
         assert "Permission denied" in result.stdout
 
@@ -1229,7 +1186,7 @@ class TestMultiAgentCLI:
         runner = CliRunner()
         runner.invoke(app, ["init"], input="c\n")
         runner.invoke(app, ["global", "add", "skill", str(fake_skill_dir), "--name", "test-skill"])
-        result = runner.invoke(app, ["add", "skill", "test-skill"])
+        result = runner.invoke(app, ["add", "test-skill"])
         assert result.exit_code == 0
         assert "no agent configured" in result.output.lower() or "Warning" in result.output
 
@@ -1240,8 +1197,8 @@ class TestMultiAgentCLI:
         runner = CliRunner()
         runner.invoke(app, ["init"], input="c\n")
         runner.invoke(app, ["global", "add", "skill", str(fake_skill_dir), "--name", "test-skill"])
-        runner.invoke(app, ["add", "skill", "test-skill"])
-        result = runner.invoke(app, ["rm", "skill", "test-skill"])
+        runner.invoke(app, ["add", "test-skill"])
+        result = runner.invoke(app, ["rm", "test-skill"])
         assert result.exit_code == 0
         assert "no agent configured" in result.output.lower() or "Warning" in result.output
 
@@ -1314,10 +1271,10 @@ class TestCLIIntegration:
         from sklm.cli.main import app
         runner = CliRunner()
         runner.invoke(app, ["init"])
-        result = runner.invoke(app, ["add", "skill", str(fake_skill_dir)])
+        result = runner.invoke(app, ["add", str(fake_skill_dir), "--all"])
         assert result.exit_code == 0
         assert "Added" in result.output
-        result = runner.invoke(app, ["rm", "skill", fake_skill_dir.name])
+        result = runner.invoke(app, ["rm", fake_skill_dir.name])
         assert result.exit_code == 0
         assert "Removed" in result.output
 
@@ -1344,7 +1301,7 @@ class TestCLIIntegration:
         runner.invoke(app, ["init"])
         f = Sklm()
         f.global_add(ResourceKind.skill, fake_skill_dir, "test-skill")
-        runner.invoke(app, ["add", "skill", "test-skill"])
+        runner.invoke(app, ["add", "test-skill"])
         result = runner.invoke(app, ["ls", "--json"])
         assert result.exit_code == 0
         data = json.loads(result.output)
@@ -1511,7 +1468,7 @@ class TestCLIIntegration:
         runner = CliRunner()
         runner.invoke(app, ["init"])
         runner.invoke(app, ["global", "add", "skill", str(fake_skill_dir), "--name", "test-skill"])
-        result = runner.invoke(app, ["add", "skill", "test-skill"])
+        result = runner.invoke(app, ["add", "test-skill"])
         assert result.exit_code == 0
         agent_skill_dir = temp_dir / ".opencode" / "skills" / "test-skill"
         assert agent_skill_dir.is_dir()
@@ -1526,10 +1483,10 @@ class TestCLIIntegration:
         runner = CliRunner()
         runner.invoke(app, ["init"])
         runner.invoke(app, ["global", "add", "skill", str(fake_skill_dir), "--name", "test-skill"])
-        runner.invoke(app, ["add", "skill", "test-skill"])
+        runner.invoke(app, ["add", "test-skill"])
         agent_skill_dir = temp_dir / ".opencode" / "skills" / "test-skill"
         assert agent_skill_dir.is_dir()
-        result = runner.invoke(app, ["rm", "skill", "test-skill"])
+        result = runner.invoke(app, ["rm", "test-skill"])
         assert result.exit_code == 0
         assert not agent_skill_dir.exists()
 
@@ -1541,11 +1498,11 @@ class TestCLIIntegration:
         runner = CliRunner()
         runner.invoke(app, ["init"])
         runner.invoke(app, ["global", "add", "skill", str(fake_skill_dir), "--name", "test-skill"])
-        runner.invoke(app, ["add", "skill", "test-skill"])
+        runner.invoke(app, ["add", "test-skill"])
         assert (temp_dir / ".opencode" / "skills" / "test-skill" / "SKILL.md").exists()
-        runner.invoke(app, ["rm", "skill", "test-skill"])
+        runner.invoke(app, ["rm", "test-skill"])
         assert not (temp_dir / ".opencode" / "skills" / "test-skill").exists()
-        runner.invoke(app, ["add", "skill", "test-skill"])
+        runner.invoke(app, ["add", "test-skill"])
         assert (temp_dir / ".opencode" / "skills" / "test-skill" / "SKILL.md").exists()
         assert (temp_dir / ".opencode" / "skills" / "test-skill" / "SKILL.md").read_text() == "# My Skill\nA test skill."
 
@@ -1579,7 +1536,7 @@ class TestCLIIntegration:
         assert "Agents" in result.output
 
     def test_add_with_from_flag(self, temp_dir):
-        """sklm add --help doit mentionner --from."""
+        """sklm add --help doit mentionner --from et --skill."""
         from typer.testing import CliRunner
         from sklm.cli.main import app
         runner = CliRunner()
@@ -1587,7 +1544,8 @@ class TestCLIIntegration:
         assert result.exit_code == 0
         # Check for the help description text instead of the raw flag syntax,
         # which can vary across Typer/Rich versions (e.g. ANSI wrapping).
-        assert "Git repository URL to install from" in result.output
+        assert "Source URL" in result.output
+        assert "Skill to install" in result.output
 
     def test_uninstall_command(self, temp_dir, fake_skill_dir):
         """sklm uninstall doit supprimer un skill du store."""
@@ -1597,7 +1555,7 @@ class TestCLIIntegration:
         runner = CliRunner()
         runner.invoke(app, ["init"])
         runner.invoke(app, ["global", "add", "skill", str(fake_skill_dir), "--name", "test-skill"])
-        result = runner.invoke(app, ["uninstall", "skill", "test-skill", "--force"])
+        result = runner.invoke(app, ["uninstall", "test-skill", "--force"])
         assert result.exit_code == 0
         assert "Uninstalled" in result.output
 
@@ -1609,9 +1567,9 @@ class TestCLIIntegration:
         runner = CliRunner()
         runner.invoke(app, ["init"])
         runner.invoke(app, ["global", "add", "skill", str(fake_skill_dir), "--name", "test-skill"])
-        runner.invoke(app, ["add", "skill", "test-skill"])
+        runner.invoke(app, ["add", "test-skill"])
         # sans --force, avec input "y"
-        result = runner.invoke(app, ["uninstall", "skill", "test-skill"], input="y\n")
+        result = runner.invoke(app, ["uninstall", "test-skill"], input="y\n")
         assert result.exit_code == 0
         assert "Uninstalled" in result.output
 
@@ -1625,7 +1583,7 @@ class TestCLIIntegration:
         from typer.testing import CliRunner
         from sklm.cli.main import app
         runner = CliRunner()
-        result = runner.invoke(app, ["migrate", "skill", "test-agent-skill"])
+        result = runner.invoke(app, ["migrate", "test-agent-skill"])
         assert result.exit_code == 0
         assert "Migrated" in result.output
         # cleanup
@@ -1689,7 +1647,7 @@ class TestCLIIntegration:
         from typer.testing import CliRunner
         from sklm.cli.main import app
         runner = CliRunner()
-        result = runner.invoke(app, ["migrate", "skill", "test-force-clean-skill", "--force-cleanup"])
+        result = runner.invoke(app, ["migrate", "test-force-clean-skill", "--force-cleanup"])
         assert result.exit_code == 0
         assert "Deleted" in result.output
         assert not test_skill_dir.exists()
@@ -1704,7 +1662,7 @@ class TestCLIIntegration:
         from typer.testing import CliRunner
         from sklm.cli.main import app
         runner = CliRunner()
-        result = runner.invoke(app, ["migrate", "skill", "test-no-clean-skill", "--no-cleanup"])
+        result = runner.invoke(app, ["migrate", "test-no-clean-skill", "--no-cleanup"])
         assert result.exit_code == 0
         assert "no-cleanup" in result.output
         assert test_skill_dir.exists()
@@ -1721,7 +1679,7 @@ class TestCLIIntegration:
         from typer.testing import CliRunner
         from sklm.cli.main import app
         runner = CliRunner()
-        result = runner.invoke(app, ["migrate", "skill", "test-non-int-skill"])
+        result = runner.invoke(app, ["migrate", "test-non-int-skill"])
         assert result.exit_code == 0
         assert "Non-interactive mode" in result.output
         assert test_skill_dir.exists()
@@ -1793,43 +1751,97 @@ class TestCLIIntegration:
         result = runner.invoke(app, ["unlink", "skill", "test"], input="n\n")
         assert result.exit_code != 0
 
-    def test_install_api(self, temp_dir):
-        """Sklm.install() avec --from doit appeler add_resource_from_git."""
+    def test_install_source_api(self, temp_dir):
+        """Sklm.install_source() doit stocker les skills sélectionnés depuis une source."""
         from sklm.api import Sklm
+        from sklm.core.fetch import SourceFiles
         from sklm.models import ResourceKind
-        f = Sklm()
-        mock_resource = MagicMock()
-        mock_resource.name = "test-skill"
-        mock_resource.kind = ResourceKind.skill
-        mock_resource.path = Path("/tmp/test")
-        with unittest.mock.patch.object(f.global_store, "add_resource_from_git") as mock_add:
-            mock_add.return_value = mock_resource
-            ref = f.install(ResourceKind.skill, "test-skill", from_url="https://github.com/test/repo")
-            mock_add.assert_called_once()
-            assert ref.name == "test-skill"
-            assert ref.origin == "https://github.com/test/repo"
 
-    def test_add_from_url_calls_install(self, temp_dir):
-        """Sklm.add() avec from_url doit appeler install()."""
+        class _Fake(SourceFiles):
+            def __init__(self, files):
+                self._files = files
+
+            def list_paths(self):
+                return sorted(self._files)
+
+            def read_bytes(self, path):
+                return self._files[path].encode("utf-8")
+
+        fake = _Fake({
+            "skills/foo/SKILL.md": "# Foo",
+            "skills/bar/SKILL.md": "# Bar",
+        })
+        with unittest.mock.patch("sklm.api.resolve_source_files", return_value=fake):
+            f = Sklm()
+            refs = f.install_source("owner/repo", skills=["foo"])
+        assert [r.name for r in refs] == ["foo"]
+        assert refs[0].origin == "owner/repo"
+        assert f.global_store.get_resource(ResourceKind.skill, "foo") is not None
+        assert f.global_store.get_resource(ResourceKind.skill, "bar") is None
+
+    def test_install_source_resolves_once_for_multiple_skills(self, temp_dir):
+        """Une source n'est résolue qu'une fois pour plusieurs skills."""
         from sklm.api import Sklm
-        from sklm.models import ResourceKind
-        ref = MagicMock()
-        ref.name = "test-skill"
-        ref.kind = ResourceKind.skill
+        from sklm.core.fetch import SourceFiles
+
+        class _Fake(SourceFiles):
+            def __init__(self, files):
+                self._files = files
+
+            def list_paths(self):
+                return sorted(self._files)
+
+            def read_bytes(self, path):
+                return self._files[path].encode("utf-8")
+
+        fake = _Fake({
+            "skills/a/SKILL.md": "# A",
+            "skills/b/SKILL.md": "# B",
+        })
+        calls = []
+
+        def fake_resolve(parsed):
+            calls.append(parsed)
+            return fake
+
+        with unittest.mock.patch(
+            "sklm.api.resolve_source_files", side_effect=fake_resolve
+        ):
+            f = Sklm()
+            refs = f.install_source("owner/repo", all_=True)
+        assert len(calls) == 1
+        assert sorted(r.name for r in refs) == ["a", "b"]
+
+    def test_add_source_links_and_syncs(self, temp_dir):
+        """Sklm.add_source() doit installer, lier et synchroniser."""
+        from sklm.api import Sklm
+        from sklm.core.fetch import SourceFiles
+
+        class _Fake(SourceFiles):
+            def __init__(self, files):
+                self._files = files
+
+            def list_paths(self):
+                return sorted(self._files)
+
+            def read_bytes(self, path):
+                return self._files[path].encode("utf-8")
+
+        fake = _Fake({"skills/foo/SKILL.md": "# Foo"})
         (temp_dir / ".opencode").mkdir()
-        f = Sklm()
-        f.init_workspace(["none"])
-        with unittest.mock.patch.object(f, "install") as mock_install:
-            mock_install.return_value = ref
+        with unittest.mock.patch("sklm.api.resolve_source_files", return_value=fake):
+            f = Sklm()
+            f.init_workspace(["none"])
+            # _link_resource is mocked: this asserts the add_source contract,
+            # not whether the host OS permits symlinks.
             with unittest.mock.patch("sklm.api._link_resource") as mock_link:
                 mock_link.return_value = MagicMock()
                 with unittest.mock.patch.object(f, "agent_sync") as mock_sync:
-                    mock_sync.return_value = {"agent": "test", "synced": True}
-                    f.add(ResourceKind.skill, "test-skill", from_url="https://github.com/test/repo")
-                    mock_install.assert_called_once_with(
-                        ResourceKind.skill, "test-skill",
-                        from_url="https://github.com/test/repo", subdir=None
-                    )
+                    mock_sync.return_value = {"agents": ["none"], "synced": True}
+                    refs = f.add_source("owner/repo", skills=["foo"])
+        assert [r.name for r in refs] == ["foo"]
+        assert mock_link.called
+        assert mock_sync.called
 
     def test_status_warns_external_skills(self, temp_dir):
         """sklm status doit avertir si des skills externes sont détectés."""
@@ -2451,3 +2463,919 @@ class TestWizardInitWorkspace:
         assert f.workspace.exists()
         config = f.workspace.load_config()
         assert "opencode" in config.agents
+
+
+# ─── Source parsing ──────────────────────────────────────────────────────────
+
+
+class TestParseSource:
+    """Tests pour sklm.core.sources.parse_source."""
+
+    def test_github_shorthand(self):
+        from sklm.core.sources import parse_source
+
+        parsed = parse_source("github/awesome-copilot")
+        assert parsed.type == "github"
+        assert parsed.owner == "github"
+        assert parsed.repo == "awesome-copilot"
+        assert parsed.url == "https://github.com/github/awesome-copilot.git"
+
+    def test_full_github_url(self):
+        from sklm.core.sources import parse_source
+
+        parsed = parse_source("https://github.com/github/awesome-copilot")
+        assert parsed.type == "github"
+        assert parsed.owner == "github"
+        assert parsed.repo == "awesome-copilot"
+
+    def test_github_url_with_git_suffix(self):
+        from sklm.core.sources import parse_source
+
+        parsed = parse_source("https://github.com/github/awesome-copilot.git")
+        assert parsed.type == "github"
+        assert parsed.repo == "awesome-copilot"
+
+    def test_shorthand_with_git_suffix(self):
+        from sklm.core.sources import parse_source
+
+        parsed = parse_source("owner/repo.git")
+        assert parsed.type == "github"
+        assert parsed.repo == "repo"
+
+    def test_github_tree_url_sets_ref_and_subpath(self):
+        from sklm.core.sources import parse_source
+
+        parsed = parse_source("https://github.com/owner/repo/tree/main/skills/foo")
+        assert parsed.type == "github"
+        assert parsed.ref == "main"
+        assert parsed.subpath == "skills/foo"
+
+    def test_github_tree_url_without_path(self):
+        from sklm.core.sources import parse_source
+
+        parsed = parse_source("https://github.com/owner/repo/tree/v2")
+        assert parsed.ref == "v2"
+        assert parsed.subpath is None
+
+    def test_shorthand_skill_filter(self):
+        from sklm.core.sources import parse_source
+
+        parsed = parse_source("owner/repo@create-readme")
+        assert parsed.skill_filter == "create-readme"
+
+    def test_fragment_ref_and_skill(self):
+        from sklm.core.sources import parse_source
+
+        parsed = parse_source("owner/repo#v2@create-readme")
+        assert parsed.ref == "v2"
+        assert parsed.skill_filter == "create-readme"
+
+    def test_shorthand_with_subpath(self):
+        from sklm.core.sources import parse_source
+
+        parsed = parse_source("owner/repo/skills/foo")
+        assert parsed.subpath == "skills/foo"
+
+    def test_local_relative_path(self, temp_dir):
+        from sklm.core.sources import parse_source
+
+        parsed = parse_source("./my-local-skills")
+        assert parsed.type == "local"
+        assert parsed.url == str((temp_dir / "my-local-skills").resolve())
+
+    def test_local_dot(self):
+        from sklm.core.sources import parse_source
+
+        assert parse_source(".").type == "local"
+
+    def test_local_parent(self):
+        from sklm.core.sources import parse_source
+
+        assert parse_source("..").type == "local"
+
+    def test_local_windows_drive_path(self):
+        from sklm.core.sources import parse_source
+
+        assert parse_source("C:\\skills").type == "local"
+
+    def test_local_backslash_parent(self):
+        from sklm.core.sources import parse_source
+
+        assert parse_source("..\\skills").type == "local"
+
+    def test_gitlab_url_is_generic_git(self):
+        from sklm.core.sources import parse_source
+
+        assert parse_source("https://gitlab.com/org/repo").type == "git"
+
+    def test_ssh_shorthand_is_generic_git(self):
+        from sklm.core.sources import parse_source
+
+        assert parse_source("git@github.com:owner/repo.git").type == "git"
+
+    def test_generic_git_url(self):
+        from sklm.core.sources import parse_source
+
+        assert parse_source("https://git.example.com/team/skills.git").type == "git"
+
+    def test_empty_source_raises(self):
+        from sklm.core.sources import SourceParseError, parse_source
+
+        with pytest.raises(SourceParseError):
+            parse_source("   ")
+
+    def test_bare_word_raises(self):
+        from sklm.core.sources import SourceParseError, parse_source
+
+        with pytest.raises(SourceParseError):
+            parse_source("my-skill")
+
+
+class TestSanitizeSubpath:
+    def test_rejects_traversal(self):
+        from sklm.core.sources import SourceParseError, sanitize_subpath
+
+        with pytest.raises(SourceParseError):
+            sanitize_subpath("../etc/passwd")
+
+    def test_rejects_nested_traversal(self):
+        from sklm.core.sources import SourceParseError, sanitize_subpath
+
+        with pytest.raises(SourceParseError):
+            sanitize_subpath("skills/../../etc")
+
+    def test_tree_url_with_traversal_raises(self):
+        from sklm.core.sources import SourceParseError, parse_source
+
+        with pytest.raises(SourceParseError):
+            parse_source("https://github.com/o/r/tree/main/../etc")
+
+    def test_normalizes_separators(self):
+        from sklm.core.sources import sanitize_subpath
+
+        assert sanitize_subpath("skills\\foo\\") == "skills/foo"
+
+
+class TestLooksLikeSource:
+    def test_returns_true_for_sources(self):
+        from sklm.core.sources import looks_like_source
+
+        for value in [
+            "owner/repo",
+            "owner/repo/skills/foo",
+            "https://github.com/owner/repo",
+            "git@github.com:owner/repo.git",
+            "ssh://git@host/owner/repo.git",
+            "./my-local-skills",
+            "../skills",
+            "C:\\skills",
+            "..\\skills",
+        ]:
+            assert looks_like_source(value) is True, value
+
+    def test_returns_false_for_names(self):
+        from sklm.core.sources import looks_like_source
+
+        for value in ["my-skill", "my-registry:my-skill", "find-skills"]:
+            assert looks_like_source(value) is False, value
+
+
+# ─── Fetch layer ─────────────────────────────────────────────────────────────
+
+
+class TestFetchLayer:
+    """Tests pour sklm.core.fetch : interface, transports, fallback, précondition git."""
+
+    def _fake(self, files):
+        from sklm.core.fetch import SourceFiles
+
+        class _Fake(SourceFiles):
+            def __init__(self, mapping):
+                self._mapping = mapping
+
+            def list_paths(self):
+                return sorted(self._mapping)
+
+            def read_bytes(self, path):
+                return self._mapping[path]
+
+        return _Fake(files)
+
+    def _http_stub(self, paths, tree_status=200, raw_status=200, seen=None):
+        def http_get(url, headers):
+            if seen is not None:
+                seen.append((url, dict(headers)))
+            if "api.github.com" in url:
+                if tree_status != 200:
+                    return tree_status, b"{}"
+                body = json.dumps({
+                    "sha": "abc",
+                    "truncated": False,
+                    "tree": [{"path": p, "type": "blob"} for p in paths]
+                    + [{"path": "skills", "type": "tree"}],
+                }).encode("utf-8")
+                return 200, body
+            if raw_status != 200:
+                return raw_status, b""
+            return 200, f"# content of {url}".encode("utf-8")
+
+        return http_get
+
+    # ── SourceFiles interface ────────────────────────────────────────────
+
+    def test_fake_source_drives_materialize(self, temp_dir):
+        src = self._fake({
+            "skills/foo/SKILL.md": b"# Foo",
+            "skills/foo/refs/a.md": b"A",
+        })
+        dest = temp_dir / "out"
+        src.materialize(
+            dest, "skills/foo", ["skills/foo/SKILL.md", "skills/foo/refs/a.md"]
+        )
+        assert (dest / "SKILL.md").read_bytes() == b"# Foo"
+        assert (dest / "refs" / "a.md").read_bytes() == b"A"
+
+    def test_materialize_root_skill_keeps_paths(self, temp_dir):
+        src = self._fake({"SKILL.md": b"# Root"})
+        dest = temp_dir / "out"
+        src.materialize(dest, "", ["SKILL.md"])
+        assert (dest / "SKILL.md").read_bytes() == b"# Root"
+
+    # ── DiskSource ───────────────────────────────────────────────────────
+
+    def test_disk_source_lists_paths_and_skips_git(self, temp_dir):
+        from sklm.core.fetch import DiskSource
+
+        root = temp_dir / "repo"
+        (root / "skills" / "foo").mkdir(parents=True)
+        (root / "skills" / "foo" / "SKILL.md").write_text("# Foo")
+        (root / ".git").mkdir()
+        (root / ".git" / "HEAD").write_text("ref: refs/heads/main")
+
+        src = DiskSource(root)
+        paths = src.list_paths()
+        assert "skills/foo/SKILL.md" in paths
+        assert not any(p.startswith(".git/") for p in paths)
+        assert src.read_bytes("skills/foo/SKILL.md") == b"# Foo"
+
+    # ── HttpGithubSource ─────────────────────────────────────────────────
+
+    def test_http_source_lists_blobs_only(self):
+        from sklm.core.fetch import HttpGithubSource
+
+        src = HttpGithubSource(
+            "o", "r", http_get=self._http_stub(["skills/foo/SKILL.md", "README.md"])
+        )
+        assert src.list_paths() == ["skills/foo/SKILL.md", "README.md"]
+
+    def test_http_source_reads_raw_content(self):
+        from sklm.core.fetch import HttpGithubSource
+
+        src = HttpGithubSource("o", "r", http_get=self._http_stub(["skills/foo/SKILL.md"]))
+        data = src.read_bytes("skills/foo/SKILL.md")
+        assert b"raw.githubusercontent.com" in data
+
+    def test_http_source_sends_token_when_provided(self):
+        from sklm.core.fetch import HttpGithubSource
+
+        seen = []
+        src = HttpGithubSource(
+            "o", "r", token="secret", http_get=self._http_stub(["a"], seen=seen)
+        )
+        src.list_paths()
+        assert seen[0][1]["Authorization"] == "Bearer secret"
+
+    def test_http_source_rate_limit_is_unavailable(self):
+        from sklm.core.fetch import HttpGithubSource, HttpSourceUnavailable
+
+        src = HttpGithubSource("o", "r", http_get=self._http_stub([], tree_status=403))
+        with pytest.raises(HttpSourceUnavailable):
+            src.list_paths()
+
+    def test_http_source_private_repo_is_unavailable(self):
+        from sklm.core.fetch import HttpGithubSource, HttpSourceUnavailable
+
+        src = HttpGithubSource("o", "r", http_get=self._http_stub([], tree_status=404))
+        with pytest.raises(HttpSourceUnavailable):
+            src.list_paths()
+
+    def test_http_source_truncated_tree_is_unavailable(self):
+        from sklm.core.fetch import HttpGithubSource, HttpSourceUnavailable
+
+        def http_get(url, headers):
+            return 200, json.dumps({"truncated": True, "tree": []}).encode("utf-8")
+
+        src = HttpGithubSource("o", "r", http_get=http_get)
+        with pytest.raises(HttpSourceUnavailable):
+            src.list_paths()
+
+    # ── resolve_source routing ───────────────────────────────────────────
+
+    def test_resolve_source_github_uses_http(self):
+        from sklm.core.fetch import HttpGithubSource, resolve_source
+        from sklm.core.sources import parse_source
+
+        src = resolve_source(
+            parse_source("github/awesome-copilot"),
+            http_get=self._http_stub(["skills/foo/SKILL.md"]),
+        )
+        assert isinstance(src, HttpGithubSource)
+        assert src.list_paths() == ["skills/foo/SKILL.md"]
+
+    def _git_fallback_fixture(self, temp_dir, monkeypatch, url):
+        repo = temp_dir / "cache" / "fixture_repo"
+        repo.mkdir(parents=True, exist_ok=True)
+        (repo / "SKILL.md").write_text("# x")
+        monkeypatch.setattr("sklm.core.registry.REGISTRY_CACHE", temp_dir / "cache")
+        monkeypatch.setattr(
+            "sklm.core.registry.RegistryManager.clone_or_fetch",
+            lambda self, url, name, ref="HEAD": repo,
+        )
+        return repo
+
+    def test_resolve_source_gitlab_uses_git(self, temp_dir, monkeypatch):
+        from sklm.core.fetch import DiskSource, resolve_source
+        from sklm.core.sources import parse_source
+
+        self._git_fallback_fixture(temp_dir, monkeypatch, "https://gitlab.com/org/repo")
+        src = resolve_source(parse_source("https://gitlab.com/org/repo"))
+        assert isinstance(src, DiskSource)
+
+    def test_resolve_source_ssh_uses_git(self, temp_dir, monkeypatch):
+        from sklm.core.fetch import DiskSource, resolve_source
+        from sklm.core.sources import parse_source
+
+        self._git_fallback_fixture(temp_dir, monkeypatch, "git@github.com:owner/repo.git")
+        src = resolve_source(parse_source("git@github.com:owner/repo.git"))
+        assert isinstance(src, DiskSource)
+
+    def test_resolve_source_falls_back_on_rate_limit(self, temp_dir, monkeypatch):
+        from sklm.core.fetch import DiskSource, resolve_source
+        from sklm.core.sources import parse_source
+
+        self._git_fallback_fixture(temp_dir, monkeypatch, "owner/repo")
+        src = resolve_source(
+            parse_source("owner/repo"),
+            http_get=self._http_stub([], tree_status=403),
+        )
+        assert isinstance(src, DiskSource)
+
+    def test_resolve_source_local_directory(self, temp_dir):
+        from sklm.core.fetch import DiskSource, resolve_source
+        from sklm.core.sources import parse_source
+
+        root = temp_dir / "local"
+        root.mkdir()
+        (root / "SKILL.md").write_text("# local")
+        src = resolve_source(parse_source("./local"))
+        assert isinstance(src, DiskSource)
+        assert src.list_paths() == ["SKILL.md"]
+
+    def test_resolve_source_missing_local_directory_raises(self, temp_dir):
+        from sklm.core.fetch import SourceFetchError, resolve_source
+        from sklm.core.sources import parse_source
+
+        with pytest.raises(SourceFetchError):
+            resolve_source(parse_source("./does-not-exist"))
+
+    # ── git precondition ─────────────────────────────────────────────────
+
+    def test_require_git_reports_missing_binary(self, monkeypatch):
+        from sklm.core.fetch import GitUnavailableError, require_git
+
+        monkeypatch.setattr("sklm.core.fetch.shutil.which", lambda name: None)
+        with pytest.raises(GitUnavailableError) as exc:
+            require_git()
+        message = str(exc.value)
+        assert "git" in message
+        assert "WinError" not in message
+
+    def test_clone_or_fetch_missing_git_raises_actionable_error(
+        self, isolated_store, monkeypatch
+    ):
+        import subprocess as subprocess_module
+        from sklm.core.registry import RegistryManager
+
+        monkeypatch.setattr("sklm.core.registry.REGISTRY_CACHE", isolated_store.cache_dir)
+
+        def boom(*args, **kwargs):
+            raise FileNotFoundError(2, "The system cannot find the file specified")
+
+        monkeypatch.setattr(subprocess_module, "run", boom)
+        with pytest.raises(ValueError) as exc:
+            RegistryManager().clone_or_fetch("https://github.com/o/r", "o_r")
+        message = str(exc.value)
+        assert "git" in message
+        assert "WinError" not in message
+        assert "cannot find the file" not in message
+
+
+# ─── Discovery ───────────────────────────────────────────────────────────────
+
+
+class TestDiscovery:
+    """Tests pour sklm.core.discovery : conteneurs, profondeur, ombrage, frontmatter."""
+
+    def _files(self, mapping):
+        from sklm.core.fetch import SourceFiles
+
+        class _Fake(SourceFiles):
+            def __init__(self, files):
+                self._files = files
+
+            def list_paths(self):
+                return sorted(self._files)
+
+            def read_bytes(self, path):
+                return self._files[path].encode("utf-8")
+
+        return _Fake(mapping)
+
+    def _skill(self, name="Foo", description="A skill"):
+        return f"---\nname: {name}\ndescription: {description}\n---\n# {name}\n"
+
+    def _plain(self):
+        return "# Plain skill\n"
+
+    def test_flat_layout_discovered(self):
+        from sklm.core.discovery import discover_skills
+
+        files = self._files({"skills/create-readme/SKILL.md": self._skill("Create Readme")})
+        skills = discover_skills(files)
+        assert [s.name for s in skills] == ["create-readme"]
+        assert skills[0].directory == "skills/create-readme"
+        assert skills[0].frontmatter_name == "Create Readme"
+
+    def test_agent_directory_discovered(self):
+        from sklm.core.discovery import discover_skills
+
+        files = self._files({".claude/skills/review/SKILL.md": self._skill("Review")})
+        assert [s.name for s in discover_skills(files)] == ["review"]
+
+    def test_agents_container_discovered(self):
+        from sklm.core.discovery import discover_skills
+
+        files = self._files({".agents/skills/foo/SKILL.md": self._skill("Foo")})
+        assert [s.name for s in discover_skills(files)] == ["foo"]
+
+    def test_catalog_layout_discovered(self):
+        from sklm.core.discovery import discover_skills
+
+        files = self._files({"skills/seo/entity-seo/SKILL.md": self._skill("Entity SEO")})
+        assert [s.name for s in discover_skills(files)] == ["entity-seo"]
+
+    def test_too_deep_is_excluded(self):
+        from sklm.core.discovery import discover_skills
+
+        files = self._files({"skills/a/b/c/d/SKILL.md": self._skill("Deep")})
+        assert discover_skills(files) == []
+
+    def test_shallower_shadows_nested(self):
+        from sklm.core.discovery import discover_skills
+
+        files = self._files({
+            "skills/foo/SKILL.md": self._skill("Foo"),
+            "skills/foo/nested/SKILL.md": self._skill("Nested"),
+        })
+        assert [s.name for s in discover_skills(files)] == ["foo"]
+
+    def test_skip_dirs_excluded(self):
+        from sklm.core.discovery import discover_skills
+
+        files = self._files({
+            "node_modules/x/SKILL.md": self._skill("Node"),
+            "dist/y/SKILL.md": self._skill("Dist"),
+            "skills/ok/SKILL.md": self._skill("Ok"),
+        })
+        assert [s.name for s in discover_skills(files)] == ["ok"]
+
+    def test_frontmatter_optional(self):
+        from sklm.core.discovery import discover_skills
+
+        files = self._files({"skills/plain/SKILL.md": self._plain()})
+        skills = discover_skills(files)
+        assert [s.name for s in skills] == ["plain"]
+        assert skills[0].frontmatter_name is None
+        assert skills[0].description is None
+
+    def test_frontmatter_exposed(self):
+        from sklm.core.discovery import discover_skills
+
+        files = self._files({"skills/foo/SKILL.md": self._skill("Foo", "Does foo")})
+        skill = discover_skills(files)[0]
+        assert skill.frontmatter_name == "Foo"
+        assert skill.description == "Does foo"
+
+    def test_frontmatter_name_matches_slug_request(self):
+        from sklm.core.discovery import discover_skills, select_skills
+
+        files = self._files({
+            "skills/convex-best-practices/SKILL.md": self._skill("Convex Best Practices")
+        })
+        skills = discover_skills(files)
+        selected = select_skills(skills, requested=["convex-best-practices"])
+        assert [s.name for s in selected] == ["convex-best-practices"]
+
+    def test_frontmatter_name_does_not_rename(self):
+        from sklm.core.discovery import discover_skills
+
+        files = self._files({
+            "skills/react-best-practices/SKILL.md": self._skill("React Best Practices")
+        })
+        assert discover_skills(files)[0].name == "react-best-practices"
+
+    def test_select_unknown_raises_with_available(self):
+        from sklm.core.discovery import discover_skills, select_skills
+
+        files = self._files({"skills/foo/SKILL.md": self._skill("Foo")})
+        skills = discover_skills(files)
+        with pytest.raises(ValueError) as exc:
+            select_skills(skills, requested=["nonexistent"])
+        assert "foo" in str(exc.value)
+
+    def test_select_all_returns_everything(self):
+        from sklm.core.discovery import discover_skills, select_skills
+
+        files = self._files({
+            "skills/a/SKILL.md": self._skill("A"),
+            "skills/b/SKILL.md": self._skill("B"),
+        })
+        skills = discover_skills(files)
+        assert len(select_skills(skills, all_=True)) == 2
+
+    def test_subpath_restricts_discovery(self):
+        from sklm.core.discovery import discover_skills
+
+        files = self._files({
+            "skills/nested/review/SKILL.md": self._skill("Review"),
+            "skills/other/foo/SKILL.md": self._skill("Foo"),
+        })
+        skills = discover_skills(files, subpath="skills/nested")
+        assert [s.name for s in skills] == ["review"]
+
+    def test_root_skill_uses_default_name(self):
+        from sklm.core.discovery import discover_skills
+
+        files = self._files({"SKILL.md": self._plain()})
+        skills = discover_skills(files, default_name="beautify-github-readme")
+        assert [s.name for s in skills] == ["beautify-github-readme"]
+        assert skills[0].directory == ""
+
+    def test_member_paths_belong_to_the_skill(self):
+        from sklm.core.discovery import discover_skills
+
+        files = self._files({
+            "skills/foo/SKILL.md": self._skill("Foo"),
+            "skills/foo/refs/a.md": "A",
+            "skills/bar/SKILL.md": self._skill("Bar"),
+        })
+        skill = next(s for s in discover_skills(files) if s.name == "foo")
+        assert skill.paths == ["skills/foo/SKILL.md", "skills/foo/refs/a.md"]
+
+    def test_containers_include_agent_directories(self):
+        from sklm.core.discovery import containers
+
+        found = containers()
+        assert "" in found
+        assert "skills" in found
+        assert ".agents/skills" in found
+        assert ".claude/skills" in found
+        assert ".opencode/skills" in found
+
+
+# ─── Source CLI surface ──────────────────────────────────────────────────────
+
+
+class TestSourceCLI:
+    """Tests pour la nouvelle surface CLI : source, --skill/--all/--list, legacy."""
+
+    @pytest.fixture(autouse=True)
+    def setup(self, monkeypatch, temp_dir):
+        monkeypatch.setattr("sklm.store.SKLM_HOME", temp_dir / ".sklm-home")
+        monkeypatch.setattr(
+            "sklm.core.registry.REGISTRIES_PATH",
+            temp_dir / ".sklm-home" / "registries.yaml",
+        )
+        monkeypatch.setattr(
+            "sklm.core.registry.REGISTRY_CACHE", temp_dir / ".sklm-home" / "cache"
+        )
+        monkeypatch.setattr("sklm.cli.main._sklm", None)
+        monkeypatch.setattr("sklm.cli.main._tracker", None)
+
+    def _repo(self, temp_dir):
+        root = temp_dir / "repo"
+        for name in ("alpha", "beta"):
+            d = root / "skills" / name
+            d.mkdir(parents=True)
+            (d / "SKILL.md").write_text(
+                f"---\nname: {name.title()}\ndescription: {name} skill\n---\n# {name}\n"
+            )
+        return root
+
+    def test_install_source_lists_skills(self, temp_dir):
+        from typer.testing import CliRunner
+        from sklm.cli.main import app
+
+        runner = CliRunner()
+        root = self._repo(temp_dir)
+        result = runner.invoke(app, ["install", str(root), "--list"])
+        assert result.exit_code == 0
+        assert "alpha" in result.output
+        assert "beta" in result.output
+        assert "alpha skill" in result.output
+
+    def test_install_source_skill_flag_selects_one(self, temp_dir):
+        from typer.testing import CliRunner
+        from sklm.cli.main import app
+        from sklm.api import Sklm
+        from sklm.models import ResourceKind
+
+        runner = CliRunner()
+        root = self._repo(temp_dir)
+        result = runner.invoke(app, ["install", str(root), "--skill", "alpha"])
+        assert result.exit_code == 0
+        f = Sklm()
+        assert f.global_store.get_resource(ResourceKind.skill, "alpha") is not None
+        assert f.global_store.get_resource(ResourceKind.skill, "beta") is None
+
+    def test_install_source_unmatched_skill_lists_available(self, temp_dir):
+        from typer.testing import CliRunner
+        from sklm.cli.main import app
+
+        runner = CliRunner()
+        root = self._repo(temp_dir)
+        result = runner.invoke(app, ["install", str(root), "--skill", "nope"])
+        assert result.exit_code != 0
+        assert "alpha" in result.output
+
+    def test_install_source_all(self, temp_dir):
+        from typer.testing import CliRunner
+        from sklm.cli.main import app
+        from sklm.api import Sklm
+        from sklm.models import ResourceKind
+
+        runner = CliRunner()
+        root = self._repo(temp_dir)
+        result = runner.invoke(app, ["install", str(root), "--all"])
+        assert result.exit_code == 0
+        f = Sklm()
+        names = sorted(
+            r.name for r in f.global_store.list_resources(ResourceKind.skill)
+        )
+        assert names == ["alpha", "beta"]
+
+    def test_install_source_without_selection_fails_non_interactive(self, temp_dir):
+        from typer.testing import CliRunner
+        from sklm.cli.main import app
+
+        runner = CliRunner()
+        root = self._repo(temp_dir)
+        result = runner.invoke(app, ["install", str(root)])
+        assert result.exit_code != 0
+        assert "--skill" in result.output
+        assert "--all" in result.output
+        assert "--list" in result.output
+
+    def test_from_alias_supplies_the_source(self, temp_dir):
+        from typer.testing import CliRunner
+        from sklm.cli.main import app
+        from sklm.api import Sklm
+        from sklm.models import ResourceKind
+
+        runner = CliRunner()
+        root = self._repo(temp_dir)
+        result = runner.invoke(app, ["install", "alpha", "--from", str(root)])
+        assert result.exit_code == 0
+        f = Sklm()
+        assert f.global_store.get_resource(ResourceKind.skill, "alpha") is not None
+
+    def test_legacy_type_token_errors_on_every_command(self, temp_dir):
+        from typer.testing import CliRunner
+        from sklm.cli.main import app
+
+        runner = CliRunner()
+        for command in ("add", "install", "rm", "uninstall", "migrate"):
+            result = runner.invoke(app, [command, "skill", "my-skill"])
+            assert result.exit_code != 0, command
+            assert "resource-type argument was removed" in result.output, command
+
+    def test_help_does_not_describe_a_resource_type(self, temp_dir):
+        from typer.testing import CliRunner
+        from sklm.cli.main import app
+
+        runner = CliRunner()
+        for command in ("add", "install", "rm", "uninstall", "migrate"):
+            result = runner.invoke(app, [command, "--help"])
+            assert result.exit_code == 0, command
+            assert "Resource type" not in result.output, command
+
+    def test_add_stored_name_resolves_from_store(self, temp_dir, fake_skill_dir, monkeypatch):
+        from typer.testing import CliRunner
+        from sklm.cli.main import app
+        from sklm.api import Sklm
+        from sklm.models import ResourceKind
+
+        runner = CliRunner()
+        f = Sklm()
+        f.global_add(ResourceKind.skill, fake_skill_dir, "my-skill")
+        # Linking is mocked: this asserts name resolution, not OS symlink support.
+        monkeypatch.setattr("sklm.api._link_resource", lambda *a, **k: MagicMock())
+        result = runner.invoke(app, ["add", "my-skill"])
+        assert result.exit_code == 0
+        assert "my-skill" in result.output
+
+
+# ─── Linking without symlink privilege ───────────────────────────────────────
+
+
+class TestLinkingFallback:
+    """Tests pour le repli copie quand os.symlink n'est pas disponible."""
+
+    def _refuse(self, *args, **kwargs):
+        """Stand-in for os.symlink on a host without the privilege."""
+        import errno as _errno
+
+        raise OSError(_errno.EPERM, "Operation not permitted")
+
+    def _store_skill(self, isolated_store, name="foo"):
+        src = isolated_store.root / "src" / name
+        (src / "refs").mkdir(parents=True, exist_ok=True)
+        (src / "SKILL.md").write_text("# Foo")
+        (src / "refs" / "a.md").write_text("A")
+        return isolated_store.add_resource(ResourceKind.skill, src, name)
+
+    def _workspace(self, temp_dir):
+        ws = Workspace(temp_dir)
+        ws.init(["none"])
+        return ws
+
+    # ── helper ───────────────────────────────────────────────────────────
+
+    def test_symlinks_unsupported_detects_windows_privilege_error(self):
+        from sklm.core.linking import symlinks_unsupported
+
+        exc = OSError(22, "privilege not held", None, 1314)
+        assert getattr(exc, "winerror", None) == 1314
+        assert symlinks_unsupported(exc) is True
+
+    def test_symlinks_unsupported_detects_errno_variants(self):
+        import errno as _errno
+        from sklm.core.linking import symlinks_unsupported
+
+        for value in (_errno.EPERM, _errno.EACCES, _errno.ENOTSUP, _errno.EINVAL):
+            assert symlinks_unsupported(OSError(value, "x")) is True, value
+        assert symlinks_unsupported(OSError(_errno.ENOSPC, "x")) is False
+
+    # ── real, unmocked round trip ────────────────────────────────────────
+
+    def test_link_resource_round_trip(self, isolated_store, temp_dir):
+        """Creating and removing a link works on this host, symlink or copy."""
+        from sklm.core.linking import link_resource, unlink_resource
+
+        resource = self._store_skill(isolated_store, "foo")
+        ws = self._workspace(temp_dir)
+
+        link = link_resource(ws, isolated_store, ResourceKind.skill, "foo")
+        assert link.link_path.exists()
+        assert (link.link_path / "SKILL.md").exists()
+        assert ws.get_link(ResourceKind.skill, "foo") is not None
+
+        unlink_resource(ws, ResourceKind.skill, "foo")
+        assert not link.link_path.exists()
+        assert ws.get_link(ResourceKind.skill, "foo") is None
+        # The stored skill is never touched by unlinking.
+        assert resource.path.exists()
+        assert (resource.path / "SKILL.md").exists()
+
+    # ── copy fallback ────────────────────────────────────────────────────
+
+    def test_link_falls_back_to_copy(self, isolated_store, temp_dir, monkeypatch):
+        from sklm.core.linking import link_resource
+
+        self._store_skill(isolated_store, "foo")
+        ws = self._workspace(temp_dir)
+        monkeypatch.setattr("sklm.core.linking.os.symlink", self._refuse)
+
+        link = link_resource(ws, isolated_store, ResourceKind.skill, "foo")
+
+        assert link.link_path.is_dir()
+        assert not link.link_path.is_symlink()
+        assert (link.link_path / "SKILL.md").read_text() == "# Foo"
+        assert (link.link_path / "refs" / "a.md").read_text() == "A"
+        assert ws.get_link(ResourceKind.skill, "foo") is not None
+
+    def test_unrelated_oserror_is_not_swallowed(self, isolated_store, temp_dir, monkeypatch):
+        import errno as _errno
+        from sklm.core.linking import link_resource
+
+        self._store_skill(isolated_store, "foo")
+        ws = self._workspace(temp_dir)
+
+        def fail(*args, **kwargs):
+            raise OSError(_errno.ENOSPC, "No space left on device")
+
+        monkeypatch.setattr("sklm.core.linking.os.symlink", fail)
+        with pytest.raises(OSError):
+            link_resource(ws, isolated_store, ResourceKind.skill, "foo")
+
+    def test_unlink_copied_entry_keeps_store_skill(self, isolated_store, temp_dir, monkeypatch):
+        from sklm.core.linking import link_resource, unlink_resource
+
+        resource = self._store_skill(isolated_store, "foo")
+        ws = self._workspace(temp_dir)
+        monkeypatch.setattr("sklm.core.linking.os.symlink", self._refuse)
+        link = link_resource(ws, isolated_store, ResourceKind.skill, "foo")
+        assert not link.link_path.is_symlink()
+
+        unlink_resource(ws, ResourceKind.skill, "foo")
+
+        assert not link.link_path.exists()
+        assert (resource.path / "SKILL.md").exists()
+
+    # ── broken link detection ────────────────────────────────────────────
+
+    def test_broken_link_detected_when_store_skill_deleted(
+        self, isolated_store, temp_dir, monkeypatch
+    ):
+        import shutil as _shutil
+        from sklm.core.linking import detect_broken_links, link_resource
+
+        self._store_skill(isolated_store, "foo")
+        ws = self._workspace(temp_dir)
+        monkeypatch.setattr("sklm.core.linking.os.symlink", self._refuse)
+        link = link_resource(ws, isolated_store, ResourceKind.skill, "foo")
+        assert not link.link_path.is_symlink()
+        assert detect_broken_links(ws) == []
+
+        # The copied entry survives, so detection must consult the store target.
+        _shutil.rmtree(isolated_store.skills_dir / "foo")
+        broken = detect_broken_links(ws)
+        assert len(broken) == 1
+        assert broken[0].name == "foo"
+
+    def test_intact_link_is_not_reported_broken(self, isolated_store, temp_dir):
+        from sklm.core.linking import detect_broken_links, link_resource
+
+        self._store_skill(isolated_store, "foo")
+        ws = self._workspace(temp_dir)
+        link_resource(ws, isolated_store, ResourceKind.skill, "foo")
+        assert detect_broken_links(ws) == []
+
+    # ── idempotent re-add ────────────────────────────────────────────────
+
+    def test_readd_repairs_recorded_but_unlinked_resource(self, temp_dir, monkeypatch):
+        monkeypatch.setattr("sklm.store.SKLM_HOME", temp_dir / ".sklm-home")
+        from sklm.api import Sklm
+        from sklm.core.fetch import SourceFiles
+
+        class _Fake(SourceFiles):
+            def __init__(self, files):
+                self._files = files
+
+            def list_paths(self):
+                return sorted(self._files)
+
+            def read_bytes(self, path):
+                return self._files[path].encode("utf-8")
+
+        fake = _Fake({"skills/foo/SKILL.md": "# Foo"})
+        with unittest.mock.patch("sklm.api.resolve_source_files", return_value=fake):
+            f = Sklm(project_root=temp_dir)
+            f.init_workspace(["none"])
+            refs = f.install_source("owner/repo", skills=["foo"])
+
+            # Simulate the half-applied state: recorded, but never linked.
+            f.workspace.add_resource(refs[0])
+            assert f.workspace.get_link(ResourceKind.skill, "foo") is None
+
+            repaired = f.add(ResourceKind.skill, "foo")
+
+        assert repaired.name == "foo"
+        assert f.workspace.get_link(ResourceKind.skill, "foo") is not None
+
+    # ── CLI error surfacing ──────────────────────────────────────────────
+
+    def test_cli_add_reports_link_failure_without_traceback(
+        self, temp_dir, fake_skill_dir, monkeypatch
+    ):
+        import errno as _errno
+        from typer.testing import CliRunner
+        from sklm.cli.main import app
+        from sklm.api import Sklm
+
+        monkeypatch.setattr("sklm.store.SKLM_HOME", temp_dir / ".sklm-home")
+        monkeypatch.setattr("sklm.cli.main._sklm", None)
+
+        f = Sklm(project_root=temp_dir)
+        f.global_add(ResourceKind.skill, fake_skill_dir, "my-skill")
+
+        def fail(*args, **kwargs):
+            raise OSError(_errno.ENOSPC, "No space left on device")
+
+        monkeypatch.setattr("sklm.core.linking.os.symlink", fail)
+        runner = CliRunner()
+        result = runner.invoke(app, ["add", "my-skill"])
+
+        assert result.exit_code != 0
+        assert "No space left on device" in result.output
+        assert "Traceback" not in result.output

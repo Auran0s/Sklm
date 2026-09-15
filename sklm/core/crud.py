@@ -23,7 +23,7 @@ def add_resource_to_workspace(
     kind: ResourceKind,
     name: str,
 ) -> ResourceRef:
-    ref = _resolve_resource(global_store, registry_manager, kind, name)
+    ref = resolve_resource(global_store, registry_manager, kind, name)
     workspace.add_resource(ref)
     return ref
 
@@ -69,7 +69,7 @@ def get_resource_info(
     return ref
 
 
-def _resolve_resource(
+def resolve_resource(
     global_store: GlobalStore,
     registry_manager: RegistryManager,
     kind: ResourceKind,
