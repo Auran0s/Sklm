@@ -8,6 +8,7 @@
 
 ![Python version](https://img.shields.io/badge/Python->=3.9-3776AB?style=flat-square&logo=python&logoColor=fff)
 [![License](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](LICENSE)
+[![PyPI](https://img.shields.io/pypi/v/sklm-cli?style=flat-square&logo=pypi&logoColor=fff)](https://pypi.org/project/sklm-cli/)
 
 [![Product Hunt](https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1172208&theme=light)](https://www.producthunt.com/products/sklm?utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-sklm)
 
@@ -37,6 +38,8 @@ Sklm keeps a global library in `~/.sklm/`, then lets you pick which skills each 
 - **Per-agent skill variants** — a single skill can ship agent-specific file overrides in a `variants/` subdirectory. Each agent receives the version tuned for it.
 
 ## Installation
+
+Available on [PyPI](https://pypi.org/project/sklm-cli/):
 
 ```bash
 pip install sklm-cli
