@@ -142,6 +142,44 @@ def prompt_skill_selection(
     return selected
 
 
+def prompt_discovered_selection(skills: object) -> list[str]:
+    """Show an interactive checkbox over skills discovered in a source.
+
+    Parameters
+    ----------
+    skills
+        A sequence of discovered skills (objects exposing ``name`` and
+        ``description``).
+
+    Returns
+    -------
+    list[str]
+        The names of the selected skills, or an empty list if cancelled.
+    """
+    _ensure_tty()
+    skill_list = list(skills)
+    if not skill_list:
+        console.print("[yellow]No skills found in this source.[/]")
+        return []
+
+    choices = []
+    for skill in skill_list:
+        title: list = [("", f"{skill.name:28s}")]
+        if skill.description:
+            title.append((f"class:{DIM_STYLE_CLASS}", skill.description))
+        choices.append(questionary.Choice(title=title, value=skill.name))
+
+    selected = questionary.checkbox(
+        "Select skills to install",
+        choices=choices,
+        style=QUESTIONARY_STYLE,
+    ).ask()
+
+    if selected is None:
+        return []
+    return selected
+
+
 def prompt_install_from_git() -> tuple[str, str | None]:
     """Prompt for a Git URL and optional subdirectory.
 

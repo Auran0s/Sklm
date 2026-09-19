@@ -7,12 +7,16 @@ import re
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import yaml
 from rich.console import Console
 
 from sklm.models import GlobalConfig, Resource, ResourceKind, SourceMetadata, TelemetryConfig
+
+if TYPE_CHECKING:
+    from sklm.core.discovery import DiscoveredSkill
+    from sklm.core.fetch import SourceFiles
 
 
 console = Console()
@@ -113,93 +117,54 @@ class GlobalStore:
         del config.resources[key]
         self._save_config(config)
 
-    def add_resource_from_git(
+    def add_resource_from_source(
         self,
         kind: ResourceKind,
-        name: str,
-        repo_url: str,
-        subdir: Optional[str] = None,
+        skill: "DiscoveredSkill",
+        files: "SourceFiles",
+        source_repo: str,
         ref: str = "HEAD",
     ) -> Resource:
-        from sklm.core.registry import RegistryManager
+        """Install one discovered skill into the global store.
 
-        registry = RegistryManager()
-        repo_slug = url_to_repo_slug(repo_url)
-        console.print(f"[dim]Cloning from {repo_url}...[/]")
-        cache_path = registry.clone_or_fetch(repo_url, repo_slug, ref=ref)
-        console.print("[green]✓[/] Repository cloned")
-
-        resolved_subdir: Optional[str] = subdir
-        if subdir:
-            src = cache_path / subdir
-        else:
-            # Try standard layouts in priority order:
-            # 1. skills/<name> subdirectory (multi-skill repo)
-            # 2. repo root (single-skill repo with SKILL.md at root)
-            # 3. <name> subdirectory (repo with nested subdir of same name)
-            # 4. Recursive search under skills/ for <name>/SKILL.md
-            candidate = cache_path / "skills" / name
-            if candidate.exists():
-                src = candidate
-                resolved_subdir = f"skills/{name}"
-            elif (cache_path / "SKILL.md").exists():
-                src = cache_path
-                resolved_subdir = None
-            else:
-                src = cache_path / name
-                resolved_subdir = name
-
-            if not src.exists() or not src.is_dir():
-                skills_root = cache_path / "skills"
-                if skills_root.is_dir():
-                    for dirpath, dirnames, _ in os.walk(skills_root):
-                        if name in dirnames:
-                            candidate = Path(dirpath) / name
-                            if (candidate / "SKILL.md").exists():
-                                src = candidate
-                                resolved_subdir = str(src.relative_to(cache_path))
-                                break
-
-        if not src.exists() or not src.is_dir():
-            available = []
-            skills_root = cache_path / "skills"
-            if skills_root.is_dir():
-                for dirpath, _, filenames in os.walk(skills_root):
-                    if "SKILL.md" in filenames:
-                        rel = Path(dirpath).relative_to(cache_path)
-                        available.append(str(rel))
-            hint = ""
-            if available:
-                hint = f" Available skills: {', '.join(sorted(available))}."
-            raise FileNotFoundError(
-                f"Skill directory '{name}' not found at expected path '{src}' in repo '{repo_url}'.{hint}"
-                + " Use --subdir to specify the exact subdirectory path."
-            )
-
-        dest = self._type_dir(kind) / name
+        Parameters
+        ----------
+        kind:
+            Resource kind (only ``skill`` exists today).
+        skill:
+            The skill to install, as returned by discovery.
+        files:
+            The source the skill's files are read from.
+        source_repo:
+            Repository URL or local path, recorded as provenance.
+        ref:
+            Git ref the source was resolved at.
+        """
+        dest = self._type_dir(kind) / skill.name
         if dest.exists():
             if dest.is_dir():
                 shutil.rmtree(dest)
             else:
                 dest.unlink()
-        shutil.copytree(src, dest)
+        dest.mkdir(parents=True, exist_ok=True)
+        files.materialize(dest, skill.directory, skill.paths)
 
         resource = Resource(
-            name=name,
+            name=skill.name,
             kind=kind,
-            source=repo_url,
+            source=source_repo,
             path=dest,
         )
         config = self._load_config()
-        config.resources[f"{kind.value}:{name}"] = resource
+        config.resources[f"{kind.value}:{skill.name}"] = resource
         self._save_config(config)
 
         self.save_source_metadata(
             kind,
-            name,
+            skill.name,
             SourceMetadata(
-                source_repo=repo_url,
-                source_subdir=resolved_subdir or "",
+                source_repo=source_repo,
+                source_subdir=skill.directory,
                 installed_at=datetime.now(timezone.utc).isoformat(),
                 ref=ref,
             ),

@@ -1,14 +1,49 @@
-"""Linking logic — manage symlinks between global store and project workspace."""
+"""Linking logic — manage links between the global store and a project workspace."""
 
 from __future__ import annotations
 
+import errno
 import os
+import shutil
 from pathlib import Path
 from typing import Optional
 
 from sklm.models import Link, ResourceKind
 from sklm.store import GlobalStore
 from sklm.core.workspace import Workspace
+
+
+# Windows ERROR_PRIVILEGE_NOT_HELD: raised by os.symlink when the process does
+# not hold SeCreateSymbolicLinkPrivilege (Developer Mode off, not elevated).
+_WINDOWS_PRIVILEGE_NOT_HELD = 1314
+
+# errno values that mean "this platform will not create a symlink here".
+_SYMLINK_UNSUPPORTED_ERRNOS = frozenset({
+    errno.EPERM,
+    errno.EACCES,
+    errno.ENOTSUP,
+    errno.EINVAL,
+})
+
+
+def symlinks_unsupported(exc: OSError) -> bool:
+    """Return True when *exc* means the platform will not create symlinks.
+
+    Windows without Developer Mode raises ``WinError 1314``; other platforms
+    surface the refusal through one of the errno values above.
+    """
+    if getattr(exc, "winerror", None) == _WINDOWS_PRIVILEGE_NOT_HELD:
+        return True
+    return exc.errno in _SYMLINK_UNSUPPORTED_ERRNOS
+
+
+def _copy_into(source: Path, dest: Path) -> None:
+    """Copy *source* to *dest* — the fallback when symlinks are unavailable."""
+    if source.is_dir():
+        shutil.copytree(source, dest)
+    else:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, dest)
 
 
 def link_resource(
@@ -26,7 +61,14 @@ def link_resource(
     link_dir.parent.mkdir(parents=True, exist_ok=True)
     if link_dir.exists():
         raise FileExistsError(f"Link already exists for '{kind.value}:{name}'")
-    os.symlink(resource.path, link_dir, target_is_directory=resource.path.is_dir())
+    try:
+        os.symlink(resource.path, link_dir, target_is_directory=resource.path.is_dir())
+    except OSError as exc:
+        if not symlinks_unsupported(exc):
+            raise
+        # Symlinks need a privilege this process does not hold (Windows without
+        # Developer Mode). Copy instead so the install still completes.
+        _copy_into(resource.path, link_dir)
     link = Link(
         name=name,
         kind=kind,
@@ -55,10 +97,15 @@ def unlink_resource(
 def detect_broken_links(
     workspace: Workspace,
 ) -> list[Link]:
+    """Return links whose stored skill or workspace entry is missing.
+
+    The store target is checked as well as the workspace entry, because the
+    entry may be a copy rather than a symlink when the platform cannot create
+    symlinks.
+    """
     broken: list[Link] = []
     for link in workspace.list_links():
-        target = link.link_path
-        if not target.exists():
+        if not link.target.exists() or not link.link_path.exists():
             broken.append(link)
     return broken
 

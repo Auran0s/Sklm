@@ -34,7 +34,7 @@ Sklm keeps a global library in `~/.sklm/`, then lets you pick which skills each 
 - **Install once, scope per project** — a global store at `~/.sklm/` holds your skills; per-project symlinks activate only what you need.
 - **Auto-sync** — `sklm add` and `sklm rm` automatically update the agent's skills directory. No manual copying.
 - **Registry discovery** — index local folders or git repos as searchable skill catalogs.
-- **Git repo installation** — `sklm add --from` clones a repo and figures out where the skill lives.
+- **Git repo installation** — `sklm add owner/repo --skill my-skill` discovers the skills a repository contains and installs the ones you pick. Public GitHub repos are fetched over HTTPS, so `git` is only needed for private or non-GitHub sources.
 - **Per-agent skill variants** — a single skill can ship agent-specific file overrides in a `variants/` subdirectory. Each agent receives the version tuned for it.
 
 ## Installation
@@ -77,28 +77,68 @@ If no agent directory is detected, Sklm shows an interactive prompt. Select one 
 ### Global store (install once, activate anywhere)
 
 ```bash
-sklm install skill find-skills \
+sklm install find-skills \
   --from https://github.com/vercel-labs/skills
-sklm uninstall skill find-skills               # remove from global store
-sklm uninstall skill find-skills --force       # skip confirmation
+sklm uninstall find-skills                     # remove from global store
+sklm uninstall find-skills --force             # skip confirmation
 
 sklm migrate                                   # import all from ~/.agents/skills/
-sklm migrate skill find-skills                 # import a single skill
+sklm migrate find-skills                       # import a single skill
 sklm migrate --from-registry my-reg            # import from a local registry
 sklm migrate --force-cleanup                   # delete sources after import
 ```
 
 
+### Installing from a repository
+
+`sklm add` and `sklm install` take a source and discover the skills it contains.
+
+```bash
+sklm add github/awesome-copilot --list                  # 1. see what is available
+sklm add github/awesome-copilot --skill create-readme   # 2. install one
+sklm add github/awesome-copilot \
+  --skill create-readme --skill git-commit              # or several at once
+sklm add github/awesome-copilot --all                   # or everything
+```
+
+With no `--skill`, `--all`, or `--list`, Sklm prompts you to pick from the
+discovered skills.
+
+Accepted source forms:
+
+| Form | Example |
+|---|---|
+| GitHub shorthand | `owner/repo` |
+| GitHub URL | `https://github.com/owner/repo` |
+| Direct path inside a repo | `https://github.com/owner/repo/tree/main/skills/foo` |
+| Inline skill filter | `owner/repo@skill-name` |
+| Ref plus skill | `owner/repo#v2@skill-name` |
+| Local path | `./my-skills` or `C:\skills` |
+| Any git URL | `https://gitlab.com/org/repo`, `git@github.com:owner/repo.git` |
+
+Public GitHub repositories are read over HTTPS (the GitHub Trees API plus
+`raw.githubusercontent.com`), so no `git` executable is required. Private
+repositories, GitLab, Azure Repos, SSH URLs, and other git remotes fall back to
+a shallow `git clone`, which does need `git` on your PATH.
+
+Discovery looks in the repository root, `skills/`, `.agents/skills/`, and
+`<agent-dir>/skills/` for every supported agent, up to three levels deep. A
+`SKILL.md` closer to the top shadows anything nested beneath it, and frontmatter
+is optional.
+
+`--ref` pins a branch, tag, or commit. `--subdir` restricts discovery to one
+subtree.
+
+
 ### Project resources (activate per project)
 
 ```bash
-sklm add skill my-skill                        # resolve → store → link → sync
-sklm add skill my-skill \
-  --from https://github.com/user/skills        # install from git + activate
+sklm add my-skill                              # resolve → store → link → sync
+sklm add github/awesome-copilot --skill create-readme   # install from a repo + activate
 sklm ls                                        # list active resources
 sklm ls --json                                 # machine-readable output
 sklm info skill my-skill                       # origin, path, link status
-sklm rm skill my-skill                         # unlink + clean agent config
+sklm rm my-skill                               # unlink + clean agent config
 ```
 
 
@@ -143,7 +183,7 @@ sklm registry search scraper --registry my-skills       # within one registry
 You can also reference skills by registry when adding:
 
 ```bash
-sklm add skill my-registry:my-skill
+sklm add my-registry:my-skill
 ```
 
 ### Agent management
@@ -248,9 +288,9 @@ Sklm manages three locations to keep skills organized:
                          # e.g., .opencode/skills/
 ```
 
-Running `sklm add skill my-skill` does four things in sequence:
+Running `sklm add my-skill` does four things in sequence:
 
-1. **Resolve** — finds the skill in the global store, a registry, or a local path
+1. **Resolve** — parses the source (`owner/repo`, a URL, or a local path) and discovers the skills it contains, or finds a named skill in the global store or a registry
 2. **Store** — copies it into `~/.sklm/store/skills/` if it wasn't there already
 3. **Link** — creates a symlink in `./.sklm/links/skills/`
 4. **Sync** — copies the linked skill into the agent's config directory, applying any `variants/<agent>/` overlay automatically
@@ -275,13 +315,16 @@ Run `sklm init` first. It creates the `.sklm/` directory and configures your age
 **"No agent configured — not synced"**
 The skill is installed and linked, but no agent is set up to receive it. Run `sklm init --agent <name>`.
 
-**"Broken symlinks"**
+**"Broken links"**
 Run `sklm status --repair` to re-create links that point to missing targets.
 
-**"Skill not found in git repo"**
-Some repos use non-standard layouts. Use `--subdir` to point to the exact directory:
+**"WinError 1314" when adding a skill on Windows**
+Creating symbolic links on Windows requires Developer Mode or an elevated shell. Sklm detects the refusal and copies the skill into `.sklm/links/skills/` instead, so `sklm add` still completes and syncs. Enable Developer Mode if you would rather have real symlinks.
+
+**"Skill not found in a repository"**
+Run `sklm add <source> --list` to see the skills a repository contains. If the skill lives outside the standard directories, point `--subdir` at it:
 ```bash
-sklm add skill my-skill --from https://github.com/user/repo --subdir custom/path
+sklm add github/user/repo --subdir custom/path --skill my-skill
 ```
 
 **"GitHub Copilot isn't detected"**
